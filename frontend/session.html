@@ -132,7 +132,6 @@
         .output-body h2 { font-size: 1.4rem; margin: 1.5rem 0 0.75rem; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
         .output-body h3 { font-size: 1.1rem; margin: 1rem 0 0.5rem; color: var(--text); }
         .output-body p { margin: 0.75rem 0; }
-        .output-body ul, .output-body ol { margin: 0.75rem 0; padding-left: 1.5rem; }
         .output-body li { margin: 0.25rem 0; }
         .output-body code {
             background: var(--bg);
@@ -215,7 +214,7 @@
         .phase-header:first-child { margin-top: 0; padding-top: 0; }
         /* Document items - clickable entries */
         .doc-item {
-            padding: 0.5rem 0.75rem;
+            padding: 0.5rem 0.75rem 0.5rem 1.5rem;
             margin: 0 -0.75rem;
             border-radius: 6px;
             cursor: pointer;
@@ -416,34 +415,44 @@
             // Priority 1: document name
             if (step.document_name) return step.document_name;
             
-            // Priority 2: phase name
-            if (step.phase_name) return `Phase ${step.phase_number}: ${step.phase_name}`;
-            
-            // Priority 3: Extract first heading from content
+            // Priority 2: Extract heading from content (NOT phase info - that's shown separately)
             const content = step.content_markdown || step.content || '';
             
             // Look for ## heading first (most common in steps)
             const h2Match = content.match(/^##\s+(.+)$/m);
-            if (h2Match) return h2Match[1].substring(0, 40);
+            if (h2Match) {
+                const heading = h2Match[1].trim();
+                // Skip if it's just "Phase X:" prefix
+                if (!heading.match(/^Phase \d+:/)) {
+                    return heading.substring(0, 40);
+                }
+            }
             
             // Look for # heading
             const h1Match = content.match(/^#\s+(.+)$/m);
-            if (h1Match) return h1Match[1].substring(0, 40);
+            if (h1Match) {
+                const heading = h1Match[1].trim();
+                if (!heading.match(/^Phase \d+:/)) {
+                    return heading.substring(0, 40);
+                }
+            }
             
-            // Look for **bold** at start
-            const boldMatch = content.match(/^\*\*([^*]+)\*\*/);
+            // Look for **bold** at start of any line
+            const boldMatch = content.match(/^\*\*([^*]+)\*\*/m);
             if (boldMatch) return boldMatch[1].substring(0, 40);
             
-            // Priority 4: First line of content (truncated)
-            const firstLine = content.split('\n')[0].replace(/[#*`]/g, '').trim();
-            if (firstLine && firstLine.length > 0) {
-                return firstLine.substring(0, 35) + (firstLine.length > 35 ? '...' : '');
+            // First non-empty, non-phase line
+            const lines = content.split('\n');
+            for (const line of lines) {
+                const clean = line.replace(/[#*`-]/g, '').trim();
+                if (clean && clean.length > 3 && !clean.match(/^Phase \d+:/) && !clean.match(/^pdev_version/)) {
+                    return clean.substring(0, 35) + (clean.length > 35 ? '...' : '');
+                }
             }
             
             // Fallback: Step number
-            return `Step ${index + 1}`;
+            return 'Step ' + (index + 1);
         }
-
         async function init() {
             if (!sessionId) {
                 showError('No session ID provided. Add ?id=SESSION_UUID to the URL.');
@@ -472,7 +481,7 @@
                 renderSession();
                 loadManifest();
                 renderSteps();
-                renderDocSteps();
+                // renderDocSteps();
                 
                 // Show latest output
                 if (session.steps && session.steps.length > 0) {
@@ -515,7 +524,7 @@
                 if (!session.steps) session.steps = [];
                 session.steps.push(data.step);
                 renderSteps();
-                renderDocSteps();
+                // renderDocSteps();
                 // Auto-show new step
                 // auto-scroll disabled
             } else if (data.type === 'complete') {
@@ -555,55 +564,65 @@
         }
 
         
-                function renderSteps() {
-                    const list = document.getElementById('stepList');
-                    const countEl = document.getElementById('stepCount');
-                    
-                    if (!session || !session.steps || session.steps.length === 0) {
-                        list.innerHTML = '<li class="doc-item" style="color: var(--muted); cursor: default;">No documents yet</li>';
-                        countEl.textContent = '0';
-                        return;
-                    }
-        
-                    let currentPhase = null;
-                    let clickableCount = 0;
-                    
-                    list.innerHTML = session.steps.map((step, i) => {
-                        const type = step.step_type || step.type || 'output';
-                        let html = '';
-                        
-                        // Phase header - render once per unique phase
-                        if (step.phase_name) {
-                            const phaseName = step.phase_name.trim();
-                            if (phaseName !== currentPhase) {
-                                currentPhase = phaseName;
-                                html += '<li class="phase-header">' + phaseName + '</li>';
-                            }
-                        }
-                        
-                        // Skip system steps that are just phase markers (no real content)
-                        if (type === 'system' && step.phase_name && !step.document_name) {
-                            return html; // Just the phase header, no clickable item
-                        }
-                        
-                        // Clickable document/output item
-                        clickableCount++;
-                        const label = extractStepLabel(step, i);
-                        const icon = type === 'document' ? '📄' : type === 'system' ? '⚙️' : '📝';
-                        const iconClass = type;
-                        const activeClass = i === currentStepIndex ? 'active' : '';
-                        
-                        html += '<li onclick="showStep(' + i + ')" class="doc-item ' + activeClass + '">' +
-                            '<span class="step-icon ' + iconClass + '">' + icon + '</span>' +
-                            '<span class="step-label" title="' + label + '">' + label + '</span>' +
-                        '</li>';
-                        
-                        return html;
-                    }).join('');
-                    
-                    countEl.textContent = clickableCount;
-                    renderDocSteps();
+        function renderSteps() {
+            const list = document.getElementById('stepList');
+            const countEl = document.getElementById('stepCount');
+            
+            if (!session || !session.steps || session.steps.length === 0) {
+                list.innerHTML = '<li class="doc-item" style="color: var(--muted); cursor: default;">No documents yet</li>';
+                countEl.textContent = '0';
+                return;
+            }
+
+            const seenSections = new Set();
+            let clickableCount = 0;
+            
+            list.innerHTML = session.steps.map((step, i) => {
+                const type = step.step_type || step.type || 'output';
+                let html = '';
+                
+                // Skip hook outputs and system noise
+                if (step.content_markdown && (step.content_markdown.includes('pdevlivesync') || step.content_markdown.includes('Modified:'))) {
+                    return '';
                 }
+                
+                // Determine section name: document_name takes priority, then phase_name
+                let sectionName = null;
+                if (step.document_name && step.document_name.trim()) {
+                    sectionName = step.document_name.trim().toUpperCase().replace(/_/g, ' ');
+                } else if (step.phase_name && step.phase_name.trim()) {
+                    sectionName = step.phase_name.trim();
+                }
+                
+                // Only show section header if we haven't seen this section before
+                if (sectionName && !seenSections.has(sectionName)) {
+                    seenSections.add(sectionName);
+                    html += '<li class="phase-header">' + sectionName + '</li>';
+                }
+                
+                // Skip system steps that are just phase markers
+                if (type === 'system' && step.phase_name && !step.document_name) {
+                    return html;
+                }
+                
+                // Clickable item
+                clickableCount++;
+                const label = extractStepLabel(step, i);
+                const icon = type === 'document' ? '📄' : type === 'system' ? '⚙️' : '📝';
+                const iconClass = type;
+                const activeClass = i === currentStepIndex ? 'active' : '';
+                
+                html += '<li onclick="showStep(' + i + ')" class="doc-item ' + activeClass + '">' +
+                    '<span class="step-icon ' + iconClass + '">' + icon + '</span>' +
+                    '<span class="step-label" title="' + label + '">' + label + '</span>' +
+                '</li>';
+                
+                return html;
+            }).join('');
+            
+            countEl.textContent = clickableCount;
+        }
+
         function showStep(index) {
             if (!session.steps || !session.steps[index]) return;
             
@@ -630,7 +649,7 @@
 
             // Update step list to show active
             renderSteps();
-                renderDocSteps();
+                // renderDocSteps();
         }
 
         function showError(msg) {
