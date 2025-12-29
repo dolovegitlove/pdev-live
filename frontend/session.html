@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDev Live - Session</title>
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --bg: #0a0a0f;
+            --card: #12121a;
+            --border: #1e1e2e;
+            --text: #e4e4e7;
+            --muted: #71717a;
+            --accent: #6366f1;
+            --accent2: #818cf8;
+            --success: #22c55e;
+            --warn: #f59e0b;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1rem;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 0;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 1rem;
+        }
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent), #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            color: var(--muted);
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--muted);
+        }
+        .status-dot.connected { background: var(--success); animation: pulse 2s infinite; }
+        .status-dot.active { background: var(--warn); animation: pulse 0.5s infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .session-header {
+            display: flex;
+            gap: 1rem;
+            padding: 1rem;
+            background: var(--card);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .session-header .badge {
+            padding: 0.25rem 0.75rem;
+            background: var(--accent);
+            color: white;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        .session-header .badge.completed { background: var(--success); }
+        .session-header .badge.interrupted { background: #ef4444; }
+        .session-meta {
+            font-size: 0.85rem;
+            color: var(--muted);
+        }
+        .session-meta strong { color: var(--text); }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 280px;
+            gap: 1rem;
+        }
+        @media (max-width: 900px) {
+            .main-content { grid-template-columns: 1fr; }
+            .sidebar { order: -1; }
+        }
+
+        .output-panel {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .output-header {
+            padding: 0.75rem 1rem;
+            background: var(--border);
+            font-weight: 600;
+            font-size: 0.9rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .output-body {
+            padding: 1.5rem;
+            max-height: 75vh;
+            overflow-y: auto;
+        }
+        .output-body::-webkit-scrollbar { width: 6px; }
+        .output-body::-webkit-scrollbar-track { background: var(--bg); }
+        .output-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+        /* Markdown rendering */
+        .output-body h1 { font-size: 1.8rem; margin: 1.5rem 0 1rem; color: var(--accent2); }
+        .output-body h2 { font-size: 1.4rem; margin: 1.5rem 0 0.75rem; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+        .output-body h3 { font-size: 1.1rem; margin: 1rem 0 0.5rem; color: var(--text); }
+        .output-body p { margin: 0.75rem 0; }
+        .output-body ul, .output-body ol { margin: 0.75rem 0; padding-left: 1.5rem; }
+        .output-body li { margin: 0.25rem 0; }
+        .output-body code {
+            background: var(--bg);
+            padding: 0.15rem 0.4rem;
+            border-radius: 3px;
+            font-size: 0.85em;
+        }
+        .output-body pre {
+            background: var(--bg);
+            padding: 1rem;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 1rem 0;
+        }
+        .output-body pre code {
+            background: none;
+            padding: 0;
+        }
+        .output-body blockquote {
+            border-left: 3px solid var(--accent);
+            padding-left: 1rem;
+            margin: 1rem 0;
+            color: var(--muted);
+        }
+        .output-body table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+        }
+        .output-body th, .output-body td {
+            padding: 0.5rem;
+            border: 1px solid var(--border);
+            text-align: left;
+        }
+        .output-body th { background: var(--border); }
+
+        .sidebar-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        .sidebar-card h3 {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--muted);
+            margin-bottom: 0.75rem;
+        }
+        .step-list {
+            list-style: none;
+            font-size: 0.85rem;
+        }
+        .step-list li {
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .step-list li:hover { background: var(--border); margin: 0 -1rem; padding: 0.5rem 1rem; }
+        .step-list li.active { background: var(--accent); margin: 0 -1rem; padding: 0.5rem 1rem; border-radius: 4px; }
+        .step-list li:last-child { border-bottom: none; }
+        /* Phase headers - section labels (no click) */
+        .phase-header {
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--muted);
+            padding: 0.75rem 0 0.35rem 0;
+            margin-top: 0.5rem;
+            border: none !important;
+            cursor: default;
+            user-select: none;
+        }
+        .phase-header:first-child { margin-top: 0; padding-top: 0; }
+        /* Document items - clickable entries */
+        .doc-item {
+            padding: 0.5rem 0.75rem;
+            margin: 0 -0.75rem;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .doc-item:hover {
+            transform: translateX(4px);
+            background: rgba(99, 102, 241, 0.15);
+            color: var(--accent2);
+        }
+        .step-icon {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            flex-shrink: 0;
+        }
+        .step-icon.output { background: var(--accent); color: white; }
+        .step-icon.document { background: var(--success); color: white; }
+        .step-icon.system { background: var(--warn); color: black; }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+        }
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text);
+        }
+        .btn-outline:hover { background: var(--border); }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: var(--muted);
+        }
+        .empty-state .icon { font-size: 3rem; margin-bottom: 1rem; }
+        
+        .error-state {
+            text-align: center;
+            padding: 3rem;
+            color: #ef4444;
+        }
+        /* Navigation */
+        .nav-header {
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .nav-logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--accent);
+            text-decoration: none;
+        }
+        .nav-logo-icon {
+            width: 28px;
+            height: 28px;
+            background: linear-gradient(135deg, var(--accent), #a855f7);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .nav-links { display: flex; gap: 8px; }
+        .nav-link {
+            color: var(--muted);
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .nav-link:hover { color: var(--text); background: var(--border); }
+        @media (max-width: 768px) {
+            .nav-header { padding: 10px 16px; }
+            .nav-links { gap: 4px; }
+            .nav-link { padding: 6px 10px; font-size: 13px; }
+        }
+        
+        /* Step label truncation */
+        .step-label {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 180px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav-header">
+        <a href="/pdev/" class="nav-logo">
+            <div class="nav-logo-icon">P</div>
+            <span>PDev Suite</span>
+        </a>
+        <div class="nav-links">
+            <a href="/pdev/live/" class="nav-link">Dashboard</a>
+            <a href="/pdev/history/" class="nav-link">History</a>
+            <a href="/pdev/" class="nav-link">Docs</a>
+        </div>
+    </nav>
+    <div class="container">
+        <header>
+            <div class="logo">PDev Live</div>
+            <div class="status">
+                <span class="status-dot" id="statusDot"></span>
+                <span id="statusText">Loading...</span>
+            </div>
+        </header>
+
+        <div class="session-header" id="sessionHeader">
+            <span class="badge" id="sessionBadge">Loading...</span>
+            <div class="session-meta" id="sessionMeta">Loading session...</div>
+        </div>
+
+        <div class="main-content">
+            <div class="output-panel">
+                <div class="output-header">
+                    <span id="outputTitle">Output</span>
+                    <button class="btn btn-outline" onclick="copyOutput()">Copy</button>
+                </div>
+                <div class="output-body" id="outputBody">
+                    <div class="empty-state">
+                        <div class="icon">⏳</div>
+                        <p>Loading session data...</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar">
+                <div class="sidebar-card">
+                    <h3>Documents (<span id="stepCount">0</span>)</h3>
+                    <ul class="step-list" id="stepList">
+                        <li style="color: var(--muted);">Loading...</li>
+                    </ul>
+                </div>
+                <div class="sidebar-card" id="docsCard" style="display: none;">
+                    <h3>Documents</h3>
+                    <ul class="step-list" id="docsList"></ul>
+                </div>
+
+
+                <div class="sidebar-card">
+                    <h3>Actions</h3>
+                    <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                        <a href="/pdev/live/" class="btn btn-outline" style="text-align: center; text-decoration: none;">Dashboard</a>
+                        <a href="/pdev/" class="btn btn-outline" style="text-align: center; text-decoration: none;">PDev Docs</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+        const API_BASE = '/pdev/api';
+        const params = new URLSearchParams(window.location.search);
+        const sessionId = params.get('id') || params.get('guest');
+        const guestToken = params.get('guest');
+        
+        let eventSource = null;
+        let session = null;
+        let currentStepIndex = -1;
+
+        // Configure marked
+        marked.setOptions({
+            highlight: function(code, lang) {
+                if (lang && hljs.getLanguage(lang)) {
+                    return hljs.highlight(code, { language: lang }).value;
+                }
+                return hljs.highlightAuto(code).value;
+            }
+        });
+
+        // Extract a label from step content
+        function extractStepLabel(step, index) {
+            // Priority 1: document name
+            if (step.document_name) return step.document_name;
+            
+            // Priority 2: phase name
+            if (step.phase_name) return `Phase ${step.phase_number}: ${step.phase_name}`;
+            
+            // Priority 3: Extract first heading from content
+            const content = step.content_markdown || step.content || '';
+            
+            // Look for ## heading first (most common in steps)
+            const h2Match = content.match(/^##\s+(.+)$/m);
+            if (h2Match) return h2Match[1].substring(0, 40);
+            
+            // Look for # heading
+            const h1Match = content.match(/^#\s+(.+)$/m);
+            if (h1Match) return h1Match[1].substring(0, 40);
+            
+            // Look for **bold** at start
+            const boldMatch = content.match(/^\*\*([^*]+)\*\*/);
+            if (boldMatch) return boldMatch[1].substring(0, 40);
+            
+            // Priority 4: First line of content (truncated)
+            const firstLine = content.split('\n')[0].replace(/[#*`]/g, '').trim();
+            if (firstLine && firstLine.length > 0) {
+                return firstLine.substring(0, 35) + (firstLine.length > 35 ? '...' : '');
+            }
+            
+            // Fallback: Step number
+            return `Step ${index + 1}`;
+        }
+
+        async function init() {
+            if (!sessionId) {
+                showError('No session ID provided. Add ?id=SESSION_UUID to the URL.');
+                return;
+            }
+
+            try {
+                // For guest access, validate token first
+                if (guestToken) {
+                    const guestRes = await fetch(`${API_BASE}/guest/${guestToken}`);
+                    if (!guestRes.ok) {
+                        showError('Invalid or expired guest link.');
+                        return;
+                    }
+                }
+
+                // Fetch session data
+                const res = await fetch(`${API_BASE}/sessions/${sessionId}`);
+                if (!res.ok) {
+                    showError('Session not found.');
+                    return;
+                }
+
+                session = await res.json();
+                session = session;
+                renderSession();
+                loadManifest();
+                renderSteps();
+                renderDocSteps();
+                
+                // Show latest output
+                if (session.steps && session.steps.length > 0) {
+                    // auto-scroll disabled
+                }
+
+                // Connect to SSE for live updates if session is active
+                if (session.session_status === 'active') {
+                    connectSSE();
+                }
+            } catch (err) {
+                showError('Failed to load session: ' + err.message);
+            }
+        }
+
+        function connectSSE() {
+            eventSource = new EventSource(`${API_BASE}/events/${sessionId}`);
+
+            eventSource.onopen = () => {
+                document.getElementById('statusDot').className = 'status-dot connected';
+                document.getElementById('statusText').textContent = 'Live';
+            };
+
+            eventSource.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                handleEvent(data);
+            };
+
+            eventSource.onerror = () => {
+                document.getElementById('statusDot').className = 'status-dot';
+                document.getElementById('statusText').textContent = 'Reconnecting...';
+                eventSource.close();
+                setTimeout(connectSSE, 3000);
+            };
+        }
+
+        function handleEvent(data) {
+            if (data.type === 'step' && data.step) {
+                // Add new step
+                if (!session.steps) session.steps = [];
+                session.steps.push(data.step);
+                renderSteps();
+                renderDocSteps();
+                // Auto-show new step
+                // auto-scroll disabled
+            } else if (data.type === 'complete') {
+                session.session_status = 'completed';
+                renderSession();
+                loadManifest();
+                if (eventSource) eventSource.close();
+            }
+        }
+
+        function renderSession() {
+            const badge = document.getElementById('sessionBadge');
+            const meta = document.getElementById('sessionMeta');
+            
+            const status = session.session_status || 'active';
+            badge.textContent = session.command_type || 'Session';
+            badge.className = 'badge ' + status;
+
+            const started = new Date(session.started_at).toLocaleString();
+            const project = session.project_name || 'Unknown';
+            const server = session.server_origin || 'Unknown';
+            
+            meta.innerHTML = `
+                <strong>${project}</strong> on ${server} &nbsp;|&nbsp; 
+                Started: ${started}
+                ${session.duration_seconds ? ` &nbsp;|&nbsp; Duration: ${session.duration_seconds}s` : ''}
+            `;
+
+            // Update status indicator
+            if (status === 'active') {
+                document.getElementById('statusDot').className = 'status-dot connected';
+                document.getElementById('statusText').textContent = 'Live';
+            } else {
+                document.getElementById('statusDot').className = 'status-dot';
+                document.getElementById('statusText').textContent = status;
+            }
+        }
+
+        
+                function renderSteps() {
+                    const list = document.getElementById('stepList');
+                    const countEl = document.getElementById('stepCount');
+                    
+                    if (!session || !session.steps || session.steps.length === 0) {
+                        list.innerHTML = '<li class="doc-item" style="color: var(--muted); cursor: default;">No documents yet</li>';
+                        countEl.textContent = '0';
+                        return;
+                    }
+        
+                    let currentPhase = null;
+                    let clickableCount = 0;
+                    
+                    list.innerHTML = session.steps.map((step, i) => {
+                        const type = step.step_type || step.type || 'output';
+                        let html = '';
+                        
+                        // Phase header - render once per unique phase
+                        if (step.phase_name) {
+                            const phaseName = step.phase_name.trim();
+                            if (phaseName !== currentPhase) {
+                                currentPhase = phaseName;
+                                html += '<li class="phase-header">' + phaseName + '</li>';
+                            }
+                        }
+                        
+                        // Skip system steps that are just phase markers (no real content)
+                        if (type === 'system' && step.phase_name && !step.document_name) {
+                            return html; // Just the phase header, no clickable item
+                        }
+                        
+                        // Clickable document/output item
+                        clickableCount++;
+                        const label = extractStepLabel(step, i);
+                        const icon = type === 'document' ? '📄' : type === 'system' ? '⚙️' : '📝';
+                        const iconClass = type;
+                        const activeClass = i === currentStepIndex ? 'active' : '';
+                        
+                        html += '<li onclick="showStep(' + i + ')" class="doc-item ' + activeClass + '">' +
+                            '<span class="step-icon ' + iconClass + '">' + icon + '</span>' +
+                            '<span class="step-label" title="' + label + '">' + label + '</span>' +
+                        '</li>';
+                        
+                        return html;
+                    }).join('');
+                    
+                    countEl.textContent = clickableCount;
+                    renderDocSteps();
+                }
+        function showStep(index) {
+            if (!session.steps || !session.steps[index]) return;
+            
+            currentStepIndex = index;
+            const step = session.steps[index];
+            const body = document.getElementById('outputBody');
+            const title = document.getElementById('outputTitle');
+            
+            title.textContent = extractStepLabel(step, index);
+            
+            // Use pre-rendered HTML if available, otherwise render markdown
+            if (step.content_html) {
+                body.innerHTML = step.content_html;
+            } else if (step.content_markdown || step.content) {
+                body.innerHTML = marked.parse(step.content_markdown || step.content || '');
+            } else {
+                body.innerHTML = '<p style="color: var(--muted);">No content</p>';
+            }
+
+            // Re-highlight code blocks
+            body.querySelectorAll('pre code').forEach(block => {
+                hljs.highlightElement(block);
+            });
+
+            // Update step list to show active
+            renderSteps();
+                renderDocSteps();
+        }
+
+        function showError(msg) {
+            document.getElementById('sessionHeader').innerHTML = `<span class="badge" style="background: #ef4444;">Error</span>`;
+            document.getElementById('outputBody').innerHTML = `
+                <div class="error-state">
+                    <div class="icon">❌</div>
+                    <p>${msg}</p>
+                </div>
+            `;
+            document.getElementById('statusDot').className = 'status-dot';
+            document.getElementById('statusText').textContent = 'Error';
+        }
+
+        function copyOutput() {
+            const body = document.getElementById('outputBody');
+            navigator.clipboard.writeText(body.innerText);
+            alert('Copied to clipboard!');
+        }
+
+        // Initialize
+        // Load and render manifest documents
+        async function loadManifest() {
+            if (!session) return;
+            const server = session.server_origin;
+            const project = session.project_name;
+            if (!server || !project) return;
+            
+            try {
+                const res = await fetch(`${API_BASE}/manifests/${server}/${project}`);
+                if (!res.ok) return;
+                
+                const manifest = await res.json();
+                if (manifest && manifest.docs && Object.keys(manifest.docs).length > 0) {
+                    renderDocs(manifest);
+                }
+            } catch (err) {
+                console.log("No manifest:", err.message);
+            }
+        }
+
+        function renderDocs(manifest) {
+            const card = document.getElementById("docsCard");
+            const list = document.getElementById("docsList");
+            
+            if (!manifest.docs || Object.keys(manifest.docs).length === 0) {
+                card.style.display = "none";
+                return;
+            }
+            
+            card.style.display = "block";
+            
+            const docTypes = {
+                ideation: { icon: "💡", label: "Ideation" },
+                spec: { icon: "📋", label: "Product Spec" },
+                sop: { icon: "📝", label: "Development SOP" },
+                benchmark: { icon: "📊", label: "Benchmark" },
+                design: { icon: "🎨", label: "Design System" },
+                gap: { icon: "🔍", label: "Gap Analysis" },
+                innov: { icon: "🚀", label: "Innovation" },
+                caps: { icon: "⚙️", label: "Capabilities" }
+            };
+            
+            list.innerHTML = Object.entries(manifest.docs).map(([type, fileName]) => {
+                const meta = docTypes[type] || { icon: "📄", label: type };
+                return `<li style="justify-content: space-between;">
+                    <span>${meta.icon} ${meta.label}</span>
+                    <span style="color: var(--muted); font-size: 0.75rem;">${fileName}</span>
+                </li>`;
+            }).join("");
+        }
+
+
+        // Alias for hook-safe reference
+        session = null;
+        // Render documents from steps (pushed via pdev-live doc)
+        function renderDocSteps() {
+            const card = document.getElementById("docsCard");
+            const list = document.getElementById("docsList");
+
+            if (!session || !session.steps) return;
+
+            // Filter for document-type steps
+            const docSteps = session.steps.filter(s => s.step_type === 'document' || s.type === 'document');
+
+            if (docSteps.length === 0) return;
+
+            card.style.display = "block";
+
+            list.innerHTML = docSteps.map((step, origIndex) => {
+                // Find the real index in all steps
+                const realIndex = session.steps.indexOf(step);
+                const name = step.document_name || extractStepLabel(step, realIndex);
+                const icon = name.includes('BENCHMARK') ? '📊' :
+                            name.includes('IDEATION') ? '💡' :
+                            name.includes('SPEC') ? '📋' :
+                            name.includes('SOP') ? '📝' :
+                            name.includes('GAP') ? '🔍' :
+                            name.includes('INNOV') ? '🚀' :
+                            name.includes('CAPS') ? '⚙️' :
+                            name.includes('DESIGN') ? '🎨' : '📄';
+                return '<li onclick="showStep(' + realIndex + ')" class="doc-clickable">' +
+                    '<span>' + icon + ' ' + name + '</span>' +
+                '</li>';
+            }).join("");
+        }
+
+        init();
+    </script>
+</body>
+</html>

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDev Suite</title>
+    <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
+    <meta name="googlebot" content="noindex, nofollow">
+    <style>
+        *{-webkit-user-select:text;-moz-user-select:text;-ms-user-select:text;user-select:text;box-sizing:border-box}
+        :root{--bg:#0a0a0f;--card:#12121a;--border:#1e1e2e;--text:#e4e4e7;--muted:#71717a;--accent:#6366f1;--accent2:#818cf8;--success:#22c55e;--warn:#f59e0b;--danger:#ef4444}
+        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);margin:0;padding:0;min-height:100vh;line-height:1.6}
+        
+        /* Navigation */
+        .nav-header{background:var(--card);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+        .nav-logo{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:600;color:var(--accent)}
+        .nav-logo-icon{width:28px;height:28px;background:linear-gradient(135deg,var(--accent),#a855f7);border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:bold;font-size:14px}
+        .nav-links{display:flex;gap:8px}
+        .nav-link{color:var(--muted);text-decoration:none;padding:8px 16px;border-radius:6px;font-size:14px;transition:all 0.2s}
+        .nav-link:hover{color:var(--text);background:var(--border)}
+        .nav-link.active{color:var(--text);background:var(--border)}
+        
+        .container{max-width:1100px;margin:0 auto;padding:2rem}
+        header{text-align:center;padding:2.5rem 0;border-bottom:1px solid var(--border);margin-bottom:2.5rem}
+        h1{font-size:2.5rem;margin:0 0 0.5rem;background:linear-gradient(135deg,var(--accent),#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+        .subtitle{color:var(--muted);font-size:1.1rem}
+        h2{font-size:1.4rem;margin:2rem 0 1rem;padding-bottom:0.5rem;border-bottom:1px solid var(--border)}
+        .pipeline{display:flex;flex-wrap:wrap;gap:0.4rem;justify-content:center;margin:1.5rem 0;padding:1.25rem;background:var(--card);border-radius:10px;border:1px solid var(--border)}
+        .pipe-step{display:flex;align-items:center;gap:0.4rem}
+        .pipe-step .cmd{background:var(--accent);color:#fff;padding:0.4rem 0.8rem;border-radius:5px;font-family:monospace;font-size:0.85rem}
+        .pipe-step .arr{color:var(--muted)}
+        .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.25rem;margin:1.5rem 0}
+        .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:1.25rem;transition:all 0.2s}
+        .card:hover{border-color:var(--accent);transform:translateY(-2px)}
+        .card h3{margin:0 0 0.4rem;color:var(--accent);font-size:1.1rem}
+        .card p{color:var(--muted);margin:0;font-size:0.9rem}
+        .card a{color:var(--accent);text-decoration:none}
+        .guide{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:1.5rem;margin:2rem 0}
+        .guide p{color:var(--muted);margin:0 0 1rem}
+        .steps{list-style:none;padding:0;margin:0}
+        .steps li{padding:1rem;margin:0.5rem 0;background:var(--bg);border-radius:8px;border-left:3px solid var(--accent)}
+        .steps li strong{color:var(--accent)}
+        .steps li .ex{font-family:monospace;font-size:0.8rem;color:var(--success);margin-top:0.4rem;display:block}
+        .layers-tbl{width:100%;border-collapse:collapse;margin:1rem 0}
+        .layers-tbl th,.layers-tbl td{padding:0.6rem;text-align:left;border-bottom:1px solid var(--border)}
+        .layers-tbl th{color:var(--muted);font-weight:500;font-size:0.8rem;text-transform:uppercase}
+        .layers-tbl code{font-family:monospace;background:var(--border);padding:0.15rem 0.4rem;border-radius:4px;color:var(--success);font-size:0.85rem}
+        .input-demo{background:var(--bg);border-radius:10px;padding:1.25rem;margin:1.5rem 0}
+        .input-demo .q{color:var(--text);margin-bottom:0.8rem;font-size:1rem}
+        .input-demo .opts{display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:0.8rem}
+        .input-demo .opt{padding:0.5rem 1rem;background:var(--border);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;transition:all 0.2s;font-size:0.9rem}
+        .input-demo .opt:hover{background:var(--accent);border-color:var(--accent)}
+        .input-demo .alts{display:flex;gap:0.4rem;padding-top:0.8rem;border-top:1px solid var(--border);flex-wrap:wrap}
+        .input-demo .alt{padding:0.4rem 0.8rem;background:transparent;border:1px dashed var(--border);border-radius:5px;color:var(--muted);cursor:pointer;font-size:0.8rem}
+        .input-demo .alt:hover{border-color:var(--accent);color:var(--accent)}
+        .cmd-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem}
+        .cmd-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:1rem}
+        .cmd-card .name{font-family:monospace;font-size:1rem;color:var(--success);margin-bottom:0.4rem}
+        .cmd-card .desc{color:var(--muted);font-size:0.85rem;margin-bottom:0.6rem}
+        .cmd-card .chips{display:flex;flex-wrap:wrap;gap:0.25rem}
+        .chip{font-size:0.65rem;padding:0.15rem 0.4rem;background:var(--accent);border-radius:3px;color:#fff}
+        footer{text-align:center;padding:1.5rem;color:var(--muted);font-size:0.8rem;border-top:1px solid var(--border);margin-top:2rem}
+        @media(max-width:768px){.container{padding:1rem}h1{font-size:1.8rem}.pipeline{flex-direction:column;align-items:center}.pipe-step .arr{transform:rotate(90deg)}.nav-header{padding:10px 16px}.nav-links{gap:4px}.nav-link{padding:6px 10px;font-size:13px}}
+    </style>
+</head>
+<body>
+<!-- Navigation Header -->
+<nav class="nav-header">
+    <div class="nav-logo">
+        <div class="nav-logo-icon">P</div>
+        <span>PDev Suite</span>
+    </div>
+    <div class="nav-links">
+        <a href="/pdev/live/" class="nav-link">Dashboard</a>
+        <a href="/pdev/history/" class="nav-link">History</a>
+        <a href="/pdev/" class="nav-link active">Docs</a>
+    </div>
+</nav>
+
+<div class="container">
+    <header>
+        <h1>PDev Suite</h1>
+        <p class="subtitle">Product Development Pipeline - Idea to Implementation</p>
+    </header>
+
+    <section class="pipeline">
+        <div class="pipe-step"><span class="cmd">/idea</span><span class="arr">→</span></div>
+        <div class="pipe-step"><span class="cmd">/bmrk</span><span class="arr">→</span></div>
+        <div class="pipe-step"><span class="cmd">/gapa</span><span class="arr">→</span></div>
+        <div class="pipe-step"><span class="cmd">/innov</span><span class="arr">→</span></div>
+        <div class="pipe-step"><span class="cmd">/caps</span><span class="arr">→</span></div>
+        <div class="pipe-step"><span class="cmd">/spec</span><span class="arr">→</span></div>
+        <div class="pipe-step"><span class="cmd">/bmrk design</span><span class="arr">→</span></div>
+        <div class="pipe-step"><span class="cmd">/sop</span><span class="arr">→</span></div>
+        <div class="pipe-step"><span class="cmd">/pv</span></div>
+    </section>
+
+    <section class="cards">
+        <div class="card">
+            <h3>New Idea</h3>
+            <p>Starting fresh with a concept. Go from "I have an idea" to a complete implementation plan.</p>
+        </div>
+        <div class="card">
+            <h3>Existing Business</h3>
+            <p>Already have something running. Evaluate, benchmark, and find ways to improve or expand.</p>
+        </div>
+    </section>
+
+    <section class="guide">
+        <h2>The No-BS Guide</h2>
+        <p>Think of PDev like building a business the smart way - you don't just start coding. You figure out what's already out there, what's missing, and then build something better.</p>
+
+        <ol class="steps">
+            <li><strong>/idea or /eval</strong> - What are you building? New concept or improving existing?<span class="ex">/idea "fitness app for busy people"</span></li>
+            <li><strong>/bmrk</strong> - What's the competition doing? Who's winning and why?<span class="ex">/bmrk industry "fitness apps"</span></li>
+            <li><strong>/gapa</strong> - What's missing in the market? What are people complaining about?<span class="ex">/gapa industry "fitness tech"</span></li>
+            <li><strong>/innov</strong> - Now that you know what exists and what's missing, how can you do it 10x better?<span class="ex">/innov product myfitapp</span></li>
+            <li><strong>/caps</strong> - Can you actually build this? What team/tech do you need?<span class="ex">/caps tech myfitapp</span></li>
+            <li><strong>/spec</strong> - Write the blueprint. Every feature, every screen, every API.<span class="ex">/spec product myfitapp</span></li>
+            <li><strong>/bmrk design</strong> - What should it look like? Research the best designs in your category.<span class="ex">/bmrk design myfitapp</span></li>
+            <li><strong>/sop</strong> - Break it into tasks. Phase 1, Phase 2, etc. What gets built first?<span class="ex">/sop product myfitapp</span></li>
+            <li><strong>/pv</strong> - Validate everything. Make sure nothing's missing before you start coding.<span class="ex">/pv myfitapp</span></li>
+        </ol>
+    </section>
+
+    <h2>Command Reference</h2>
+    <div class="cmd-grid">
+        <div class="cmd-card">
+            <div class="name">/idea</div>
+            <div class="desc">Capture and develop a new product idea from scratch</div>
+            <div class="chips"><span class="chip">ideation</span><span class="chip">vision</span></div>
+        </div>
+        <div class="cmd-card">
+            <div class="name">/eval</div>
+            <div class="desc">Evaluate an existing product or business for improvements</div>
+            <div class="chips"><span class="chip">analysis</span><span class="chip">audit</span></div>
+        </div>
+        <div class="cmd-card">
+            <div class="name">/bmrk</div>
+            <div class="desc">Competitive benchmark analysis - who's winning and why</div>
+            <div class="chips"><span class="chip">research</span><span class="chip">competition</span></div>
+        </div>
+        <div class="cmd-card">
+            <div class="name">/gapa</div>
+            <div class="desc">Gap analysis - find market holes and unmet needs</div>
+            <div class="chips"><span class="chip">opportunity</span><span class="chip">gaps</span></div>
+        </div>
+        <div class="cmd-card">
+            <div class="name">/innov</div>
+            <div class="desc">Innovation analysis - how to do it 10x better</div>
+            <div class="chips"><span class="chip">innovation</span><span class="chip">differentiation</span></div>
+        </div>
+        <div class="cmd-card">
+            <div class="name">/caps</div>
+            <div class="desc">Capability assessment - what you can build and need</div>
+            <div class="chips"><span class="chip">resources</span><span class="chip">feasibility</span></div>
+        </div>
+        <div class="cmd-card">
+            <div class="name">/spec</div>
+            <div class="desc">Technical specification - the complete blueprint</div>
+            <div class="chips"><span class="chip">technical</span><span class="chip">blueprint</span></div>
+        </div>
+        <div class="cmd-card">
+            <div class="name">/sop</div>
+            <div class="desc">Standard operating procedure - phased implementation</div>
+            <div class="chips"><span class="chip">tasks</span><span class="chip">phases</span></div>
+        </div>
+        <div class="cmd-card">
+            <div class="name">/pv</div>
+            <div class="desc">Pipeline validation - ensure nothing's missing</div>
+            <div class="chips"><span class="chip">validation</span><span class="chip">review</span></div>
+        </div>
+    </div>
+
+    <h2>PDev Live</h2>
+    <div class="cards">
+        <div class="card">
+            <h3><a href="/pdev/live/">Live Dashboard</a></h3>
+            <p>Watch PDev commands execute in real-time across all servers.</p>
+        </div>
+        <div class="card">
+            <h3><a href="/pdev/history/">Session History</a></h3>
+            <p>Browse past PDev sessions and their outputs.</p>
+        </div>
+    </div>
+
+    <footer>
+        PDev Suite v3.1 | Product Development Pipeline
+    </footer>
+</div>
+</body>
+</html>
