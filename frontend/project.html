@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDev - Project View</title>
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --bg: #0a0a0f;
+            --card: #12121a;
+            --border: #1e1e2e;
+            --text: #e4e4e7;
+            --muted: #71717a;
+            --accent: #6366f1;
+            --accent2: #818cf8;
+            --success: #22c55e;
+            --warn: #f59e0b;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+        .container { max-width: 1400px; margin: 0 auto; padding: 1rem; }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 0;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 1rem;
+        }
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent), #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-decoration: none;
+        }
+        .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+            color: var(--muted);
+        }
+        .breadcrumb a { color: var(--accent); text-decoration: none; }
+        .breadcrumb a:hover { text-decoration: underline; }
+        .project-header {
+            display: flex;
+            gap: 1rem;
+            padding: 1.5rem;
+            background: var(--card);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .project-title { font-size: 1.8rem; font-weight: 700; color: var(--accent2); }
+        .project-meta { font-size: 0.85rem; color: var(--muted); margin-left: auto; }
+        .project-meta strong { color: var(--text); }
+        .main-content { display: grid; grid-template-columns: 280px 1fr; gap: 1rem; }
+        @media (max-width: 900px) { .main-content { grid-template-columns: 1fr; } }
+        .sidebar-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        .sidebar-card h3 {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--muted);
+            margin-bottom: 0.75rem;
+        }
+        .doc-list { list-style: none; }
+        .doc-item {
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            transition: all 0.15s;
+            border-radius: 4px;
+        }
+        .doc-item:hover { background: var(--border); }
+        .doc-item.active { background: var(--accent); }
+        .doc-item:last-child { border-bottom: none; }
+        .doc-name { font-weight: 600; font-size: 0.9rem; display: flex; align-items: center; gap: 0.5rem; }
+        .doc-meta { font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem; }
+        .doc-item.active .doc-meta { color: rgba(255,255,255,0.7); }
+        .doc-item.missing { opacity: 0.5; cursor: default; }
+        .session-list { list-style: none; font-size: 0.85rem; }
+        .session-list li { padding: 0.5rem 0; border-bottom: 1px solid var(--border); }
+        .session-list li:last-child { border-bottom: none; }
+        .session-list a { color: var(--accent); text-decoration: none; }
+        .session-list a:hover { text-decoration: underline; }
+        .output-panel {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .output-header {
+            padding: 0.75rem 1rem;
+            background: var(--border);
+            font-weight: 600;
+            font-size: 0.9rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .output-body { padding: 1.5rem; max-height: 80vh; overflow-y: auto; }
+        .output-body::-webkit-scrollbar { width: 6px; }
+        .output-body::-webkit-scrollbar-track { background: var(--bg); }
+        .output-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        .output-body h1 { font-size: 1.8rem; margin: 1.5rem 0 1rem; color: var(--accent2); }
+        .output-body h2 { font-size: 1.4rem; margin: 1.5rem 0 0.75rem; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+        .output-body h3 { font-size: 1.1rem; margin: 1rem 0 0.5rem; color: var(--text); }
+        .output-body p { margin: 0.75rem 0; }
+        .output-body li { margin: 0.25rem 0; }
+        .output-body ul, .output-body ol { padding-left: 1.5rem; }
+        .output-body code { background: var(--bg); padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.85em; }
+        .output-body pre { background: var(--bg); padding: 1rem; border-radius: 6px; overflow-x: auto; margin: 1rem 0; }
+        .output-body pre code { background: none; padding: 0; }
+        .output-body blockquote { border-left: 3px solid var(--accent); padding-left: 1rem; margin: 1rem 0; color: var(--muted); }
+        .output-body table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+        .output-body th, .output-body td { padding: 0.5rem; border: 1px solid var(--border); text-align: left; }
+        .output-body th { background: var(--border); }
+        .empty-state { text-align: center; padding: 3rem; color: var(--muted); }
+        .empty-state h2 { color: var(--text); margin-bottom: 0.5rem; }
+        .loading { text-align: center; padding: 2rem; color: var(--muted); }
+        @keyframes pulse {
+            0%, 100% { opacity: 0.4; }
+            50% { opacity: 1; }
+        }
+        .loading-pulse { animation: pulse 1.5s ease-in-out infinite; }
+        .phase-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--border);
+            color: var(--muted);
+            font-size: 0.7rem;
+            font-weight: 600;
+            margin-right: 6px;
+        }
+        .doc-item:not(.missing) .phase-badge { background: var(--accent); color: #fff; }
+        .missing-tag {
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 3px;
+            background: var(--border);
+            color: var(--muted);
+            margin-left: auto;
+        }
+        .action-hint {
+            font-size: 0.7rem;
+            color: var(--accent);
+            cursor: pointer;
+            margin-left: auto;
+        }
+        .action-hint:hover { text-decoration: underline; }
+        .onboarding-card {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(168, 85, 247, 0.1));
+            border: 1px solid var(--accent);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+        .onboarding-card h3 { color: var(--accent2); margin-bottom: 0.5rem; }
+        .onboarding-card p { color: var(--muted); font-size: 0.9rem; margin-bottom: 1rem; }
+        .onboarding-card code { background: var(--bg); padding: 0.25rem 0.5rem; border-radius: 4px; color: var(--accent); }
+        .help-content { margin-bottom: 1rem; }
+        .help-command { margin-top: 0.5rem; }
+        .help-command code { font-size: 1.1rem; padding: 0.5rem 1rem; }
+        .help-phase { margin-top: 1.5rem; font-size: 0.85rem; color: var(--muted); }
+        .actions-list { display: flex; flex-direction: column; gap: 0.5rem; }
+        .btn { padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.9rem; cursor: pointer; border: none; transition: all 0.2s; }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { background: var(--accent2); }
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); text-align: center; text-decoration: none; }
+        .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+        .action-link { display: block; }
+        .modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .modal.hidden, .hidden { display: none; }
+        .modal-content { background: var(--card); border: 1px solid var(--border); border-radius: 12px; width: 90%; max-width: 450px; }
+        .modal-header { padding: 1rem 1.5rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        .modal-header h3 { margin: 0; }
+        .modal-close { background: none; border: none; color: var(--muted); font-size: 1.5rem; cursor: pointer; }
+        .modal-close:hover { color: var(--text); }
+        .modal-body { padding: 1.5rem; }
+        .modal-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 0.5rem; }
+        .form-group { margin-bottom: 1rem; }
+        .form-group label { display: block; margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--muted); }
+        .form-group input, .form-group select { width: 100%; padding: 0.5rem; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); }
+        .share-result { margin-top: 1rem; }
+        .share-link-row { display: flex; gap: 0.5rem; }
+        .share-link-row input { flex: 1; }
+        .share-expires { color: var(--muted); font-size: 0.8rem; margin-top: 0.5rem; }
+        .nav-header {
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .nav-logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--accent);
+            text-decoration: none;
+        }
+        .nav-logo-icon {
+            width: 28px;
+            height: 28px;
+            background: linear-gradient(135deg, var(--accent), #a855f7);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .nav-links { display: flex; gap: 8px; }
+        .nav-link {
+            color: var(--muted);
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .nav-link:hover { color: var(--text); background: var(--border); }
+        .nav-link.active { color: var(--text); background: var(--border); }
+        .breadcrumb-container { margin-bottom: 1rem; }
+        @media (max-width: 768px) {
+            .nav-header { padding: 10px 16px; }
+            .nav-links { gap: 4px; }
+            .nav-link { padding: 6px 10px; font-size: 13px; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav-header">
+        <a href="/pdev/" class="nav-logo">
+            <div class="nav-logo-icon">P</div>
+            <span>PDev Suite</span>
+        </a>
+        <div class="nav-links">
+            <a href="/pdev/live/" class="nav-link active">Dashboard</a>
+            <a href="/pdev/history/" class="nav-link">History</a>
+            <a href="/pdev/" class="nav-link">Docs</a>
+        </div>
+    </nav>
+    <div class="container">
+        <div class="breadcrumb breadcrumb-container">
+            <a href="index.html">Dashboard</a>
+            <span>/</span>
+            <span id="breadcrumb-project">Project</span>
+        </div>
+        <div class="project-header">
+            <div class="project-title" id="project-name">Loading...</div>
+            <div class="project-meta">
+                <strong>Server:</strong> <span id="project-server">-</span>
+                <span> | </span>
+                <strong>Last updated:</strong> <span id="project-updated">-</span>
+            </div>
+        </div>
+        <div class="main-content">
+            <div class="sidebar">
+                <div class="sidebar-card">
+                    <h3>Pipeline Documents</h3>
+                    <ul class="doc-list" id="doc-list">
+                        <li class="loading loading-pulse">Loading docs...</li>
+                    </ul>
+                </div>
+                <div class="sidebar-card">
+                    <h3>Recent Sessions</h3>
+                    <ul class="session-list" id="session-list">
+                        <li class="loading loading-pulse">Loading...</li>
+                    </ul>
+                </div>
+                <div class="sidebar-card">
+                    <h3>Actions</h3>
+                    <div class="actions-list">
+                        <button class="btn btn-primary" onclick="openShareModal()" id="shareBtn">Share with Client</button>
+                        <a href="/pdev/live/" class="btn btn-outline action-link">Dashboard</a>
+                    </div>
+                </div>
+            </div>
+            <div class="output-panel">
+                <div class="output-header">
+                    <span id="doc-title">Select a document</span>
+                    <span id="doc-version"></span>
+                </div>
+                <div class="output-body" id="doc-content">
+                    <div class="empty-state">
+                        <h2>Select a document</h2>
+                        <p>Click on a document from the sidebar to view its contents.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+        const API_BASE = 'https://walletsnack.com/pdev/api';
+        // SINGLE SOURCE OF TRUTH: Load from API, fallback to hardcoded
+        let PIPELINE_DOCS = [
+            { type: 'IDEATION', name: 'IDEATION.md', icon: '💡', phase: 1, cmd: '/idea' },
+            { type: 'BENCHMARK', name: 'BENCHMARK.md', icon: '📊', phase: 2, cmd: '/bmrk' },
+            { type: 'GAP_ANALYSIS', name: 'GAP_ANALYSIS.md', icon: '🔍', phase: 3, cmd: '/gapa' },
+            { type: 'INNOVATION', name: 'INNOVATION.md', icon: '🚀', phase: 4, cmd: '/innov' },
+            { type: 'CAPABILITIES', name: 'CAPABILITIES.md', icon: '⚙️', phase: 5, cmd: '/caps' },
+            { type: 'PRODUCT_SPEC', name: 'PRODUCT_SPEC.md', icon: '📋', phase: 6, cmd: '/spec' },
+            { type: 'DESIGN_SYSTEM', name: 'DESIGN_SYSTEM.md', icon: '🎨', phase: 7, cmd: '/bmrk design' },
+            { type: 'DEVELOPMENT_SOP', name: 'DEVELOPMENT_SOP.md', icon: '📝', phase: 8, cmd: '/sop' },
+            { type: 'EVALUATION', name: 'EVALUATION.md', icon: '✅', phase: 9, cmd: '/eval' }
+        ];
+        const params = new URLSearchParams(window.location.search);
+        const projectName = params.get('project');
+        const serverName = params.get('server') || 'cfree';
+        const guestToken = params.get('guest');
+        const isGuestView = !!guestToken;
+        let projectDocs = {};
+
+        async function init() {
+            if (!projectName) {
+                document.getElementById('project-name').textContent = 'No project specified';
+                return;
+            }
+            // Load contract from API (single source of truth)
+            try {
+                const contractRes = await fetch(API_BASE + '/contract');
+                if (contractRes.ok) {
+                    const contract = await contractRes.json();
+                    if (contract.PIPELINE_DOCS && contract.PIPELINE_DOCS.length > 0) {
+                        PIPELINE_DOCS = contract.PIPELINE_DOCS;
+                        console.log('[PDev] Loaded doc contract from API:', PIPELINE_DOCS.length, 'types');
+                    }
+                }
+            } catch (e) {
+                console.warn('[PDev] Using fallback doc contract');
+            }
+            document.getElementById('project-name').textContent = projectName;
+            document.getElementById('breadcrumb-project').textContent = projectName;
+            document.getElementById('project-server').textContent = serverName;
+
+            // Hide share functionality for guest viewers (guests cannot create new share links)
+            if (isGuestView) {
+                var shareBtn = document.getElementById('shareBtn');
+                if (shareBtn) shareBtn.classList.add('hidden');
+            }
+
+            await Promise.all([loadProjectDocs(), loadProjectSessions()]);
+        }
+        
+        async function loadProjectDocs() {
+            try {
+                const response = await fetch(API_BASE + '/projects/' + serverName + '/' + projectName + '/docs');
+                if (!response.ok) { renderDocList({}); return; }
+                projectDocs = await response.json();
+                renderDocList(projectDocs);
+                if (projectDocs.lastModified) {
+                    document.getElementById('project-updated').textContent = new Date(projectDocs.lastModified).toLocaleString();
+                }
+            } catch (err) {
+                console.error('Failed to load docs:', err);
+                renderDocList({});
+            }
+        }
+        
+        function renderDocList(docs) {
+            const list = document.getElementById('doc-list');
+            list.innerHTML = '';
+            const hasAnyDocs = Object.keys(docs).some(k => k !== 'lastModified');
+
+            // Show onboarding if no docs exist
+            if (!hasAnyDocs) {
+                const onboarding = document.createElement('div');
+                onboarding.className = 'onboarding-card';
+                onboarding.innerHTML = '<h3>Start Your Pipeline</h3>' +
+                    '<p>Begin by running <code>/idea ' + projectName + '</code> or <code>/eval ' + projectName + '</code> in Claude Code</p>';
+                list.parentNode.insertBefore(onboarding, list);
+            }
+
+            PIPELINE_DOCS.forEach(doc => {
+                const docData = docs[doc.type];
+                const li = document.createElement('li');
+                li.className = 'doc-item' + (docData ? '' : ' missing');
+                const phaseBadge = '<span class="phase-badge">' + doc.phase + '</span>';
+                if (docData) {
+                    li.innerHTML = '<div class="doc-name">' + phaseBadge + '<span class="icon">' + doc.icon + '</span>' + doc.name + '</div>' +
+                        '<div class="doc-meta">' + (docData.version ? 'v' + docData.version : '') +
+                        (docData.modified ? ' • ' + new Date(docData.modified).toLocaleDateString() : '') + '</div>';
+                    li.onclick = function() { selectDoc(doc.type, docData); };
+                } else {
+                    li.innerHTML = '<div class="doc-name">' + phaseBadge + '<span class="icon">' + doc.icon + '</span>' + doc.name +
+                        '<span class="action-hint" title="Run this command to create">Run ' + doc.cmd + '</span></div>';
+                    li.onclick = function() { showMissingDocHelp(doc); };
+                }
+                list.appendChild(li);
+            });
+            const firstDoc = PIPELINE_DOCS.find(d => docs[d.type]);
+            if (firstDoc && docs[firstDoc.type]) selectDoc(firstDoc.type, docs[firstDoc.type]);
+        }
+
+        function showMissingDocHelp(doc) {
+            document.querySelectorAll('.doc-item').forEach(el => el.classList.remove('active'));
+            const items = document.querySelectorAll('.doc-item');
+            const index = PIPELINE_DOCS.findIndex(d => d.type === doc.type);
+            if (items[index]) items[index].classList.add('active');
+
+            document.getElementById('doc-title').textContent = doc.name;
+            document.getElementById('doc-version').textContent = '';
+            document.getElementById('doc-content').innerHTML =
+                '<div class="empty-state">' +
+                '<h2>' + doc.icon + ' ' + doc.name.replace('.md', '') + '</h2>' +
+                '<p class="help-content">This document hasn\'t been created yet.</p>' +
+                '<p>To create it, run:</p>' +
+                '<p class="help-command"><code>' + doc.cmd + ' ' + projectName + '</code></p>' +
+                '<p class="help-phase">Phase ' + doc.phase + ' of 9 in the PDev pipeline</p>' +
+                '</div>';
+        }
+        
+        async function selectDoc(type, docData) {
+            document.querySelectorAll('.doc-item').forEach(el => el.classList.remove('active'));
+            const items = document.querySelectorAll('.doc-item');
+            const index = PIPELINE_DOCS.findIndex(d => d.type === type);
+            if (items[index]) items[index].classList.add('active');
+            
+            document.getElementById('doc-title').textContent = PIPELINE_DOCS.find(d => d.type === type)?.name || type;
+            document.getElementById('doc-version').textContent = docData.version ? 'v' + docData.version : '';
+            
+            if (docData.content) {
+                renderContent(docData.content);
+            } else {
+                try {
+                    const response = await fetch(API_BASE + '/projects/' + serverName + '/' + projectName + '/docs/' + type);
+                    if (response.ok) {
+                        const data = await response.json();
+                        renderContent(data.content || 'No content available');
+                    } else {
+                        const doc = PIPELINE_DOCS.find(d => d.type === type);
+                        renderContent('## Document Loading Issue\n\nThe content for **' + type + '** could not be loaded.\n\n' +
+                            '**Try:** Run `' + (doc ? doc.cmd : '/pdev') + ' ' + projectName + '` to regenerate this document.');
+                    }
+                } catch (err) {
+                    renderContent('## Connection Error\n\nCould not connect to the API.\n\n**Try:** Refresh the page or check your network connection.');
+                }
+            }
+        }
+        
+        function renderContent(markdown) {
+            const html = marked.parse(markdown);
+            document.getElementById('doc-content').innerHTML = html;
+            document.querySelectorAll('#doc-content pre code').forEach(block => hljs.highlightElement(block));
+        }
+        
+        async function loadProjectSessions() {
+            try {
+                const response = await fetch(API_BASE + '/projects/' + serverName + '/' + projectName + '/sessions');
+                if (!response.ok) {
+                    document.getElementById('session-list').innerHTML = '<li>No sessions found</li>';
+                    return;
+                }
+                const data = await response.json();
+                const sessions = data.sessions || data || [];
+                const list = document.getElementById('session-list');
+                if (!sessions.length) {
+                    list.innerHTML = '<li>No sessions yet</li>';
+                    return;
+                }
+                list.innerHTML = sessions.slice(0, 10).map(function(s) {
+                    return '<li><a href="session.html?id=' + s.id + '">/' + (s.command_type || 'session') + '</a> ' +
+                        '<span class="session-date">' + new Date(s.created_at).toLocaleDateString() + '</span> ' +
+                        '<span>(' + (s.step_count || 0) + ' steps)</span></li>';
+                }).join('');
+            } catch (err) {
+                document.getElementById('session-list').innerHTML = '<li>Failed to load</li>';
+            }
+        }
+        
+        init();
+
+        // Share Modal Functions
+        function openShareModal() {
+            // Block guest users from opening share modal
+            if (isGuestView) {
+                console.warn('[PDev] Share functionality disabled for guest viewers');
+                return;
+            }
+            document.getElementById('shareModal').classList.remove('hidden');
+            document.getElementById('shareResult').classList.add('hidden');
+            document.getElementById('shareEmail').value = '';
+            document.getElementById('createShareBtn').disabled = false;
+            document.getElementById('createShareBtn').textContent = 'Create Link';
+        }
+
+        function closeShareModal() {
+            document.getElementById('shareModal').classList.add('hidden');
+        }
+
+        async function createShareLink() {
+            // Block guest users from creating share links
+            if (isGuestView) {
+                console.warn('[PDev] Share functionality disabled for guest viewers');
+                return;
+            }
+            var email = document.getElementById('shareEmail').value.trim();
+            var hours = document.getElementById('shareExpiry').value;
+            var btn = document.getElementById('createShareBtn');
+            var adminKey = '5CG0k5JOyBmd//v8xqTDzKbJlSwXImB6y91SErZWfd0=';
+
+            btn.disabled = true;
+            btn.textContent = 'Creating...';
+
+            try {
+                var res = await fetch(API_BASE + '/project-share', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
+                    body: JSON.stringify({
+                        server: serverName,
+                        project: projectName,
+                        email: email || null,
+                        expiresInHours: parseInt(hours)
+                    })
+                });
+
+                if (!res.ok) throw new Error('Failed to create share link');
+                var data = await res.json();
+
+                document.getElementById('shareLink').value = data.shareUrl;
+                document.getElementById('shareExpires').textContent = 'Expires: ' + new Date(data.expiresAt).toLocaleString();
+                document.getElementById('shareResult').classList.remove('hidden');
+                btn.textContent = 'Link Created';
+            } catch (err) {
+                alert('Failed to create share link: ' + err.message);
+                btn.disabled = false;
+                btn.textContent = 'Create Link';
+            }
+        }
+
+        function copyShareLink() {
+            var input = document.getElementById('shareLink');
+            input.select();
+            document.execCommand('copy');
+            alert('Link copied to clipboard!');
+        }
+    </script>
+
+    <!-- Share Modal -->
+    <div id="shareModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Share Project</h3>
+                <button class="modal-close" onclick="closeShareModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="shareEmail">Client Email (optional)</label>
+                    <input type="email" id="shareEmail" placeholder="client@example.com">
+                </div>
+                <div class="form-group">
+                    <label for="shareExpiry">Link expires in</label>
+                    <select id="shareExpiry">
+                        <option value="24">24 hours</option>
+                        <option value="48">48 hours</option>
+                        <option value="72" selected>72 hours (3 days)</option>
+                        <option value="168">1 week</option>
+                        <option value="336">2 weeks</option>
+                        <option value="720">30 days</option>
+                    </select>
+                </div>
+                <div id="shareResult" class="share-result hidden">
+                    <label>Share Link</label>
+                    <div class="share-link-row">
+                        <input type="text" id="shareLink" readonly>
+                        <button class="btn" onclick="copyShareLink()">Copy</button>
+                    </div>
+                    <p id="shareExpires" class="share-expires"></p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeShareModal()">Cancel</button>
+                <button class="btn btn-primary" id="createShareBtn" onclick="createShareLink()">Create Link</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

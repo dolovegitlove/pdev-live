@@ -3,190 +3,576 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PDev Suite</title>
-    <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
-    <meta name="googlebot" content="noindex, nofollow">
+    <title>PDev Live</title>
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
     <style>
-        *{-webkit-user-select:text;-moz-user-select:text;-ms-user-select:text;user-select:text;box-sizing:border-box}
-        :root{--bg:#0a0a0f;--card:#12121a;--border:#1e1e2e;--text:#e4e4e7;--muted:#71717a;--accent:#6366f1;--accent2:#818cf8;--success:#22c55e;--warn:#f59e0b;--danger:#ef4444}
-        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);margin:0;padding:0;min-height:100vh;line-height:1.6}
-        
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --bg: #0a0a0f;
+            --card: #12121a;
+            --border: #1e1e2e;
+            --text: #e4e4e7;
+            --muted: #71717a;
+            --accent: #6366f1;
+            --accent2: #818cf8;
+            --success: #22c55e;
+            --warn: #f59e0b;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1rem;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 0;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 1rem;
+        }
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent), #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            color: var(--muted);
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--muted);
+        }
+        .status-dot.connected { background: var(--success); animation: pulse 2s infinite; }
+        .status-dot.active { background: var(--warn); animation: pulse 0.5s infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .pipeline {
+            display: flex;
+            gap: 0.25rem;
+            padding: 1rem;
+            background: var(--card);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            margin-bottom: 1rem;
+            overflow-x: auto;
+            flex-wrap: wrap;
+        }
+        .pipe-step {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+        .pipe-cmd {
+            padding: 0.35rem 0.7rem;
+            background: var(--border);
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.8rem;
+            color: var(--muted);
+            transition: all 0.3s;
+        }
+        .pipe-cmd.active {
+            background: var(--accent);
+            color: white;
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+        }
+        .pipe-cmd.done {
+            background: var(--success);
+            color: white;
+        }
+        .pipe-arr { color: var(--muted); font-size: 0.7rem; }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 1rem;
+        }
+        @media (max-width: 900px) {
+            .main-content { grid-template-columns: 1fr; }
+            .sidebar { order: -1; }
+        }
+
+        .output-panel {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .output-header {
+            padding: 0.75rem 1rem;
+            background: var(--border);
+            font-weight: 600;
+            font-size: 0.9rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .output-body {
+            padding: 1.5rem;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+        .output-body::-webkit-scrollbar { width: 6px; }
+        .output-body::-webkit-scrollbar-track { background: var(--bg); }
+        .output-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+        /* Markdown rendering */
+        .output-body h1 { font-size: 1.8rem; margin: 1.5rem 0 1rem; color: var(--accent2); }
+        .output-body h2 { font-size: 1.4rem; margin: 1.5rem 0 0.75rem; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+        .output-body h3 { font-size: 1.1rem; margin: 1rem 0 0.5rem; color: var(--text); }
+        .output-body p { margin: 0.75rem 0; }
+        .output-body ul, .output-body ol { margin: 0.75rem 0; padding-left: 1.5rem; }
+        .output-body li { margin: 0.25rem 0; }
+        .output-body code {
+            background: var(--bg);
+            padding: 0.15rem 0.4rem;
+            border-radius: 3px;
+            font-size: 0.85em;
+            color: var(--success);
+        }
+        .output-body pre {
+            background: var(--bg);
+            padding: 1rem;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 1rem 0;
+        }
+        .output-body pre code {
+            background: none;
+            padding: 0;
+            color: var(--text);
+        }
+        .output-body table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+        }
+        .output-body th, .output-body td {
+            padding: 0.5rem;
+            border: 1px solid var(--border);
+            text-align: left;
+        }
+        .output-body th { background: var(--border); }
+        .output-body blockquote {
+            border-left: 3px solid var(--accent);
+            padding-left: 1rem;
+            margin: 1rem 0;
+            color: var(--muted);
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .sidebar-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+        }
+        .sidebar-card h3 {
+            font-size: 0.85rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.75rem;
+        }
+        .step-list {
+            list-style: none;
+            font-size: 0.9rem;
+        }
+        .step-list li {
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .step-list li:last-child { border-bottom: none; }
+        .step-icon {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+        }
+        .step-icon.done { background: var(--success); }
+        .step-icon.active { background: var(--accent); animation: pulse 1s infinite; }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: var(--muted);
+        }
+        .empty-state .icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .typing-indicator {
+            display: inline-flex;
+            gap: 4px;
+            padding: 0.5rem;
+        }
+        .typing-indicator span {
+            width: 6px;
+            height: 6px;
+            background: var(--accent);
+            border-radius: 50%;
+            animation: typing 1.4s infinite;
+        }
+        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typing {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-4px); }
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: background 0.2s;
+        }
+        .btn:hover { background: var(--accent2); }
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text);
+        }
+        .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+
         /* Navigation */
-        .nav-header{background:var(--card);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
-        .nav-logo{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:600;color:var(--accent)}
-        .nav-logo-icon{width:28px;height:28px;background:linear-gradient(135deg,var(--accent),#a855f7);border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:bold;font-size:14px}
-        .nav-links{display:flex;gap:8px}
-        .nav-link{color:var(--muted);text-decoration:none;padding:8px 16px;border-radius:6px;font-size:14px;transition:all 0.2s}
-        .nav-link:hover{color:var(--text);background:var(--border)}
-        .nav-link.active{color:var(--text);background:var(--border)}
-        
-        .container{max-width:1100px;margin:0 auto;padding:2rem}
-        header{text-align:center;padding:2.5rem 0;border-bottom:1px solid var(--border);margin-bottom:2.5rem}
-        h1{font-size:2.5rem;margin:0 0 0.5rem;background:linear-gradient(135deg,var(--accent),#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-        .subtitle{color:var(--muted);font-size:1.1rem}
-        h2{font-size:1.4rem;margin:2rem 0 1rem;padding-bottom:0.5rem;border-bottom:1px solid var(--border)}
-        .pipeline{display:flex;flex-wrap:wrap;gap:0.4rem;justify-content:center;margin:1.5rem 0;padding:1.25rem;background:var(--card);border-radius:10px;border:1px solid var(--border)}
-        .pipe-step{display:flex;align-items:center;gap:0.4rem}
-        .pipe-step .cmd{background:var(--accent);color:#fff;padding:0.4rem 0.8rem;border-radius:5px;font-family:monospace;font-size:0.85rem}
-        .pipe-step .arr{color:var(--muted)}
-        .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.25rem;margin:1.5rem 0}
-        .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:1.25rem;transition:all 0.2s}
-        .card:hover{border-color:var(--accent);transform:translateY(-2px)}
-        .card h3{margin:0 0 0.4rem;color:var(--accent);font-size:1.1rem}
-        .card p{color:var(--muted);margin:0;font-size:0.9rem}
-        .card a{color:var(--accent);text-decoration:none}
-        .guide{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:1.5rem;margin:2rem 0}
-        .guide p{color:var(--muted);margin:0 0 1rem}
-        .steps{list-style:none;padding:0;margin:0}
-        .steps li{padding:1rem;margin:0.5rem 0;background:var(--bg);border-radius:8px;border-left:3px solid var(--accent)}
-        .steps li strong{color:var(--accent)}
-        .steps li .ex{font-family:monospace;font-size:0.8rem;color:var(--success);margin-top:0.4rem;display:block}
-        .layers-tbl{width:100%;border-collapse:collapse;margin:1rem 0}
-        .layers-tbl th,.layers-tbl td{padding:0.6rem;text-align:left;border-bottom:1px solid var(--border)}
-        .layers-tbl th{color:var(--muted);font-weight:500;font-size:0.8rem;text-transform:uppercase}
-        .layers-tbl code{font-family:monospace;background:var(--border);padding:0.15rem 0.4rem;border-radius:4px;color:var(--success);font-size:0.85rem}
-        .input-demo{background:var(--bg);border-radius:10px;padding:1.25rem;margin:1.5rem 0}
-        .input-demo .q{color:var(--text);margin-bottom:0.8rem;font-size:1rem}
-        .input-demo .opts{display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:0.8rem}
-        .input-demo .opt{padding:0.5rem 1rem;background:var(--border);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;transition:all 0.2s;font-size:0.9rem}
-        .input-demo .opt:hover{background:var(--accent);border-color:var(--accent)}
-        .input-demo .alts{display:flex;gap:0.4rem;padding-top:0.8rem;border-top:1px solid var(--border);flex-wrap:wrap}
-        .input-demo .alt{padding:0.4rem 0.8rem;background:transparent;border:1px dashed var(--border);border-radius:5px;color:var(--muted);cursor:pointer;font-size:0.8rem}
-        .input-demo .alt:hover{border-color:var(--accent);color:var(--accent)}
-        .cmd-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem}
-        .cmd-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:1rem}
-        .cmd-card .name{font-family:monospace;font-size:1rem;color:var(--success);margin-bottom:0.4rem}
-        .cmd-card .desc{color:var(--muted);font-size:0.85rem;margin-bottom:0.6rem}
-        .cmd-card .chips{display:flex;flex-wrap:wrap;gap:0.25rem}
-        .chip{font-size:0.65rem;padding:0.15rem 0.4rem;background:var(--accent);border-radius:3px;color:#fff}
-        footer{text-align:center;padding:1.5rem;color:var(--muted);font-size:0.8rem;border-top:1px solid var(--border);margin-top:2rem}
-        @media(max-width:768px){.container{padding:1rem}h1{font-size:1.8rem}.pipeline{flex-direction:column;align-items:center}.pipe-step .arr{transform:rotate(90deg)}.nav-header{padding:10px 16px}.nav-links{gap:4px}.nav-link{padding:6px 10px;font-size:13px}}
+        .nav-header {
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .nav-logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--accent);
+            text-decoration: none;
+        }
+        .nav-logo-icon {
+            width: 28px;
+            height: 28px;
+            background: linear-gradient(135deg, var(--accent), #a855f7);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .nav-links {
+            display: flex;
+            gap: 8px;
+        }
+        .nav-link {
+            color: var(--muted);
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .nav-link:hover {
+            color: var(--text);
+            background: var(--border);
+        }
+        .nav-link.active {
+            color: var(--text);
+            background: var(--border);
+        }
+        @media (max-width: 768px) {
+            .nav-header { padding: 10px 16px; }
+            .nav-links { gap: 4px; }
+            .nav-link { padding: 6px 10px; font-size: 13px; }
+        }
     </style>
 </head>
 <body>
-<!-- Navigation Header -->
-<nav class="nav-header">
-    <div class="nav-logo">
-        <div class="nav-logo-icon">P</div>
-        <span>PDev Suite</span>
-    </div>
-    <div class="nav-links">
-        <a href="/pdev/live/" class="nav-link">Dashboard</a>
-        <a href="/pdev/history/" class="nav-link">History</a>
-        <a href="/pdev/" class="nav-link active">Docs</a>
-    </div>
-</nav>
+    <!-- Navigation Header -->
+    <nav class="nav-header">
+        <a href="/pdev/" class="nav-logo">
+            <div class="nav-logo-icon">P</div>
+            <span>PDev Suite</span>
+        </a>
+        <div class="nav-links">
+            <a href="/pdev/live/" class="nav-link active">Dashboard</a>
+            <a href="/pdev/history/" class="nav-link">History</a>
+            <a href="/pdev/" class="nav-link">Docs</a>
+        </div>
+    </nav>
 
-<div class="container">
-    <header>
-        <h1>PDev Suite</h1>
-        <p class="subtitle">Product Development Pipeline - Idea to Implementation</p>
-    </header>
+    <div class="container">
+        <header>
+            <div class="logo">PDev Live</div><nav style="display:flex;gap:1rem;font-size:0.9rem;"><a href="index.html" style="color:var(--accent);text-decoration:none;">Live</a><a href="projects.html" style="color:var(--muted);text-decoration:none;">Projects</a></nav>
+            <div class="status">
+                <span class="status-dot" id="statusDot"></span>
+                <span id="statusText">Connecting...</span>
+            </div>
+        </header>
 
-    <section class="pipeline">
-        <div class="pipe-step"><span class="cmd">/idea</span><span class="arr">→</span></div>
-        <div class="pipe-step"><span class="cmd">/bmrk</span><span class="arr">→</span></div>
-        <div class="pipe-step"><span class="cmd">/gapa</span><span class="arr">→</span></div>
-        <div class="pipe-step"><span class="cmd">/innov</span><span class="arr">→</span></div>
-        <div class="pipe-step"><span class="cmd">/caps</span><span class="arr">→</span></div>
-        <div class="pipe-step"><span class="cmd">/spec</span><span class="arr">→</span></div>
-        <div class="pipe-step"><span class="cmd">/bmrk design</span><span class="arr">→</span></div>
-        <div class="pipe-step"><span class="cmd">/sop</span><span class="arr">→</span></div>
-        <div class="pipe-step"><span class="cmd">/pv</span></div>
-    </section>
+        <div class="pipeline" id="pipeline">
+            <div class="pipe-step"><span class="pipe-cmd" data-cmd="/idea">/idea</span><span class="pipe-arr">→</span></div>
+            <div class="pipe-step"><span class="pipe-cmd" data-cmd="/bmrk">/bmrk</span><span class="pipe-arr">→</span></div>
+            <div class="pipe-step"><span class="pipe-cmd" data-cmd="/gapa">/gapa</span><span class="pipe-arr">→</span></div>
+            <div class="pipe-step"><span class="pipe-cmd" data-cmd="/innov">/innov</span><span class="pipe-arr">→</span></div>
+            <div class="pipe-step"><span class="pipe-cmd" data-cmd="/caps">/caps</span><span class="pipe-arr">→</span></div>
+            <div class="pipe-step"><span class="pipe-cmd" data-cmd="/spec">/spec</span><span class="pipe-arr">→</span></div>
+            <div class="pipe-step"><span class="pipe-cmd" data-cmd="/bmrk">/bmrk design</span><span class="pipe-arr">→</span></div>
+            <div class="pipe-step"><span class="pipe-cmd" data-cmd="/sop">/sop</span><span class="pipe-arr">→</span></div>
+            <div class="pipe-step"><span class="pipe-cmd" data-cmd="/pv">/pv</span></div>
+        </div>
 
-    <section class="cards">
-        <div class="card">
-            <h3>New Idea</h3>
-            <p>Starting fresh with a concept. Go from "I have an idea" to a complete implementation plan.</p>
-        </div>
-        <div class="card">
-            <h3>Existing Business</h3>
-            <p>Already have something running. Evaluate, benchmark, and find ways to improve or expand.</p>
-        </div>
-    </section>
+        <div class="main-content">
+            <div class="output-panel">
+                <div class="output-header">
+                    <span id="outputTitle">Output</span>
+                    <button class="btn btn-outline" onclick="copyOutput()">Copy</button>
+                </div>
+                <div class="output-body" id="outputBody">
+                    <div class="empty-state">
+                        <div class="icon">📡</div>
+                        <p>Waiting for PDev commands...</p>
+                        <p style="font-size: 0.85rem; margin-top: 0.5rem;">Run a command in Claude Code to see live output here</p>
+                    </div>
+                </div>
+            </div>
 
-    <section class="guide">
-        <h2>The No-BS Guide</h2>
-        <p>Think of PDev like building a business the smart way - you don't just start coding. You figure out what's already out there, what's missing, and then build something better.</p>
+            <div class="sidebar">
+                <div class="sidebar-card">
+                    <h3>Session</h3>
+                    <div id="sessionInfo">
+                        <p style="color: var(--muted); font-size: 0.9rem;">No active session</p>
+                    </div>
+                </div>
 
-        <ol class="steps">
-            <li><strong>/idea or /eval</strong> - What are you building? New concept or improving existing?<span class="ex">/idea "fitness app for busy people"</span></li>
-            <li><strong>/bmrk</strong> - What's the competition doing? Who's winning and why?<span class="ex">/bmrk industry "fitness apps"</span></li>
-            <li><strong>/gapa</strong> - What's missing in the market? What are people complaining about?<span class="ex">/gapa industry "fitness tech"</span></li>
-            <li><strong>/innov</strong> - Now that you know what exists and what's missing, how can you do it 10x better?<span class="ex">/innov product myfitapp</span></li>
-            <li><strong>/caps</strong> - Can you actually build this? What team/tech do you need?<span class="ex">/caps tech myfitapp</span></li>
-            <li><strong>/spec</strong> - Write the blueprint. Every feature, every screen, every API.<span class="ex">/spec product myfitapp</span></li>
-            <li><strong>/bmrk design</strong> - What should it look like? Research the best designs in your category.<span class="ex">/bmrk design myfitapp</span></li>
-            <li><strong>/sop</strong> - Break it into tasks. Phase 1, Phase 2, etc. What gets built first?<span class="ex">/sop product myfitapp</span></li>
-            <li><strong>/pv</strong> - Validate everything. Make sure nothing's missing before you start coding.<span class="ex">/pv myfitapp</span></li>
-        </ol>
-    </section>
+                <div class="sidebar-card">
+                    <h3>Steps</h3>
+                    <ul class="step-list" id="stepList">
+                        <li style="color: var(--muted);">No steps yet</li>
+                    </ul>
+                </div>
 
-    <h2>Command Reference</h2>
-    <div class="cmd-grid">
-        <div class="cmd-card">
-            <div class="name">/idea</div>
-            <div class="desc">Capture and develop a new product idea from scratch</div>
-            <div class="chips"><span class="chip">ideation</span><span class="chip">vision</span></div>
-        </div>
-        <div class="cmd-card">
-            <div class="name">/eval</div>
-            <div class="desc">Evaluate an existing product or business for improvements</div>
-            <div class="chips"><span class="chip">analysis</span><span class="chip">audit</span></div>
-        </div>
-        <div class="cmd-card">
-            <div class="name">/bmrk</div>
-            <div class="desc">Competitive benchmark analysis - who's winning and why</div>
-            <div class="chips"><span class="chip">research</span><span class="chip">competition</span></div>
-        </div>
-        <div class="cmd-card">
-            <div class="name">/gapa</div>
-            <div class="desc">Gap analysis - find market holes and unmet needs</div>
-            <div class="chips"><span class="chip">opportunity</span><span class="chip">gaps</span></div>
-        </div>
-        <div class="cmd-card">
-            <div class="name">/innov</div>
-            <div class="desc">Innovation analysis - how to do it 10x better</div>
-            <div class="chips"><span class="chip">innovation</span><span class="chip">differentiation</span></div>
-        </div>
-        <div class="cmd-card">
-            <div class="name">/caps</div>
-            <div class="desc">Capability assessment - what you can build and need</div>
-            <div class="chips"><span class="chip">resources</span><span class="chip">feasibility</span></div>
-        </div>
-        <div class="cmd-card">
-            <div class="name">/spec</div>
-            <div class="desc">Technical specification - the complete blueprint</div>
-            <div class="chips"><span class="chip">technical</span><span class="chip">blueprint</span></div>
-        </div>
-        <div class="cmd-card">
-            <div class="name">/sop</div>
-            <div class="desc">Standard operating procedure - phased implementation</div>
-            <div class="chips"><span class="chip">tasks</span><span class="chip">phases</span></div>
-        </div>
-        <div class="cmd-card">
-            <div class="name">/pv</div>
-            <div class="desc">Pipeline validation - ensure nothing's missing</div>
-            <div class="chips"><span class="chip">validation</span><span class="chip">review</span></div>
+                <div class="sidebar-card">
+                    <h3>Actions</h3>
+                    <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                        <button class="btn btn-outline" onclick="resetSession()">Reset Session</button>
+                        <a href="/pdev/" class="btn btn-outline" style="text-align: center; text-decoration: none;">View Docs</a>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
-    <h2>PDev Live</h2>
-    <div class="cards">
-        <div class="card">
-            <h3><a href="/pdev/live/">Live Dashboard</a></h3>
-            <p>Watch PDev commands execute in real-time across all servers.</p>
-        </div>
-        <div class="card">
-            <h3><a href="/pdev/history/">Session History</a></h3>
-            <p>Browse past PDev sessions and their outputs.</p>
-        </div>
-    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
+    <script>
+        const API_BASE = '/pdev/api';
+        let eventSource = null;
+        let session = { steps: [] };
+        let completedCommands = new Set();
 
-    <footer>
-        PDev Suite v3.1 | Product Development Pipeline
-    </footer>
-</div>
-</body>
+        // Connect to SSE
+        function connect() {
+            eventSource = new EventSource(`${API_BASE}/events`);
+
+            eventSource.onopen = () => {
+                document.getElementById('statusDot').className = 'status-dot connected';
+                document.getElementById('statusText').textContent = 'Connected';
+            };
+
+            eventSource.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                handleEvent(data);
+            };
+
+            eventSource.onerror = () => {
+                document.getElementById('statusDot').className = 'status-dot';
+                document.getElementById('statusText').textContent = 'Reconnecting...';
+                setTimeout(connect, 3000);
+            };
+        }
+
+        // Handle incoming events
+        function handleEvent(data) {
+            switch (data.type) {
+                case 'init':
+                    session = data.session || { steps: [] };
+                    renderSession();
+                    break;
+                case 'step':
+                    session = data.session || { steps: [] };
+                    if (data.step.type === 'command') {
+                        setActiveCommand(data.step.command);
+                    }
+                    if (data.step.type === 'output' && data.step.html) {
+                        appendOutput(data.step.html);
+                    }
+                    renderSteps();
+                    break;
+                case 'reset':
+                    session = { steps: [] };
+                    completedCommands.clear();
+                    renderSession();
+                    resetPipeline();
+                    break;
+            }
+        }
+
+        // Render current session info
+        function renderSession() {
+            const info = document.getElementById('sessionInfo');
+            if (session.id) {
+                const duration = session.lastUpdate ?
+                    Math.round((Date.now() - session.startedAt) / 1000) : 0;
+                info.innerHTML = `
+                    <p><strong>ID:</strong> ${session.id.slice(0, 12)}</p>
+                    <p><strong>Project:</strong> ${session.project || 'Unknown'}</p>
+                    <p><strong>Duration:</strong> ${duration}s</p>
+                `;
+            } else {
+                info.innerHTML = '<p style="color: var(--muted); font-size: 0.9rem;">No active session</p>';
+            }
+
+            // Render any existing output
+            const outputs = session.steps.filter(s => s.type === 'output' && s.html);
+            if (outputs.length > 0) {
+                document.getElementById('outputBody').innerHTML = outputs.map(o => o.html).join('');
+            }
+
+            renderSteps();
+        }
+
+        // Render step list
+        function renderSteps() {
+            const list = document.getElementById('stepList');
+            const commands = session.steps.filter(s => s.type === 'command');
+
+            if (commands.length === 0) {
+                list.innerHTML = '<li style="color: var(--muted);">No steps yet</li>';
+                return;
+            }
+
+            list.innerHTML = commands.map((step, i) => {
+                const isLast = i === commands.length - 1;
+                const icon = isLast ? 'active' : 'done';
+                return `
+                    <li>
+                        <span class="step-icon ${icon}">${isLast ? '●' : '✓'}</span>
+                        <span>${step.command}</span>
+                    </li>
+                `;
+            }).join('');
+        }
+
+        // Set active command in pipeline
+        function setActiveCommand(cmd) {
+            // Mark previous as done
+            document.querySelectorAll('.pipe-cmd.active').forEach(el => {
+                el.classList.remove('active');
+                el.classList.add('done');
+                completedCommands.add(el.dataset.cmd);
+            });
+
+            // Set new active
+            const cmdEl = document.querySelector(`.pipe-cmd[data-cmd="${cmd}"]`);
+            if (cmdEl) {
+                cmdEl.classList.add('active');
+                document.getElementById('outputTitle').textContent = cmd;
+            }
+
+            // Update status
+            document.getElementById('statusDot').className = 'status-dot active';
+            document.getElementById('statusText').textContent = `Running ${cmd}...`;
+        }
+
+        // Append output to panel
+        function appendOutput(html) {
+            const body = document.getElementById('outputBody');
+            // Clear empty state if present
+            if (body.querySelector('.empty-state')) {
+                body.innerHTML = '';
+            }
+            body.innerHTML = html;
+            body.scrollTop = body.scrollHeight;
+
+            // Update status
+            document.getElementById('statusDot').className = 'status-dot connected';
+            document.getElementById('statusText').textContent = 'Connected';
+        }
+
+        // Reset pipeline display
+        function resetPipeline() {
+            document.querySelectorAll('.pipe-cmd').forEach(el => {
+                el.classList.remove('active', 'done');
+            });
+            document.getElementById('outputBody').innerHTML = `
+                <div class="empty-state">
+                    <div class="icon">📡</div>
+                    <p>Waiting for PDev commands...</p>
+                    <p style="font-size: 0.85rem; margin-top: 0.5rem;">Run a command in Claude Code to see live output here</p>
+                </div>
+            `;
+            document.getElementById('outputTitle').textContent = 'Output';
+        }
+
+        // Copy output to clipboard
+        function copyOutput() {
+            const body = document.getElementById('outputBody');
+            navigator.clipboard.writeText(body.innerText);
+            alert('Copied to clipboard!');
+        }
+
+        // Reset session via API
+        async function resetSession() {
+            if (confirm('Reset current session?')) {
+                await fetch(`${API_BASE}/reset`, { method: 'POST' });
+            }
+        }
+
+        // Initialize
+        connect();
+    </script>
+<script src="mgmt.js"></script></body>
 </html>

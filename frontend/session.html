@@ -253,6 +253,101 @@
             color: var(--text);
         }
         .btn-outline:hover { background: var(--border); }
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-primary:hover { background: var(--accent2); }
+        .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        /* Share Modal */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            width: 90%;
+            max-width: 450px;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .modal-header h3 { margin: 0; }
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--muted);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+        .modal-close:hover { color: var(--text); }
+        .modal-body {
+            padding: 1rem;
+        }
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.5rem;
+            padding: 1rem;
+            border-top: 1px solid var(--border);
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 0.85rem;
+            color: var(--muted);
+        }
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 0.6rem;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text);
+            font-size: 0.9rem;
+        }
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        .hidden { display: none; }
+        .actions-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .action-link {
+            text-align: center;
+            text-decoration: none;
+        }
+        .share-btn { display: block; }
+        .guest-view .share-btn { display: none; }
+        .share-result { margin-top: 1rem; }
+        .share-link-row {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .share-link-row input { flex: 1; }
+        .share-expires {
+            color: var(--muted);
+            font-size: 0.8rem;
+            margin-top: 0.5rem;
+        }
 
         .empty-state {
             text-align: center;
@@ -323,7 +418,7 @@
             max-width: 180px;
         }
     </style>
-</head>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"></head>
 <body>
     <nav class="nav-header">
         <a href="/pdev/" class="nav-logo">
@@ -379,11 +474,51 @@
 
                 <div class="sidebar-card">
                     <h3>Actions</h3>
-                    <div style="display: flex; flex-direction: column; gap: 0.5rem;">
-                        <a href="/pdev/live/" class="btn btn-outline" style="text-align: center; text-decoration: none;">Dashboard</a>
-                        <a href="/pdev/" class="btn btn-outline" style="text-align: center; text-decoration: none;">PDev Docs</a>
+                    <div class="actions-list">
+                        <button class="btn btn-primary share-btn" onclick="openShareModal()" id="shareActionBtn">Share with Client</button>
+                        <a href="/pdev/live/" class="btn btn-outline action-link">Dashboard</a>
+                        <a href="/pdev/" class="btn btn-outline action-link">PDev Docs</a>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Share Modal -->
+    <div id="shareModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Share Session</h3>
+                <button class="modal-close" onclick="closeShareModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="shareEmail">Email (optional)</label>
+                    <input type="email" id="shareEmail" placeholder="client@example.com">
+                </div>
+                <div class="form-group">
+                    <label for="shareExpiry">Link expires in</label>
+                    <select id="shareExpiry">
+                        <option value="24">24 hours</option>
+                        <option value="48">48 hours</option>
+                        <option value="72" selected>72 hours (3 days)</option>
+                        <option value="168">1 week</option>
+                        <option value="336">2 weeks</option>
+                        <option value="720">30 days</option>
+                    </select>
+                </div>
+                <div id="shareResult" class="share-result hidden">
+                    <label>Share Link</label>
+                    <div class="share-link-row">
+                        <input type="text" id="shareLink" readonly>
+                        <button class="btn" onclick="copyShareLink(event)">Copy</button>
+                    </div>
+                    <p id="shareExpires" class="share-expires"></p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeShareModal()">Cancel</button>
+                <button class="btn btn-primary" id="shareBtn" onclick="createShareLink()">Create Link</button>
             </div>
         </div>
     </div>
@@ -757,7 +892,131 @@
             }).join("");
         }
 
+        // Share Modal Functions
+        function openShareModal() {
+            var modal = document.getElementById('shareModal');
+            var result = document.getElementById('shareResult');
+            var emailInput = document.getElementById('shareEmail');
+            var btn = document.getElementById('shareBtn');
+
+            if (!modal || !result || !emailInput || !btn) {
+                console.error('Share modal: Required DOM elements not found');
+                return;
+            }
+
+            modal.classList.remove('hidden');
+            result.classList.add('hidden');
+            emailInput.value = '';
+            btn.disabled = false;
+            btn.textContent = 'Create Link';
+        }
+
+        function closeShareModal() {
+            var modal = document.getElementById('shareModal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        async function createShareLink() {
+            var emailInput = document.getElementById('shareEmail');
+            var expirySelect = document.getElementById('shareExpiry');
+            var btn = document.getElementById('shareBtn');
+
+            if (!emailInput || !expirySelect || !btn) return;
+
+            var email = emailInput.value.trim();
+            var hours = expirySelect.value;
+
+            if (!sessionId) {
+                alert('No active session to share');
+                return;
+            }
+
+            // Admin key for authenticated users (page is behind basic auth)
+            var adminKey = '5CG0k5JOyBmd//v8xqTDzKbJlSwXImB6y91SErZWfd0=';
+
+            btn.disabled = true;
+            btn.textContent = 'Creating...';
+
+            try {
+                var res = await fetch(API_BASE + '/guest-links', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Admin-Key': adminKey
+                    },
+                    body: JSON.stringify({
+                        sessionId: sessionId,
+                        email: email || null,
+                        expiresInHours: parseInt(hours, 10)
+                    })
+                });
+
+                if (!res.ok) {
+                    var errData = await res.json().catch(function() { return {}; });
+                    throw new Error(errData.error || 'Failed to create link');
+                }
+
+                var data = await res.json();
+                var baseUrl = window.location.origin + '/pdev/live/session.html';
+                var shareUrl = baseUrl + '?guest=' + encodeURIComponent(data.token);
+
+                var linkInput = document.getElementById('shareLink');
+                var expiresEl = document.getElementById('shareExpires');
+                var resultEl = document.getElementById('shareResult');
+
+                if (linkInput) linkInput.value = shareUrl;
+                if (expiresEl) expiresEl.textContent = 'Expires: ' + new Date(data.expiresAt).toLocaleString();
+                if (resultEl) resultEl.classList.remove('hidden');
+
+                btn.textContent = 'Link Created';
+                setTimeout(function() {
+                    btn.disabled = false;
+                    btn.textContent = 'Create Another';
+                }, 2000);
+
+            } catch (err) {
+                console.error('Share link creation failed:', err);
+                alert('Error: ' + err.message);
+                btn.disabled = false;
+                btn.textContent = 'Create Link';
+            }
+        }
+
+        async function copyShareLink(evt) {
+            var linkInput = document.getElementById('shareLink');
+            if (!linkInput) return;
+
+            var text = linkInput.value;
+
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(text);
+                } else {
+                    linkInput.select();
+                    document.execCommand('copy');
+                }
+
+                if (evt && evt.target) {
+                    var btn = evt.target;
+                    var orig = btn.textContent;
+                    btn.textContent = 'Copied!';
+                    setTimeout(function() { btn.textContent = orig; }, 2000);
+                }
+            } catch (err) {
+                console.error('Copy failed:', err);
+                alert('Failed to copy. Please select and copy manually.');
+            }
+        }
+
+        function checkShareAccess() {
+            // Hide share button for guest users
+            if (guestToken) {
+                document.body.classList.add('guest-view');
+            }
+        }
+
         init();
+        checkShareAccess();
     </script>
 </body>
 </html>
