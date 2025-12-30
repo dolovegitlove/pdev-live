@@ -1,0 +1,13 @@
+{
+  "PIPELINE_DOCS": [
+    { "type": "IDEATION", "name": "IDEATION.md", "icon": "💡", "phase": 1, "cmd": "/idea", "aliases": [] },
+    { "type": "BENCHMARK", "name": "BENCHMARK.md", "icon": "📊", "phase": 2, "cmd": "/bmrk", "aliases": ["BENCHMARK_ANALYSIS", "COMPETITIVE_BENCHMARK"] },
+    { "type": "GAP_ANALYSIS", "name": "GAP_ANALYSIS.md", "icon": "🔍", "phase": 3, "cmd": "/gapa", "aliases": ["GAPA"] },
+    { "type": "INNOVATION", "name": "INNOVATION.md", "icon": "🚀", "phase": 4, "cmd": "/innov", "aliases": ["INNOVATION_ANALYSIS", "INNOVATION_OPPORTUNITIES"] },
+    { "type": "CAPABILITIES", "name": "CAPABILITIES.md", "icon": "⚙️", "phase": 5, "cmd": "/caps", "aliases": ["CAPABILITIES_ANALYSIS", "CAPABILITY"] },
+    { "type": "PRODUCT_SPEC", "name": "PRODUCT_SPEC.md", "icon": "📋", "phase": 6, "cmd": "/spec", "aliases": ["PRODUCT_SPECIFICATION", "SPECIFICATION"] },
+    { "type": "DESIGN_SYSTEM", "name": "DESIGN_SYSTEM.md", "icon": "🎨", "phase": 7, "cmd": "/bmrk design", "aliases": ["DESIGN"] },
+    { "type": "DEVELOPMENT_SOP", "name": "DEVELOPMENT_SOP.md", "icon": "📝", "phase": 8, "cmd": "/sop", "aliases": ["SOP"] },
+    { "type": "EVALUATION", "name": "EVALUATION.md", "icon": "✅", "phase": 9, "cmd": "/eval", "aliases": [] }
+  ]
+}
