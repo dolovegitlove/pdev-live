@@ -164,6 +164,41 @@
             color: var(--muted);
             margin-left: auto;
         }
+        /* Meta card styles for YAML frontmatter display */
+        .meta-card {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(168, 85, 247, 0.05));
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .meta-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .meta-title { font-weight: 600; color: var(--accent2); }
+        .meta-version { font-size: 0.8rem; color: var(--muted); background: var(--bg); padding: 2px 8px; border-radius: 4px; }
+        .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; margin: 0; }
+        .meta-item { display: flex; flex-direction: column; gap: 0.25rem; }
+        .meta-label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .meta-value { font-size: 0.9rem; color: var(--text); margin: 0; }
+        .meta-value.stage { text-transform: capitalize; color: var(--accent); }
+        .meta-value.health-good { color: var(--success); }
+        .meta-value.health-warning { color: var(--warn); }
+        .meta-value.health-critical { color: #ef4444; }
+        .gap-badges { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0; }
+        .gap-badge { font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; color: #fff; font-weight: 500; }
+        .gap-badge.gap-critical { background: #ef4444; }
+        .gap-badge.gap-high { background: #f97316; }
+        .gap-badge.gap-medium { background: #f59e0b; }
+        .gap-badge.gap-low { background: #22c55e; }
+        .meta-gaps { grid-column: span 2; }
+        .meta-deps { grid-column: span 2; }
+        @media (max-width: 600px) { .meta-grid { grid-template-columns: 1fr; } .meta-gaps, .meta-deps { grid-column: span 1; } }
         .action-hint {
             font-size: 0.7rem;
             color: var(--accent);
@@ -472,10 +507,165 @@
             }
         }
         
+        // Constants for health score thresholds
+        const HEALTH_THRESHOLDS = { GOOD: 80, WARNING: 60 };
+        const GAP_COLORS = {
+            critical: 'gap-critical',
+            high: 'gap-high',
+            medium: 'gap-medium',
+            low: 'gap-low'
+        };
+
+        // Security: HTML escape function to prevent XSS
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function parseFrontmatter(markdown) {
+            if (!markdown || typeof markdown !== 'string') {
+                return { meta: null, content: markdown || '' };
+            }
+
+            // Handle Windows line endings
+            var normalizedMarkdown = markdown.replace(/\r\n/g, '\n');
+            var match = normalizedMarkdown.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+            if (!match) return { meta: null, content: markdown };
+
+            var yamlLines = match[1].split('\n');
+            var meta = {};
+            var currentKey = null;
+
+            yamlLines.forEach(function(line) {
+                var colonIdx = line.indexOf(':');
+                if (colonIdx > 0 && !line.trim().startsWith('-')) {
+                    var key = line.slice(0, colonIdx).trim();
+                    var value = line.slice(colonIdx + 1).trim();
+
+                    // Handle quoted strings
+                    if ((value.startsWith('"') && value.endsWith('"')) ||
+                        (value.startsWith("'") && value.endsWith("'"))) {
+                        value = value.slice(1, -1);
+                    }
+
+                    currentKey = key;
+                    if (value === '') {
+                        meta[key] = [];
+                    } else {
+                        meta[key] = value;
+                    }
+                } else if (line.trim().startsWith('-') && currentKey && Array.isArray(meta[currentKey])) {
+                    meta[currentKey].push(line.trim().slice(1).trim());
+                }
+            });
+
+            return { meta: meta, content: match[2] };
+        }
+
+        function getHealthClass(score) {
+            if (score >= HEALTH_THRESHOLDS.GOOD) return 'health-good';
+            if (score >= HEALTH_THRESHOLDS.WARNING) return 'health-warning';
+            return 'health-critical';
+        }
+
+        function renderMetaCard(meta) {
+            if (!meta) return '';
+
+            var healthScore = meta.health_score ? parseInt(meta.health_score, 10) : null;
+            if (healthScore !== null && isNaN(healthScore)) healthScore = null;
+
+            var html = '<aside class="meta-card" role="complementary" aria-label="Document metadata">';
+            html += '<div class="meta-header"><span class="meta-title">Document Info</span>';
+            if (meta.pdev_version) {
+                html += '<span class="meta-version">v' + escapeHtml(meta.pdev_version) + '</span>';
+            }
+            html += '</div>';
+            html += '<dl class="meta-grid">';
+
+            // Pipeline stage
+            if (meta.pipeline_stage) {
+                html += '<div class="meta-item">';
+                html += '<dt class="meta-label">Stage</dt>';
+                html += '<dd class="meta-value stage">' + escapeHtml(meta.pipeline_stage).replace(/_/g, ' ') + '</dd>';
+                html += '</div>';
+            }
+
+            // Health score with accessible indicator
+            if (healthScore !== null) {
+                var healthClass = getHealthClass(healthScore);
+                var healthLabel = healthScore >= HEALTH_THRESHOLDS.GOOD ? 'Good' :
+                                  healthScore >= HEALTH_THRESHOLDS.WARNING ? 'Warning' : 'Critical';
+                html += '<div class="meta-item">';
+                html += '<dt class="meta-label">Health</dt>';
+                html += '<dd class="meta-value ' + healthClass + '" aria-label="Health score: ' + healthScore + ' percent, ' + healthLabel + '">';
+                html += healthScore + '%</dd>';
+                html += '</div>';
+            }
+
+            // Remediation status
+            if (meta.remediation_status) {
+                html += '<div class="meta-item">';
+                html += '<dt class="meta-label">Remediation</dt>';
+                html += '<dd class="meta-value">' + escapeHtml(meta.remediation_status) + '</dd>';
+                html += '</div>';
+            }
+
+            // Gap counts
+            var gapTypes = ['critical', 'high', 'medium', 'low'];
+            var gapCounts = gapTypes.filter(function(t) {
+                return meta['gaps_' + t];
+            }).map(function(t) {
+                return { type: t, count: meta['gaps_' + t] };
+            });
+
+            if (gapCounts.length > 0) {
+                html += '<div class="meta-item meta-gaps">';
+                html += '<dt class="meta-label">Gaps</dt>';
+                html += '<dd class="gap-badges" role="list">';
+                gapCounts.forEach(function(g) {
+                    html += '<span class="gap-badge ' + GAP_COLORS[g.type] + '" role="listitem" aria-label="' +
+                        escapeHtml(g.count) + ' ' + g.type + ' priority gaps">' +
+                        escapeHtml(g.count) + ' ' + g.type + '</span>';
+                });
+                html += '</dd></div>';
+            }
+
+            // Dates
+            if (meta.created || meta.modified) {
+                html += '<div class="meta-item">';
+                html += '<dt class="meta-label">Dates</dt>';
+                html += '<dd class="meta-value">';
+                if (meta.created) html += 'Created: ' + escapeHtml(meta.created);
+                if (meta.created && meta.modified) html += ' | ';
+                if (meta.modified) html += 'Modified: ' + escapeHtml(meta.modified);
+                html += '</dd></div>';
+            }
+
+            // Dependencies (if present)
+            if (meta.dependencies && Array.isArray(meta.dependencies) && meta.dependencies.length > 0) {
+                html += '<div class="meta-item meta-deps">';
+                html += '<dt class="meta-label">Dependencies</dt>';
+                html += '<dd class="meta-value">' + meta.dependencies.map(function(d) { return escapeHtml(d); }).join(', ') + '</dd>';
+                html += '</div>';
+            }
+
+            html += '</dl></aside>';
+            return html;
+        }
+
         function renderContent(markdown) {
-            const html = marked.parse(markdown);
-            document.getElementById('doc-content').innerHTML = html;
-            document.querySelectorAll('#doc-content pre code').forEach(block => hljs.highlightElement(block));
+            var parsed = parseFrontmatter(markdown);
+            var metaHtml = renderMetaCard(parsed.meta);
+            var contentHtml = marked.parse(parsed.content);
+            document.getElementById('doc-content').innerHTML = metaHtml + contentHtml;
+            document.querySelectorAll('#doc-content pre code').forEach(function(block) {
+                hljs.highlightElement(block);
+            });
         }
         
         async function loadProjectSessions() {
