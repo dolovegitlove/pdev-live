@@ -19,6 +19,87 @@ Real-time session streaming system for PDev Suite. Stream Claude development ses
 └─────────────┘   └───────────┘   └───────────┘   └───────────┘
 ```
 
+## CSS Architecture
+
+PDev Live uses a multi-file CSS structure for optimal caching and maintainability:
+
+### External Dependencies
+All pages load syntax highlighting CSS first:
+- **highlight.js** (github-dark theme) - Code syntax highlighting for markdown rendering
+- Loaded via CDN before local CSS to allow local overrides if needed
+
+### Base CSS
+- **pdev-live.css** (12KB) - Shared styles loaded by all pages
+  - Navigation
+  - Modals
+  - Forms
+  - Buttons
+  - Global layout
+
+### Page-Specific CSS
+- **session-specific.css** (2.3KB) - Session viewer page
+  - Session header
+  - Phase navigation
+  - Document items
+- **project-specific.css** (5.8KB) - Project viewer page
+  - Breadcrumb navigation
+  - Project header
+  - Meta-card (YAML rendering)
+
+### Minimal Page-Specific CSS
+Two pages have intentionally minimal page-specific CSS:
+
+**index-specific.css (333B)**
+- Dashboard page uses primarily shared components
+- File exists for consistency but contains only comments
+- Future dashboard-specific overrides would go here
+
+**live.html (NO page-specific CSS)**
+- Uses only generic shared components (container, sidebar, buttons, empty-state)
+- No unique styling needs
+- Most minimal page in the application
+
+### Load Order
+All pages load base CSS first, then page-specific CSS:
+```html
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<link rel="stylesheet" href="pdev-live.css">
+<link rel="stylesheet" href="page-specific.css"> <!-- if applicable -->
+```
+
+### Why This Architecture?
+- **Cache Efficiency:** Base CSS cached once, used by all pages
+- **Separation of Concerns:** Page-specific styles isolated
+- **Performance:** Smaller page-specific files load faster
+- **Maintainability:** Changes to one page don't affect others
+
+### Quick Reference Table
+
+| File | Size | Pages | Primary Purpose |
+|------|------|-------|-----------------|
+| pdev-live.css | 12KB | All | Navigation, modals, forms, buttons, layout |
+| session-specific.css | 2.3KB | session.html | Session header, phase nav, document items |
+| project-specific.css | 5.8KB | project.html | Breadcrumb, project header, meta-card (YAML) |
+| index-specific.css | 333B | index.html | Dashboard overrides (currently minimal) |
+| (none) | - | live.html | No page-specific CSS needed |
+
+### Maintenance Guidelines
+
+**When to add to pdev-live.css:**
+- Component used by 2+ pages
+- Navigation/modal/form styles
+- Global utilities (.muted-text, .btn variants)
+
+**When to add to page-specific.css:**
+- Component unique to single page
+- Page-specific layout overrides
+- Specialized UI (meta-card, breadcrumb, phase nav)
+
+**Before creating new CSS file:**
+- Verify component isn't already in pdev-live.css
+- Check if existing page-specific file should be used
+- Consider if component could become shared later
+
 ## Components
 
 ### `/api` - PDev API Server (port 3016)
@@ -79,10 +160,43 @@ cp client/client.sh ~/.claude/tools/pdev-live/
 chmod +x ~/.claude/tools/pdev-live/client.sh
 ```
 
-### Frontend (nginx on acme)
+### Frontend & Backend Deployment (acme server)
+
+**Use the automated deployment script (recommended):**
+
 ```bash
-cp frontend/* /var/www/walletsnack.com/pdev/live/
+cd ~/projects/pdev-live
+./update.sh
 ```
+
+**Deployment Phases:**
+1. ✅ Backup current production files
+2. ✅ Pull latest code from GitHub
+3. ✅ Syntax validation (Node.js, JSON, CSS, HTML)
+4. ✅ Deploy backend via scp
+5. ✅ Deploy frontend via rsync (atomic)
+6. ✅ Restart PM2 service
+7. ✅ Deployment verification (PM2 status, file existence, HTTP)
+8. ✅ Backup rotation (keep 10, delete >30 days)
+9. ✅ Record deployment commit hash
+
+**Rollback:** If deployment fails, update.sh automatically restores from backup.
+
+**Post-Deployment Checklist:**
+- [ ] Run: `/cache-bust https://walletsnack.com/pdev/live/`
+- [ ] Test: https://walletsnack.com/pdev/live/ (Ctrl+Shift+R)
+- [ ] Verify: F12 console has zero CSS 404 errors
+- [ ] Check all pages: index.html, session.html, project.html, live.html
+
+**Manual Deployment (not recommended):**
+```bash
+# Only if update.sh unavailable
+rsync -avz --checksum frontend/ acme:/var/www/walletsnack.com/pdev/live/
+scp server/server.js acme:/opt/services/pdev-live/server.js
+ssh acme 'pm2 restart pdev-live'
+```
+
+**See:** [DEPLOYMENT.md](DEPLOYMENT.md) for full deployment documentation.
 
 ## Usage
 

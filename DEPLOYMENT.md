@@ -1,0 +1,453 @@
+# PDev Live Deployment Guide
+
+Complete deployment documentation for PDev Live production system.
+
+## Quick Start
+
+```bash
+cd ~/projects/pdev-live
+./update.sh
+```
+
+That's it! The update.sh script handles everything automatically.
+
+---
+
+## 9-Phase Deployment Process
+
+### Phase 1: Backup Current Production Files
+
+**What happens:**
+```bash
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+BACKUP_DIR="/var/www/walletsnack.com/pdev/live-backups/$TIMESTAMP"
+ssh acme "mkdir -p $BACKUP_DIR && cp $DEPLOY_DIR/*.{html,css,js} $BACKUP_DIR/"
+```
+
+**Why:** Safe rollback if deployment fails
+
+**Backup locations:**
+- Frontend: `/var/www/walletsnack.com/pdev/live-backups/YYYYMMDD_HHMMSS/`
+- Backend: `/opt/services/pdev-live/server.js.bak-YYYYMMDD_HHMMSS`
+- Config: `/opt/services/pdev-live/doc-contract.json.bak-YYYYMMDD_HHMMSS`
+
+**Retention:** Keep 10 most recent, delete >30 days
+
+---
+
+### Phase 2: Pull Latest Code from GitHub
+
+**What happens:**
+```bash
+cd ~/projects/pdev-live
+COMMIT_BEFORE=$(git rev-parse HEAD)
+git pull origin main
+COMMIT_AFTER=$(git rev-parse HEAD)
+```
+
+**Why:** Get latest changes from repository
+
+**Output:**
+- If no changes: "ℹ️  No new commits - already up to date"
+- If updated: "✅ Updated from <hash> to <hash>"
+
+---
+
+### Phase 3: Syntax Validation
+
+**What happens:**
+
+```bash
+# Validate server.js
+node -c server/server.js
+
+# Validate doc-contract.json
+python3 -m json.tool server/doc-contract.json > /dev/null
+
+# Validate CSS files (allow comment-only files)
+for file in frontend/*.css; do
+  if grep -qE '^[^/\*].*\{' "$file"; then
+    grep -q "}" "$file" || exit 1
+  fi
+done
+
+# Validate HTML files
+for file in frontend/*.html; do
+  grep -q "</html>" "$file" || exit 1
+done
+```
+
+**Why:** Catch syntax errors before deploying
+
+**Checks:**
+- ✅ Node.js files (server.js) - `node -c` syntax check
+- ✅ JSON files (doc-contract.json) - `json.tool` validation
+- ✅ CSS files - Opening/closing brace validation
+- ✅ HTML files - Closing `</html>` tag validation
+
+**Failures:**
+- ❌ Syntax error in server.js → Deployment aborts
+- ❌ Invalid JSON in doc-contract.json → Deployment aborts
+- ❌ CSS syntax error → Deployment aborts (unless comment-only file)
+- ❌ HTML missing </html> → Deployment aborts
+
+---
+
+### Phase 4: Deploy Backend via SCP
+
+**What happens:**
+```bash
+scp server/server.js acme:/opt/services/pdev-live/server.js
+scp server/doc-contract.json acme:/opt/services/pdev-live/doc-contract.json
+```
+
+**Why:** Update backend server code and configuration
+
+**Files deployed:**
+- `server.js` (main server)
+- `doc-contract.json` (document type definitions)
+
+---
+
+### Phase 5: Deploy Frontend via Rsync (Atomic)
+
+**What happens:**
+```bash
+rsync -avz --checksum \
+  --include='*.html' \
+  --include='*.css' \
+  --include='*.js' \
+  --exclude='*.bak' \
+  --exclude='node_modules/' \
+  frontend/ acme:/var/www/walletsnack.com/pdev/live/
+```
+
+**Why:** Atomic deployment prevents race conditions
+
+**Rsync benefits:**
+- Only transfers changed files (--checksum)
+- Atomic file replacement (no partial updates)
+- Excludes backup and development files
+- Preserves permissions
+
+**Files deployed:**
+- index.html, session.html, project.html, live.html
+- pdev-live.css (12KB base styles)
+- session-specific.css (2.3KB)
+- project-specific.css (5.8KB)
+- index-specific.css (333B)
+- mgmt.js (management functions)
+
+**Permissions:**
+```bash
+ssh acme "chmod 644 /var/www/walletsnack.com/pdev/live/*.{html,css,js}"
+```
+
+**Cleanup:**
+```bash
+rm -f frontend/*.bak  # Remove local backup files after successful deployment
+```
+
+---
+
+### Phase 6: Restart PM2 Service
+
+**What happens:**
+```bash
+ssh acme "pm2 restart pdev-live --update-env"
+sleep 5  # Wait for service to stabilize
+```
+
+**Why:** Load new backend code into production
+
+**PM2 commands:**
+- `pm2 restart pdev-live` - Graceful restart with zero downtime
+- `--update-env` - Refresh environment variables
+- `sleep 5` - Wait for process to stabilize before verification
+
+---
+
+### Phase 7: Deployment Verification
+
+**What happens:**
+
+```bash
+# Check PM2 process is online
+ssh acme 'pm2 describe pdev-live | grep -q "status.*online"'
+
+# Verify all CSS files exist
+for css_file in pdev-live.css session-specific.css project-specific.css index-specific.css; do
+  ssh acme "test -f /var/www/walletsnack.com/pdev/live/$css_file"
+done
+
+# Check HTTP accessibility (basic)
+curl -f -s https://walletsnack.com/pdev/live/pdev-live.css > /dev/null
+```
+
+**Why:** Ensure deployment succeeded before marking complete
+
+**Checks:**
+1. ✅ PM2 process status = "online"
+2. ✅ All 4 CSS files exist on server
+3. ✅ HTTP 200 response for CSS files
+
+**Rollback triggers:**
+- ❌ PM2 process not online → Automatic rollback
+- ❌ CSS files missing → Automatic rollback
+- ⚠️  HTTP verification failed → Warning only (may be temporary DNS/cache issue)
+
+---
+
+### Phase 8: Backup Rotation
+
+**What happens:**
+```bash
+# Keep only last 10 backups
+ssh acme "cd /var/www/walletsnack.com/pdev/live-backups && ls -t | tail -n +11 | xargs -r rm -rf"
+
+# Delete backups older than 30 days
+ssh acme "find /var/www/walletsnack.com/pdev/live-backups -type d -mtime +30 -delete"
+
+# Delete old service backups (keep last 5)
+ssh acme "cd /opt/services/pdev-live && ls -t server.js.bak-* | tail -n +6 | xargs -r rm -f"
+```
+
+**Why:** Prevent disk space exhaustion from old backups
+
+**Retention policies:**
+- Frontend backups: Keep 10 most recent
+- Frontend backups: Delete if >30 days old
+- Backend backups: Keep 5 most recent
+
+---
+
+### Phase 9: Record Deployment
+
+**What happens:**
+```bash
+echo "$COMMIT_AFTER" | ssh acme "cat > /opt/services/pdev-live/.deployed_version"
+```
+
+**Why:** Track which commit is currently deployed
+
+**File:** `/opt/services/pdev-live/.deployed_version`
+**Content:** Git commit hash (e.g., `8e662d66f3a2c4b1d9e5f7a8c0b3d1e2f4a5c6b7`)
+
+---
+
+## Automatic Rollback
+
+If deployment fails, update.sh automatically restores from backup:
+
+```bash
+echo "❌ PM2 process not online - triggering rollback"
+echo "🔄 Rolling back..."
+
+# Restore frontend files
+ssh acme "cp $BACKUP_DIR/* /var/www/walletsnack.com/pdev/live/"
+
+# Restore backend
+ssh acme "cp /opt/services/pdev-live/server.js.bak-$TIMESTAMP /opt/services/pdev-live/server.js"
+
+# Restart PM2
+ssh acme "pm2 restart pdev-live"
+
+exit 1
+```
+
+**Rollback scenarios:**
+- PM2 process fails to start
+- Required CSS files missing
+- Deployment verification failures
+
+---
+
+## Post-Deployment Checklist
+
+After successful deployment:
+
+### 1. Cache Busting (MANDATORY)
+
+```bash
+/cache-bust https://walletsnack.com/pdev/live/
+```
+
+**Why:** Invalidate Cloudflare cache so users get new CSS/JS files
+
+**What it does:**
+- Purges Cloudflare cache for entire /pdev/live/ directory
+- Clears Next.js cache if applicable
+- Verifies cache purge succeeded
+
+### 2. Browser Testing
+
+**Test in browser:**
+1. Navigate to https://walletsnack.com/pdev/live/
+2. Hard refresh: `Ctrl+Shift+R` (Windows/Linux) or `Cmd+Shift+R` (Mac)
+3. Open F12 Developer Tools → Console
+4. Verify: **Zero CSS 404 errors**
+
+### 3. Page Verification
+
+Test all 4 pages:
+- [ ] https://walletsnack.com/pdev/live/ (index.html - dashboard)
+- [ ] https://walletsnack.com/pdev/live/session.html (session viewer)
+- [ ] https://walletsnack.com/pdev/live/project.html (project viewer)
+- [ ] https://walletsnack.com/pdev/live/live.html (live streaming)
+
+**For each page:**
+- ✅ Page loads without errors
+- ✅ Styling renders correctly
+- ✅ No 404 errors in F12 console
+- ✅ CSS files load (Network tab shows 200 OK)
+
+### 4. Backend Health Check
+
+```bash
+ssh acme 'pm2 logs pdev-live --lines 20'
+```
+
+**Verify:**
+- ✅ No error messages in logs
+- ✅ Process is running (uptime > 0)
+- ✅ No restart loops
+
+---
+
+## Manual Deployment (Emergency Only)
+
+If update.sh is unavailable:
+
+```bash
+# 1. SSH to production server
+ssh acme
+
+# 2. Backup current files
+mkdir -p /var/www/walletsnack.com/pdev/live-backups/manual-$(date +%Y%m%d_%H%M%S)
+cp /var/www/walletsnack.com/pdev/live/*.{html,css,js} /var/www/walletsnack.com/pdev/live-backups/manual-$(date +%Y%m%d_%H%M%S)/
+
+# 3. From local machine, deploy frontend
+rsync -avz --checksum frontend/ acme:/var/www/walletsnack.com/pdev/live/
+
+# 4. Deploy backend
+scp server/server.js acme:/opt/services/pdev-live/server.js
+
+# 5. Restart PM2
+ssh acme 'pm2 restart pdev-live'
+
+# 6. Verify deployment
+ssh acme 'pm2 status pdev-live'
+
+# 7. Cache bust
+/cache-bust https://walletsnack.com/pdev/live/
+```
+
+**⚠️  WARNING:** Manual deployment skips:
+- Syntax validation
+- Automatic rollback
+- Deployment verification
+- Backup rotation
+
+**Use only when:** update.sh is broken or unavailable
+
+---
+
+## Troubleshooting
+
+### Deployment Fails at Phase 3 (Syntax Validation)
+
+**Symptom:** "❌ Syntax error in server.js"
+
+**Fix:**
+1. Run `node -c server/server.js` locally
+2. Fix syntax errors
+3. Commit and retry deployment
+
+### Deployment Fails at Phase 6 (PM2 Restart)
+
+**Symptom:** "❌ PM2 process not online"
+
+**Debug:**
+```bash
+ssh acme 'pm2 logs pdev-live --lines 50'
+ssh acme 'pm2 describe pdev-live'
+```
+
+**Common causes:**
+- Port already in use
+- Environment variable missing
+- Database connection failure
+- Permission issues
+
+### CSS Files Return 404 After Deployment
+
+**Symptom:** Browser F12 console shows "Failed to load resource: 404"
+
+**Fix:**
+1. Verify files exist: `ssh acme 'ls -la /var/www/walletsnack.com/pdev/live/*.css'`
+2. Check permissions: `ssh acme 'ls -l /var/www/walletsnack.com/pdev/live/*.css'`
+3. Run cache bust: `/cache-bust https://walletsnack.com/pdev/live/`
+4. Hard refresh browser: `Ctrl+Shift+R`
+
+### Backup Rotation Fails
+
+**Symptom:** "rm: cannot remove ... Permission denied"
+
+**Fix:**
+```bash
+ssh acme 'ls -la /var/www/walletsnack.com/pdev/live-backups/'
+ssh acme 'sudo chown -R acme:acme /var/www/walletsnack.com/pdev/live-backups/'
+```
+
+---
+
+## Production Environment
+
+| Component | Location | Port |
+|-----------|----------|------|
+| Frontend | acme:/var/www/walletsnack.com/pdev/live/ | 443 (nginx) |
+| Backend | acme:/opt/services/pdev-live/ | 3016 (internal) |
+| Backups | acme:/var/www/walletsnack.com/pdev/live-backups/ | - |
+| Logs | acme:/opt/services/pdev-live/logs/ | - |
+| Deployment Log | dolovdev:~/pdev-live-deployment.log | - |
+
+**Production URLs:**
+- https://walletsnack.com/pdev/live/ (frontend)
+- https://walletsnack.com/pdev/api/ (backend API)
+
+**Authentication:**
+- Username: `pdev`
+- Password: `PdevLive0987@@`
+- Auth type: HTTP Basic Authentication (.htpasswd)
+- Auth file: `/var/www/walletsnack.com/.htpasswd_pdev`
+
+---
+
+## Deployment Logs
+
+**Location:** `~/pdev-live-deployment.log`
+
+**Contents:**
+- Timestamp of deployment
+- Git commit before/after
+- Deployment phase progress
+- Verification results
+- Any errors or warnings
+
+**View recent deployments:**
+```bash
+tail -100 ~/pdev-live-deployment.log
+```
+
+**View today's deployments:**
+```bash
+grep "$(date +%Y-%m-%d)" ~/pdev-live-deployment.log
+```
+
+---
+
+## Related Documentation
+
+- [README.md](README.md) - Project overview and installation
+- [installer/README.md](installer/README.md) - Self-hosted installation guide
+- [update.sh](update.sh) - Deployment script source code
