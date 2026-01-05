@@ -18,25 +18,87 @@
 #   - PDEV_FORCE_NEW=1: Force new session even if one exists
 #
 
-# Server-specific PDev Live URLs
-# Each server pushes to its own PDev Live instance
-get_pdev_url() {
-  local server="$1"
-  case "$server" in
-    djm) echo "https://axiomwebcontrol.com/pdev/api" ;;
-    rmlve) echo "https://churchcarehub.com/pdev/api" ;;
-    *) echo "https://walletsnack.com/pdev/api" ;;
-  esac
-}
+# =============================================================================
+# CONFIG FILE LOADING (SECURE)
+# =============================================================================
+# Load PDev Live URL from config file with security validation
+# Precedence: 1) PDEV_LIVE_URL env var, 2) config file, 3) fail
+load_pdev_config() {
+  # Skip if already set via environment variable
+  if [ -n "$PDEV_LIVE_URL" ]; then
+    return 0
+  fi
 
-# Get base URL for dashboard links (strips /api suffix)
-get_pdev_base() {
-  local server="$1"
-  case "$server" in
-    djm) echo "https://axiomwebcontrol.com/pdev" ;;
-    rmlve) echo "https://churchcarehub.com/pdev" ;;
-    *) echo "https://walletsnack.com/pdev" ;;
-  esac
+  # Config file locations (checked in order)
+  local config_locations=(
+    "$HOME/.pdev-live-config"
+    "$HOME/.claude/tools/pdev-live/.config"
+  )
+
+  for config_file in "${config_locations[@]}"; do
+    if [ ! -f "$config_file" ]; then
+      continue
+    fi
+
+    # SECURITY: Check file permissions (must be 600 or 400)
+    local perms
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+      perms=$(stat -f "%OLp" "$config_file" 2>/dev/null)
+    else
+      perms=$(stat -c "%a" "$config_file" 2>/dev/null)
+    fi
+
+    if [ "$perms" != "600" ] && [ "$perms" != "400" ]; then
+      echo "ERROR: Config file has insecure permissions: $config_file ($perms)" >&2
+      echo "Fix with: chmod 600 $config_file" >&2
+      exit 1
+    fi
+
+    # SECURITY: Parse manually (safer than sourcing)
+    # Extract PDEV_LIVE_URL and PDEV_BASE_URL only
+    while IFS='=' read -r key value; do
+      # Skip comments and empty lines
+      [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
+
+      # Trim whitespace and quotes
+      key=$(echo "$key" | xargs)
+      value=$(echo "$value" | xargs | tr -d '"')
+
+      # Only accept specific variables
+      case "$key" in
+        PDEV_LIVE_URL)
+          export PDEV_LIVE_URL="$value"
+          ;;
+        PDEV_BASE_URL)
+          export PDEV_BASE_URL="$value"
+          ;;
+      esac
+    done < "$config_file"
+
+    # If config loaded successfully, return
+    if [ -n "$PDEV_LIVE_URL" ]; then
+      return 0
+    fi
+  done
+
+  # No config found - fail with helpful error
+  echo "ERROR: PDev Live URL not configured" >&2
+  echo "" >&2
+  echo "OPTIONS:" >&2
+  echo "  1. Set environment variable:" >&2
+  echo "     export PDEV_LIVE_URL=https://example.com/pdev/api" >&2
+  echo "" >&2
+  echo "  2. Create config file (~/.pdev-live-config):" >&2
+  echo "     cat > ~/.pdev-live-config <<EOF" >&2
+  echo "# PDev Live Client Configuration" >&2
+  echo "PDEV_LIVE_URL=https://walletsnack.com/pdev/api" >&2
+  echo "PDEV_BASE_URL=https://walletsnack.com/pdev" >&2
+  echo "EOF" >&2
+  echo "     chmod 600 ~/.pdev-live-config" >&2
+  echo "" >&2
+  echo "  3. Run installer (creates config automatically):" >&2
+  echo "     ~/projects/pdev-live/installer/pdl-installer.sh --domain example.com" >&2
+  exit 1
 }
 
 detect_server() {
@@ -58,9 +120,24 @@ detect_server() {
   esac
 }
 
+# Load configuration (env var takes precedence, then config file)
+load_pdev_config
+
+# Validate URL format
+if [[ ! "$PDEV_LIVE_URL" =~ ^https?:// ]]; then
+  echo "ERROR: PDEV_LIVE_URL must start with http:// or https://" >&2
+  echo "Current value: $PDEV_LIVE_URL" >&2
+  exit 1
+fi
+
+# Derive base URL if not explicitly set (strip /api suffix)
+if [ -z "$PDEV_BASE_URL" ]; then
+  PDEV_BASE_URL="${PDEV_LIVE_URL%/api}"
+fi
+
+# Detect current server hostname for session tracking
 PDEV_SERVER=$(detect_server)
-PDEV_LIVE_URL="${PDEV_LIVE_URL:-$(get_pdev_url "$PDEV_SERVER")}"
-PDEV_BASE_URL="$(get_pdev_base "$PDEV_SERVER")"
+
 SESSIONS_DIR="/tmp/pdev-live-sessions"
 mkdir -p "$SESSIONS_DIR"
 

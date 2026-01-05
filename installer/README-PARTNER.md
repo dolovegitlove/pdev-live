@@ -122,6 +122,7 @@ sudo ./pdl-installer.sh --domain pdev.yourdomain.com --dry-run
 - **Admin API Key**
 
 These are stored in:
+- `~/.pdev-live-config` (client URL configuration, 600 permissions)
 - `/opt/pdev-live/.env` (600 permissions, owner-only)
 - `/etc/nginx/.htpasswd` (600 permissions, owner-only)
 

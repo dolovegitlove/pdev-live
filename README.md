@@ -158,7 +158,17 @@ pm2 start ecosystem.config.js --name pdev-live
 mkdir -p ~/.claude/tools/pdev-live
 cp client/client.sh ~/.claude/tools/pdev-live/
 chmod +x ~/.claude/tools/pdev-live/client.sh
+
+# Configure PDev Live server URL
+cat > ~/.pdev-live-config <<EOF
+# PDev Live Client Configuration
+PDEV_LIVE_URL=https://walletsnack.com/pdev/api
+PDEV_BASE_URL=https://walletsnack.com/pdev
+EOF
+chmod 600 ~/.pdev-live-config
 ```
+
+**Note**: The installer (`pdl-installer.sh`) automatically generates `~/.pdev-live-config` during installation.
 
 ### Frontend & Backend Deployment (acme server)
 
