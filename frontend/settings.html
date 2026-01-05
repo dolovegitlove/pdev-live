@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - PDev Live</title>
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="stylesheet" href="pdev-live.css">
+    <link rel="stylesheet" href="settings-specific.css">
+</head>
+<body>
+    <!-- Navigation Header -->
+    <nav class="nav-header">
+        <a href="/pdev/" class="nav-logo">
+            <div class="nav-logo-icon">P</div>
+            <span>PDev Suite</span>
+        </a>
+        <div class="nav-links">
+            <a href="/pdev/live/" class="nav-link">Dashboard</a>
+            <a href="/pdev/history/" class="nav-link">History</a>
+            <a href="/pdev/" class="nav-link">Docs</a>
+            <a href="/pdev/settings/" class="nav-link active">Settings</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <header>
+            <div class="logo">PDev Live Settings</div>
+            <div class="status">
+                <span class="status-dot connected"></span>
+                <span id="statusText">Connected</span>
+            </div>
+        </header>
+
+        <div class="settings-container">
+            <!-- Success/Error Messages -->
+            <div id="messageContainer" class="message-container"></div>
+
+            <!-- Git Auto-Commit Section -->
+            <section class="settings-section">
+                <div class="section-header">
+                    <h2>Git Auto-Commit</h2>
+                    <p class="section-description">Automatically commit and push PDev pipeline documents to your git repositories</p>
+                </div>
+
+                <div class="settings-grid">
+                    <!-- Enable Toggle -->
+                    <div class="setting-item">
+                        <label class="toggle-label">
+                            <div class="toggle-info">
+                                <span class="toggle-title">Enable automatic git commits</span>
+                                <span class="toggle-help">When enabled, PDev docs (IDEATION.md, PRODUCT_SPEC.md, etc.) will be automatically committed and pushed to git</span>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="pdevAutoGit" aria-label="Enable automatic git commits">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </label>
+                    </div>
+
+                    <!-- Repository Whitelist -->
+                    <div class="setting-item">
+                        <label for="pdevGitRepos" class="input-label">
+                            <span class="label-title">Whitelisted Repositories</span>
+                            <span class="label-help">Only PDev docs in these repositories will be auto-committed. Enter one absolute path per line.</span>
+                        </label>
+                        <textarea
+                            id="pdevGitRepos"
+                            class="input-textarea"
+                            placeholder="/Users/username/projects/myapp&#10;/Users/username/projects/client-site"
+                            rows="4"
+                            aria-describedby="reposHelp"
+                        ></textarea>
+                        <small id="reposHelp" class="input-help">Example: /Users/dolovdev/projects/myapp</small>
+                    </div>
+
+                    <!-- Git Remote -->
+                    <div class="setting-item">
+                        <label for="pdevGitRemote" class="input-label">
+                            <span class="label-title">Git Remote</span>
+                            <span class="label-help">Remote repository to push to after auto-commit</span>
+                        </label>
+                        <select id="pdevGitRemote" class="input-select" aria-describedby="remoteHelp">
+                            <option value="origin">origin (default)</option>
+                            <option value="upstream">upstream</option>
+                        </select>
+                        <small id="remoteHelp" class="input-help">Most repositories use 'origin' as the default remote</small>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Safety Information -->
+            <section class="settings-section">
+                <div class="section-header">
+                    <h2>Safety & Security</h2>
+                </div>
+
+                <div class="info-boxes">
+                    <!-- What Gets Committed -->
+                    <div class="info-box info">
+                        <div class="info-icon">ℹ️</div>
+                        <div class="info-content">
+                            <h3>What gets auto-committed</h3>
+                            <p>Only PDev pipeline documents are auto-committed:</p>
+                            <ul>
+                                <li>IDEATION.md</li>
+                                <li>PRODUCT_SPEC.md</li>
+                                <li>DEVELOPMENT_SOP.md</li>
+                                <li>BENCHMARK.md</li>
+                                <li>DESIGN_SYSTEM.md</li>
+                                <li>Other PDev docs (CAPABILITIES, GAP_ANALYSIS, etc.)</li>
+                            </ul>
+                            <p><strong>Not committed:</strong> Source code, configuration files, or other documentation.</p>
+                        </div>
+                    </div>
+
+                    <!-- Safety Features -->
+                    <div class="info-box warning">
+                        <div class="info-icon">⚠️</div>
+                        <div class="info-content">
+                            <h3>Automatic safety checks</h3>
+                            <p>Auto-commits are automatically skipped in these situations:</p>
+                            <ul>
+                                <li>During git merges, rebases, or cherry-picks</li>
+                                <li>In detached HEAD state</li>
+                                <li>When document content hasn't changed</li>
+                                <li>In repositories not on the whitelist</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Documentation Link -->
+                    <div class="info-box">
+                        <div class="info-icon">📚</div>
+                        <div class="info-content">
+                            <h3>Full documentation</h3>
+                            <p>View the complete activation guide and troubleshooting steps:</p>
+                            <code>~/.claude/docs/PDEV_GIT_SYNC_ACTIVATION.md</code>
+                            <p class="muted">Activity logs: <code>~/.claude/logs/pdev-git-sync.log</code></p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Save Button -->
+            <div class="save-section">
+                <button id="saveButton" class="btn-save" type="button">Save Settings</button>
+                <p class="save-help">Changes will take effect on next PDev document generation</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Settings state
+        let settings = {
+            pdevAutoGit: false,
+            pdevGitRepos: [],
+            pdevGitRemote: 'origin'
+        };
+
+        // Load settings on page load
+        async function loadSettings() {
+            try {
+                const response = await fetch('/settings');
+                if (!response.ok) throw new Error('Failed to load settings');
+
+                settings = await response.json();
+
+                // Populate UI
+                document.getElementById('pdevAutoGit').checked = settings.pdevAutoGit;
+                document.getElementById('pdevGitRepos').value = settings.pdevGitRepos.join('\n');
+                document.getElementById('pdevGitRemote').value = settings.pdevGitRemote;
+
+            } catch (error) {
+                showMessage('Failed to load settings: ' + error.message, 'error');
+            }
+        }
+
+        // Save settings
+        async function saveSettings() {
+            try {
+                const saveButton = document.getElementById('saveButton');
+                saveButton.disabled = true;
+                saveButton.textContent = 'Saving...';
+
+                // Collect form data
+                const pdevAutoGit = document.getElementById('pdevAutoGit').checked;
+                const pdevGitReposText = document.getElementById('pdevGitRepos').value.trim();
+                const pdevGitRepos = pdevGitReposText ? pdevGitReposText.split('\n').map(line => line.trim()).filter(Boolean) : [];
+                const pdevGitRemote = document.getElementById('pdevGitRemote').value;
+
+                // Validate
+                if (pdevAutoGit && pdevGitRepos.length === 0) {
+                    throw new Error('Please add at least one repository path when enabling auto-commit');
+                }
+
+                // Send to server
+                const response = await fetch('/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pdevAutoGit, pdevGitRepos, pdevGitRemote })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to save settings');
+                }
+
+                const result = await response.json();
+                showMessage(result.message || 'Settings saved successfully', 'success');
+
+                // Update local state
+                settings = { pdevAutoGit, pdevGitRepos, pdevGitRemote };
+
+            } catch (error) {
+                showMessage(error.message, 'error');
+            } finally {
+                const saveButton = document.getElementById('saveButton');
+                saveButton.disabled = false;
+                saveButton.textContent = 'Save Settings';
+            }
+        }
+
+        // Show message
+        function showMessage(text, type = 'info') {
+            const container = document.getElementById('messageContainer');
+            container.innerHTML = `
+                <div class="message message-${type}">
+                    <span class="message-icon">${type === 'success' ? '✓' : type === 'error' ? '✗' : 'ℹ'}</span>
+                    <span class="message-text">${text}</span>
+                    <button class="message-close" onclick="this.parentElement.remove()" aria-label="Close message">×</button>
+                </div>
+            `;
+
+            // Auto-dismiss success messages after 5 seconds
+            if (type === 'success') {
+                setTimeout(() => {
+                    const message = container.querySelector('.message');
+                    if (message) message.remove();
+                }, 5000);
+            }
+        }
+
+        // Event listeners
+        document.getElementById('saveButton').addEventListener('click', saveSettings);
+
+        // Load settings on page load
+        loadSettings();
+    </script>
+</body>
+</html>

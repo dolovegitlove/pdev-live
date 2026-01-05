@@ -2,14 +2,63 @@ const { app, BrowserWindow, Tray, Menu, shell, session, nativeImage, ipcMain } =
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
 const path = require('path');
+const fs = require('fs');
 
 // Configure logging
 log.transports.file.level = 'info';
 autoUpdater.logger = log;
 
-// Constants
-const ALLOWED_ORIGIN = 'https://walletsnack.com';
-const LOAD_URL = `${ALLOWED_ORIGIN}/pdev/live/`;
+// Default configuration
+const DEFAULT_CONFIG = {
+  serverUrl: 'http://localhost:3016'
+};
+
+// Load configuration from user data directory
+function loadConfig() {
+  const configPath = path.join(app.getPath('userData'), 'config.json');
+
+  try {
+    const data = fs.readFileSync(configPath, 'utf8');
+    const loaded = JSON.parse(data);
+
+    if (loaded.serverUrl) {
+      try {
+        const parsed = new URL(loaded.serverUrl);
+        if (!['http:', 'https:'].includes(parsed.protocol)) {
+          log.error(`Invalid protocol in config: ${parsed.protocol}`);
+          return DEFAULT_CONFIG;
+        }
+        return { serverUrl: parsed.origin };
+      } catch (urlError) {
+        log.error('Invalid serverUrl format:', urlError.message);
+        return DEFAULT_CONFIG;
+      }
+    }
+
+    return DEFAULT_CONFIG;
+  } catch (e) {
+    if (e.code !== 'ENOENT') {
+      log.warn('Config load failed:', e.message);
+    }
+    return DEFAULT_CONFIG;
+  }
+}
+
+// Build Content Security Policy for configured origin
+function buildCSP(origin, wsOrigin) {
+  return [
+    `default-src 'self' ${origin}; ` +
+    `script-src 'self' 'unsafe-inline' ${origin}; ` +
+    `style-src 'self' 'unsafe-inline' ${origin}; ` +
+    "img-src 'self' https: data:; " +
+    `connect-src 'self' ${origin} ${wsOrigin}; ` +
+    `font-src 'self' ${origin} https://fonts.gstatic.com; ` +
+    "frame-ancestors 'none';"
+  ];
+}
+
+// App configuration (populated after app ready)
+let appConfig = null;
 
 // Single instance lock
 const gotTheLock = app.requestSingleInstanceLock();
@@ -21,6 +70,13 @@ let mainWindow = null;
 let tray = null;
 
 function createWindow() {
+  // Use configured origin
+  const ALLOWED_ORIGIN = appConfig.serverUrl;
+  const LOAD_URL = `${ALLOWED_ORIGIN}/`;
+  const isSecure = ALLOWED_ORIGIN.startsWith('https');
+  const wsProtocol = isSecure ? 'wss' : 'ws';
+  const wsOrigin = ALLOWED_ORIGIN.replace(/^https?/, wsProtocol);
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -39,20 +95,13 @@ function createWindow() {
     }
   });
 
-  // Content Security Policy
+  // Dynamic Content Security Policy based on configured server
+  const csp = buildCSP(ALLOWED_ORIGIN, wsOrigin);
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
-        'Content-Security-Policy': [
-          "default-src 'self' https://walletsnack.com; " +
-          "script-src 'self' 'unsafe-inline' https://walletsnack.com; " +
-          "style-src 'self' 'unsafe-inline' https://walletsnack.com; " +
-          "img-src 'self' https: data:; " +
-          "connect-src 'self' https://walletsnack.com wss://walletsnack.com; " +
-          "font-src 'self' https://walletsnack.com https://fonts.gstatic.com; " +
-          "frame-ancestors 'none';"
-        ]
+        'Content-Security-Policy': csp
       }
     });
   });
@@ -68,7 +117,7 @@ function createWindow() {
     }
   });
 
-  // Navigation security - restrict to allowed origin
+  // Navigation security - restrict to configured origin
   mainWindow.webContents.on('will-navigate', (event, url) => {
     try {
       const urlObj = new URL(url);
@@ -85,12 +134,7 @@ function createWindow() {
   // Block new windows, open external links in browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     try {
-      const urlObj = new URL(url);
-      if (urlObj.origin === ALLOWED_ORIGIN) {
-        shell.openExternal(url);
-      } else {
-        shell.openExternal(url);
-      }
+      shell.openExternal(url);
     } catch (e) {
       log.error('Invalid window open URL:', url);
     }
@@ -101,6 +145,49 @@ function createWindow() {
   mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
     log.error(`Load failed: ${errorCode} - ${errorDescription}`);
     mainWindow.loadFile(path.join(__dirname, 'renderer', 'offline.html'));
+  });
+
+  // Handle HTTP Basic Auth with prompt dialogs
+  app.on('login', async (event, webContents, details, authInfo, callback) => {
+    event.preventDefault();
+    const prompt = require('electron-prompt');
+
+    try {
+      const username = await prompt({
+        title: 'PDev Live - Login',
+        label: 'Username:',
+        inputAttrs: { type: 'text', required: true },
+        type: 'input',
+        alwaysOnTop: true,
+        width: 370,
+        height: 150
+      }, mainWindow);
+
+      if (!username) {
+        callback(); // Cancelled
+        return;
+      }
+
+      const password = await prompt({
+        title: 'PDev Live - Login',
+        label: 'Password:',
+        inputAttrs: { type: 'password', required: true },
+        type: 'input',
+        alwaysOnTop: true,
+        width: 370,
+        height: 150
+      }, mainWindow);
+
+      if (!password) {
+        callback(); // Cancelled
+        return;
+      }
+
+      callback(username, password);
+    } catch (err) {
+      log.error('Auth prompt error:', err);
+      callback(); // Cancel on error
+    }
   });
 
   // Load the app
@@ -157,6 +244,10 @@ ipcMain.handle('check-updates', () => autoUpdater.checkForUpdatesAndNotify());
 
 // App lifecycle
 app.whenReady().then(() => {
+  // Load configuration before creating window
+  appConfig = loadConfig();
+  log.info('Loaded config:', { serverUrl: appConfig.serverUrl });
+
   createWindow();
   createTray();
 

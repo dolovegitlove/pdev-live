@@ -55,7 +55,7 @@ const pool = new Pool({
   host: 'localhost',
   database: 'pdev',
   user: 'pdev_app',
-  password: process.env.PDEV_DB_PASSWORD || 'pdev_secure_2024',
+  password: process.env.PDEV_DB_PASSWORD || (() => { console.error('FATAL: PDEV_DB_PASSWORD required'); process.exit(1); })(),
   max: 3,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,

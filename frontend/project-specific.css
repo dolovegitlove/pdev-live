@@ -1,0 +1,373 @@
+/**
+ * Project-Specific Styles
+ * Unique styles for project.html only
+ */
+
+/* Container Override - Wider for project view */
+.container {
+  max-width: 1400px;
+}
+
+/* Breadcrumb Navigation */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.breadcrumb a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+.breadcrumb-container {
+  margin-bottom: 1rem;
+}
+
+/* Project Header */
+.project-header {
+  display: flex;
+  gap: 1rem;
+  padding: 1.5rem;
+  background: var(--card);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.project-title {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--accent2);
+}
+
+.project-meta {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-left: auto;
+}
+
+.project-meta strong {
+  color: var(--text);
+}
+
+/* Main Content Layout Override - Sidebar on LEFT for project page */
+.main-content {
+  grid-template-columns: 280px 1fr;
+}
+
+/* Document List */
+.doc-list {
+  list-style: none;
+}
+
+.doc-item {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.15s;
+  border-radius: 4px;
+}
+
+.doc-item:hover {
+  background: var(--border);
+}
+
+.doc-item.active {
+  background: var(--accent);
+}
+
+.doc-item:last-child {
+  border-bottom: none;
+}
+
+.doc-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.doc-meta {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 0.25rem;
+}
+
+.doc-item.active .doc-meta {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.doc-item.missing {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Session List in Sidebar */
+.session-list {
+  list-style: none;
+  font-size: 0.85rem;
+}
+
+.session-list li {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.session-list li:last-child {
+  border-bottom: none;
+}
+
+.session-list a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.session-list a:hover {
+  text-decoration: underline;
+}
+
+/* Loading States */
+.loading {
+  text-align: center;
+  padding: 2rem;
+  color: var(--muted);
+}
+
+@keyframes project-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+.loading-pulse {
+  animation: project-pulse 1.5s ease-in-out infinite;
+}
+
+/* Phase Badge (Document Number Indicators) */
+.phase-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--border);
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+.doc-item:not(.missing) .phase-badge {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Missing Document Tag */
+.missing-tag {
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--border);
+  color: var(--muted);
+  margin-left: auto;
+}
+
+/* Meta Card - YAML Frontmatter Display (CRITICAL COMPONENT) */
+.meta-card {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(168, 85, 247, 0.05));
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.meta-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.meta-title {
+  font-weight: 600;
+  color: var(--accent2);
+}
+
+.meta-version {
+  font-size: 0.8rem;
+  color: var(--muted);
+  background: var(--bg);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.meta-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.meta-value {
+  font-size: 0.9rem;
+  color: var(--text);
+  margin: 0;
+}
+
+.meta-value.stage {
+  text-transform: capitalize;
+  color: var(--accent);
+}
+
+.meta-value.health-good {
+  color: var(--success);
+}
+
+.meta-value.health-warning {
+  color: var(--warn);
+}
+
+.meta-value.health-critical {
+  color: #ef4444;
+}
+
+/* Gap Severity Indicators */
+.gap-badges {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin: 0;
+}
+
+.gap-badge {
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: #fff;
+  font-weight: 500;
+}
+
+.gap-badge.gap-critical {
+  background: #ef4444;
+}
+
+.gap-badge.gap-high {
+  background: #f97316;
+}
+
+.gap-badge.gap-medium {
+  background: #f59e0b;
+}
+
+.gap-badge.gap-low {
+  background: #22c55e;
+}
+
+.meta-gaps {
+  grid-column: span 2;
+}
+
+.meta-deps {
+  grid-column: span 2;
+}
+
+@media (max-width: 600px) {
+  .meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .meta-gaps,
+  .meta-deps {
+    grid-column: span 1;
+  }
+}
+
+/* Action Hint Links */
+.action-hint {
+  font-size: 0.7rem;
+  color: var(--accent);
+  cursor: pointer;
+  margin-left: auto;
+}
+
+.action-hint:hover {
+  text-decoration: underline;
+}
+
+/* Onboarding Card (Help UI) */
+.onboarding-card {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(168, 85, 247, 0.1));
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.onboarding-card h3 {
+  color: var(--accent2);
+  margin-bottom: 0.5rem;
+}
+
+.onboarding-card p {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.onboarding-card code {
+  background: var(--bg);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  color: var(--accent);
+}
+
+.help-content {
+  margin-bottom: 1rem;
+}
+
+.help-command {
+  margin-top: 0.5rem;
+}
+
+.help-command code {
+  font-size: 1.1rem;
+  padding: 0.5rem 1rem;
+}
+
+.help-phase {
+  margin-top: 1.5rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+/* Empty State Override */
+.empty-state h2 {
+  color: var(--text);
+  margin-bottom: 0.5rem;
+}

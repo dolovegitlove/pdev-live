@@ -1,0 +1,142 @@
+/**
+ * Session-Specific Styles
+ * Unique styles for session.html only
+ */
+
+/* Session Header */
+.session-header {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--card);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.session-header .badge {
+  padding: 0.25rem 0.75rem;
+  background: var(--accent);
+  color: white;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.session-header .badge.completed {
+  background: var(--success);
+}
+
+.session-header .badge.interrupted {
+  background: #ef4444;
+}
+
+.session-meta {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.session-meta strong {
+  color: var(--text);
+}
+
+/* Phase Headers - Section Labels (Non-clickable) */
+.phase-header {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  padding: 0.75rem 0 0.35rem 0;
+  margin-top: 0.5rem;
+  border: none !important;
+  cursor: default;
+  user-select: none;
+}
+
+.phase-header:first-child {
+  margin-top: 0;
+  padding-top: 0;
+}
+
+/* Document Items - Clickable with Hover Transform */
+.doc-item {
+  padding: 0.5rem 0.75rem 0.5rem 1.5rem;
+  margin: 0 -0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.doc-item:hover {
+  transform: translateX(4px);
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--accent2);
+}
+
+/* Step Icon Variants */
+.step-icon.output {
+  background: var(--accent);
+  color: white;
+}
+
+.step-icon.document {
+  background: var(--success);
+  color: white;
+}
+
+.step-icon.system {
+  background: var(--warn);
+  color: black;
+}
+
+/* Step List Interactive States */
+.step-list li {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.step-list li:hover {
+  background: var(--border);
+  margin: 0 -1rem;
+  padding: 0.5rem 1rem;
+}
+
+.step-list li.active {
+  background: var(--accent);
+  margin: 0 -1rem;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+}
+
+/* Step Label Truncation */
+.step-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+/* Error State */
+.error-state {
+  text-align: center;
+  padding: 3rem;
+  color: #ef4444;
+}
+
+/* Button Variants */
+.btn-primary {
+  background: var(--accent);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: var(--accent2);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

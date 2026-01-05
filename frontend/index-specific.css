@@ -1,0 +1,10 @@
+/**
+ * Index-Specific Styles
+ * Unique styles for index.html only
+ */
+
+/* Pipeline Visualization (Dashboard View) */
+/* Note: pipeline styles already in pdev-live.css - this file intentionally minimal */
+
+/* Any dashboard-specific overrides would go here */
+/* Currently, index.html uses only shared components from pdev-live.css */

@@ -89,8 +89,9 @@
     "electron-builder": "^26.0.0"
   },
   "dependencies": {
-    "electron-updater": "^6.6.0",
-    "electron-log": "^5.0.0"
+    "electron-log": "^5.0.0",
+    "electron-prompt": "^1.7.0",
+    "electron-updater": "^6.6.0"
   },
   "keywords": [],
   "type": "commonjs",

@@ -18,7 +18,26 @@
 #   - PDEV_FORCE_NEW=1: Force new session even if one exists
 #
 
-PDEV_LIVE_URL="${PDEV_LIVE_URL:-https://walletsnack.com/pdev/api}"
+# Server-specific PDev Live URLs
+# Each server pushes to its own PDev Live instance
+get_pdev_url() {
+  local server="$1"
+  case "$server" in
+    djm) echo "https://axiomwebcontrol.com/pdev/api" ;;
+    rmlve) echo "https://churchcarehub.com/pdev/api" ;;
+    *) echo "https://walletsnack.com/pdev/api" ;;
+  esac
+}
+
+# Get base URL for dashboard links (strips /api suffix)
+get_pdev_base() {
+  local server="$1"
+  case "$server" in
+    djm) echo "https://axiomwebcontrol.com/pdev" ;;
+    rmlve) echo "https://churchcarehub.com/pdev" ;;
+    *) echo "https://walletsnack.com/pdev" ;;
+  esac
+}
 
 detect_server() {
   if [ -n "$PDEV_SERVER" ]; then
@@ -29,14 +48,19 @@ detect_server() {
   case "$HOSTNAME" in
     *dolovdev*|Dolovs*|dolov-mac*|Dolov*) echo "dolovdev" ;;
     srv*|acme*) echo "acme" ;;
-    *ittz*) echo "ittz" ;;
+    itt|*ittz*) echo "ittz" ;;
     *dolov*) echo "dolov" ;;
     WIN*|DESKTOP*|*wdress*) echo "wdress" ;;
-    *) echo "dolovdev" ;;
+    wonderful-lehmann*|*djm*) echo "djm" ;;
+    *rmlve*) echo "rmlve" ;;
+    *cfree*) echo "cfree" ;;
+    *) echo "${HOSTNAME%%.*}" ;;
   esac
 }
 
 PDEV_SERVER=$(detect_server)
+PDEV_LIVE_URL="${PDEV_LIVE_URL:-$(get_pdev_url "$PDEV_SERVER")}"
+PDEV_BASE_URL="$(get_pdev_base "$PDEV_SERVER")"
 SESSIONS_DIR="/tmp/pdev-live-sessions"
 mkdir -p "$SESSIONS_DIR"
 
@@ -79,37 +103,30 @@ error() { echo -e "${RED}[PDev Live Error]${NC} $1" >&2; }
 success() { echo -e "${GREEN}[PDev Live]${NC} $1" >&2; }
 warn() { echo -e "${YELLOW}[PDev Live]${NC} $1" >&2; }
 
-restore_session_from_server() {
-  local project="$1"
-  local EXISTING=$(find_active_session "$project")
-  local FOUND=$(echo "$EXISTING" | jq -r '.found // false' 2>/dev/null)
-
-  if [ "$FOUND" = "true" ]; then
-    local SESSION_ID=$(echo "$EXISTING" | jq -r '.session.id' 2>/dev/null)
-    local CMD=$(echo "$EXISTING" | jq -r '.session.command_type' 2>/dev/null)
-    local STEPS=$(echo "$EXISTING" | jq -r '.session.step_count // 0' 2>/dev/null)
-
-    local sf=$(get_session_file "$project")
-    local pf=$(get_phase_file "$project")
-    echo "{\"sessionId\": \"$SESSION_ID\", \"stepCount\": $STEPS, \"server\": \"$PDEV_SERVER\", \"project\": \"$project\", \"command\": \"$CMD\"}" > "$sf"
-    [ ! -f "$pf" ] && echo "{\"phaseNum\": 0, \"phaseName\": \"\"}" > "$pf"
-    warn "Restored session from server: $SESSION_ID"
-  fi
-}
-
 get_session_id() {
-  local project=$(get_current_project)
-  local sf=$(get_session_file "$project")
-
-  # If local file missing but project is set, try to restore from server
-  if [ ! -f "$sf" ] && [ -n "$project" ]; then
-    restore_session_from_server "$project"
-  fi
-
+  local sf=$(get_session_file)
+  local sid=""
   if [ -f "$sf" ]; then
-    jq -r '.sessionId // empty' "$sf" 2>/dev/null
+    sid=$(jq -r '.sessionId // empty' "$sf" 2>/dev/null)
   fi
+
+  # Validate session exists and is not deleted (CLI expects accurate state)
+  if [ -n "$sid" ] && [ "$sid" != "null" ]; then
+    local validation=$(curl -s --connect-timeout 3 --max-time 5 \
+      "$PDEV_LIVE_URL/sessions/$sid" 2>/dev/null)
+
+    if echo "$validation" | jq -e '.error' >/dev/null 2>&1; then
+      # Session deleted - clear cache and return empty
+      rm -f "$sf" 2>/dev/null
+      rm -f "/tmp/pdev-live-valid-$sid" 2>/dev/null
+      echo ""
+      return
+    fi
+  fi
+
+  echo "$sid"
 }
+
 # Check if command should force new session (regen commands)
 should_force_new() {
   local cmd="$1"
@@ -122,6 +139,152 @@ should_force_new() {
   return 1
 }
 
+# ============================================================================
+# PROJECT REGISTRY FUNCTIONS (for remote doc fetching)
+# ============================================================================
+
+PROJECTS_FILE="${PROJECTS_FILE:-$HOME/.claude/tools/pdev-live/projects.json}"
+
+# Sanitize path for SSH (prevent injection)
+sanitize_remote_path() {
+  local path="$1"
+  if [[ "$path" =~ ^[a-zA-Z0-9/_.-]+$ ]]; then
+    echo "$path"
+    return 0
+  fi
+  error "Invalid path characters: $path"
+  return 1
+}
+
+# Resolve project name to server/path via registry
+resolve_project() {
+  local project_name="$1"
+
+  if [ -z "$project_name" ]; then
+    return 1
+  fi
+
+  if [ ! -f "$PROJECTS_FILE" ]; then
+    return 1
+  fi
+
+  # Validate JSON
+  if ! jq empty "$PROJECTS_FILE" 2>/dev/null; then
+    error "Invalid projects.json"
+    return 1
+  fi
+
+  # Direct match (case-insensitive) - use -c for compact single-line output
+  local lower_name=$(echo "$project_name" | tr '[:upper:]' '[:lower:]')
+  local match=$(jq -c --arg p "$lower_name" \
+    '.projects | to_entries[] |
+     select(.key | ascii_downcase == $p) |
+     .value' "$PROJECTS_FILE" 2>/dev/null | head -1)
+
+  if [ -n "$match" ] && [ "$match" != "null" ]; then
+    echo "$match"
+    return 0
+  fi
+
+  # Alias search - use -c for compact single-line output
+  match=$(jq -c --arg p "$lower_name" \
+    '.projects | to_entries[] |
+     select(.value.aliases | map(ascii_downcase) | index($p)) |
+     .value' "$PROJECTS_FILE" 2>/dev/null | head -1)
+
+  if [ -n "$match" ] && [ "$match" != "null" ]; then
+    echo "$match"
+    return 0
+  fi
+
+  return 1
+}
+
+# Fetch docs from remote server via SSH and push to pdev-live API
+fetch_remote_docs() {
+  local server="$1"
+  local remote_path="$2"
+  local session_id="$3"
+  local quiet="$4"
+
+  # Validate inputs
+  if [ -z "$server" ] || [ -z "$remote_path" ]; then
+    error "fetch_remote_docs: server and path required"
+    return 1
+  fi
+
+  # Validate server name format
+  if ! [[ "$server" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    error "Invalid server name: $server"
+    return 1
+  fi
+
+  # Sanitize path
+  local safe_path
+  safe_path=$(sanitize_remote_path "$remote_path") || return 1
+
+  [ -z "$quiet" ] && log "Fetching docs from $server:$safe_path"
+
+  # Get list of doc files
+  local doc_files
+  doc_files=$(ssh -o ConnectTimeout=10 -o BatchMode=yes "$server" \
+    "find \"$safe_path\" -maxdepth 1 -name '*.md' -type f 2>/dev/null" 2>&1)
+
+  if [ $? -ne 0 ] || [ -z "$doc_files" ]; then
+    [ -z "$quiet" ] && warn "No docs found at $server:$safe_path"
+    return 1
+  fi
+
+  local count=0
+  local DOC_LIST=""
+
+  while IFS= read -r remote_file; do
+    [ -z "$remote_file" ] && continue
+
+    local basename=$(basename "$remote_file")
+    local content
+    # Use -n to prevent SSH from consuming stdin (which breaks the while loop)
+    content=$(ssh -n -o ConnectTimeout=30 -o BatchMode=yes "$server" \
+      "cat \"$remote_file\"" 2>/dev/null)
+
+    if [ -n "$content" ]; then
+      # Get phase info
+      local PHASE_INFO=$(get_phase_for_doc "$basename")
+      local PHASE_NUM=$(echo "$PHASE_INFO" | cut -d'|' -f1)
+      local PHASE_NAME=$(echo "$PHASE_INFO" | cut -d'|' -f2)
+
+      # Get version from content
+      local VERSION=$(echo "$content" | grep -m1 'pdev_version:' | sed 's/.*pdev_version:[[:space:]]*//' | tr -d '\r')
+
+      # Push to pdev-live API
+      curl -s -X POST "$PDEV_LIVE_URL/sessions/$session_id/steps" \
+        -H "Content-Type: application/json" \
+        -d "{
+          \"type\": \"document\",
+          \"documentName\": $(echo "$basename" | jq -Rs '.'),
+          \"documentPath\": $(echo "$remote_file" | jq -Rs '.'),
+          \"content\": $(echo "$content" | jq -Rs '.'),
+          \"phaseNumber\": ${PHASE_NUM:-0},
+          \"phaseName\": $(echo "$PHASE_NAME" | jq -Rs '.')
+        }" >/dev/null 2>&1
+
+      DOC_LIST="${DOC_LIST}   • ${basename}${VERSION:+ (v$VERSION)}\n"
+      count=$((count + 1))
+    fi
+  done <<< "$doc_files"
+
+  if [ $count -gt 0 ]; then
+    if [ -z "$quiet" ]; then
+      success "Fetched $count docs from $server:"
+      echo -e "$DOC_LIST"
+    else
+      log "Auto-fetched $count docs from $server"
+    fi
+  fi
+
+  return 0
+}
+
 # Find existing active session on server
 find_active_session() {
   local project="$1"
@@ -132,38 +295,73 @@ cmd_start() {
   local COMMAND_TYPE="${1:-unknown}"
   local PROJECT_NAME="${2:-$(basename "$PWD")}"
 
-  # Force new session for regen commands OR explicit override
-  if should_force_new "$COMMAND_TYPE"; then
-    log "Creating new session (forced): /$COMMAND_TYPE for $PROJECT_NAME"
-  else
-    # Find ANY existing session for this project (active OR completed)
-    local EXISTING=$(curl -s "$PDEV_LIVE_URL/sessions/find-session?server=$PDEV_SERVER&project=$PROJECT_NAME" 2>/dev/null)
-    local FOUND=$(echo "$EXISTING" | jq -r '.found // false' 2>/dev/null)
+  # Resolve project from registry (if exists)
+  local PROJECT_INFO=$(resolve_project "$PROJECT_NAME")
+  local REMOTE_SERVER=""
+  local REMOTE_PATH=""
 
+  if [ -n "$PROJECT_INFO" ]; then
+    REMOTE_SERVER=$(echo "$PROJECT_INFO" | jq -r '.server // empty')
+    REMOTE_PATH=$(echo "$PROJECT_INFO" | jq -r '.path // empty')
+
+    if [ -n "$REMOTE_SERVER" ]; then
+      # Override PDEV_SERVER with resolved server for this session
+      PDEV_SERVER="$REMOTE_SERVER"
+      log "Resolved $PROJECT_NAME -> $REMOTE_SERVER:$REMOTE_PATH"
+    fi
+  fi
+
+  # Check if we should force new session
+  if ! should_force_new "$COMMAND_TYPE"; then
+    # Try to find existing active session
+    local EXISTING=$(find_active_session "$PROJECT_NAME")
+    local FOUND=$(echo "$EXISTING" | jq -r '.found // false' 2>/dev/null)
+    
     if [ "$FOUND" = "true" ]; then
       local EXISTING_ID=$(echo "$EXISTING" | jq -r '.session.id' 2>/dev/null)
-      local STATUS=$(echo "$EXISTING" | jq -r '.session.session_status' 2>/dev/null)
+      local EXISTING_CMD=$(echo "$EXISTING" | jq -r '.session.command_type' 2>/dev/null)
       local STEP_COUNT=$(echo "$EXISTING" | jq -r '.session.step_count // 0' 2>/dev/null)
 
-      # Reopen if completed
-      if [ "$STATUS" != "active" ]; then
-        curl -s -X POST "$PDEV_LIVE_URL/sessions/$EXISTING_ID/reopen" \
+      # Only resume if command type matches OR command is generic continuation
+      if [ "$EXISTING_CMD" != "$COMMAND_TYPE" ] && [ "$COMMAND_TYPE" != "continue" ] && [ "$COMMAND_TYPE" != "resume" ]; then
+        log "Different command type ($COMMAND_TYPE vs $EXISTING_CMD) - creating new session"
+        # End the existing session first
+        curl -s -X POST "$PDEV_LIVE_URL/sessions/$EXISTING_ID/complete" \
           -H "Content-Type: application/json" \
-          -d '{}' >/dev/null 2>&1
-        log "Reopened completed session for $PROJECT_NAME"
+          -d '{"status": "completed"}' >/dev/null 2>&1
+        # Fall through to create new session (don't return)
+      else
+        log "Resuming existing session: /$EXISTING_CMD for $PROJECT_NAME"
+
+        # Update local session file
+        local sf=$(get_session_file "$PROJECT_NAME")
+        local pf=$(get_phase_file "$PROJECT_NAME")
+        echo "{\"sessionId\": \"$EXISTING_ID\", \"stepCount\": $STEP_COUNT, \"server\": \"$PDEV_SERVER\", \"project\": \"$PROJECT_NAME\", \"command\": \"$EXISTING_CMD\"}" > "$sf"
+
+        # Create phase file if missing
+        [ ! -f "$pf" ] && echo "{\"phaseNum\": 0, \"phaseName\": \"\"}" > "$pf"
+
+        # Set as default project
+        echo "$PROJECT_NAME" > "$SESSIONS_DIR/default-$PDEV_SERVER.txt"
+
+        success "Resumed session: $EXISTING_ID ($STEP_COUNT steps)"
+        echo "View at: $PDEV_BASE_URL/live/session.html?id=$EXISTING_ID"
+        echo "Dashboard: $PDEV_BASE_URL/live/project.html?project=$PROJECT_NAME&server=$PDEV_SERVER"
+
+        # Auto-seed existing docs on resume (only if session has 0 steps)
+        if [ "$STEP_COUNT" = "0" ]; then
+          if [ -n "$REMOTE_SERVER" ] && [ -n "$REMOTE_PATH" ]; then
+            # Fetch from remote server
+            fetch_remote_docs "$REMOTE_SERVER" "$REMOTE_PATH" "$EXISTING_ID" "quiet"
+          else
+            # Fallback to local
+            cmd_seed "$PWD/docs" "quiet" 2>/dev/null || cmd_seed "$PWD" "quiet" 2>/dev/null
+          fi
+        fi
+
+        echo "$EXISTING_ID"
+        return 0
       fi
-
-      # Update local session file
-      local sf=$(get_session_file "$PROJECT_NAME")
-      local pf=$(get_phase_file "$PROJECT_NAME")
-      echo "{\"sessionId\": \"$EXISTING_ID\", \"stepCount\": $STEP_COUNT, \"server\": \"$PDEV_SERVER\", \"project\": \"$PROJECT_NAME\"}" > "$sf"
-      [ ! -f "$pf" ] && echo "{\"phaseNum\": 0, \"phaseName\": \"\"}" > "$pf"
-      echo "$PROJECT_NAME" > "$SESSIONS_DIR/default-$PDEV_SERVER.txt"
-
-      success "Resumed session: $EXISTING_ID ($STEP_COUNT steps)"
-      echo "View at: https://walletsnack.com/pdev/live/session.html?id=$EXISTING_ID"
-      echo "$EXISTING_ID"
-      return 0
     fi
   fi
 
@@ -186,11 +384,23 @@ cmd_start() {
   if [ -n "$SESSION_ID" ] && [ "$SESSION_ID" != "null" ]; then
     local sf=$(get_session_file "$PROJECT_NAME")
     local pf=$(get_phase_file "$PROJECT_NAME")
-    echo "{\"sessionId\": \"$SESSION_ID\", \"stepCount\": 0, \"server\": \"$PDEV_SERVER\", \"project\": \"$PROJECT_NAME\"}" > "$sf"
+    echo "{\"sessionId\": \"$SESSION_ID\", \"stepCount\": 0, \"server\": \"$PDEV_SERVER\", \"project\": \"$PROJECT_NAME\", \"command\": \"$COMMAND_TYPE\", \"remotePath\": \"$REMOTE_PATH\"}" > "$sf"
     echo "{\"phaseNum\": 0, \"phaseName\": \"\"}" > "$pf"
+    # Set as default project for this server
     echo "$PROJECT_NAME" > "$SESSIONS_DIR/default-$PDEV_SERVER.txt"
     success "Session created: $SESSION_ID"
-    echo "View at: https://walletsnack.com/pdev/live/session.html?id=$SESSION_ID"
+    echo "View at: $PDEV_BASE_URL/live/session.html?id=$SESSION_ID"
+    echo "Dashboard: $PDEV_BASE_URL/live/project.html?project=$PROJECT_NAME&server=$PDEV_SERVER"
+
+    # Auto-seed existing docs on new session
+    if [ -n "$REMOTE_SERVER" ] && [ -n "$REMOTE_PATH" ]; then
+      # Fetch from remote server
+      fetch_remote_docs "$REMOTE_SERVER" "$REMOTE_PATH" "$SESSION_ID" "quiet"
+    else
+      # Fallback to local
+      cmd_seed "$PWD/docs" "quiet" 2>/dev/null || cmd_seed "$PWD" "quiet" 2>/dev/null
+    fi
+
     echo "$SESSION_ID"
   else
     error "Failed to create session: $RESPONSE"
@@ -200,12 +410,6 @@ cmd_start() {
 
 cmd_step() {
   local CONTENT="$*"
-
-  # Read from stdin when content is "-" or empty
-  if [ "$CONTENT" = "-" ] || [ -z "$CONTENT" ]; then
-    CONTENT=$(cat)
-  fi
-
   local SESSION_ID=$(get_session_id)
 
   if [ -z "$SESSION_ID" ]; then
@@ -241,6 +445,24 @@ cmd_step() {
   fi
 }
 
+# Map document name to phase number and name
+get_phase_for_doc() {
+  local doc_name="$1"
+  case "$doc_name" in
+    *IDEATION*) echo "1|Idea - Project Definition" ;;
+    *BENCHMARK*) echo "2|Benchmark - Competitive Analysis" ;;
+    *GAP_ANALYSIS*|*GAP*) echo "3|Gap Analysis" ;;
+    *INNOVATION*|*INNOV*) echo "4|Innovation Analysis" ;;
+    *CAPABILITIES*|*CAPS*) echo "5|Capabilities Assessment" ;;
+    *PRODUCT_SPEC*|*SPEC*) echo "6|Product Spec" ;;
+    *DESIGN_SYSTEM*|*DESIGN*) echo "7|Design System" ;;
+    *DEVELOPMENT_SOP*|*SOP*) echo "8|Development SOP" ;;
+    *PIPELINE_VALIDATION*|*PV*) echo "9|Pipeline Validation" ;;
+    *EVALUATION*|*EVAL*) echo "10|Evaluation" ;;
+    *) echo "0|" ;;
+  esac
+}
+
 cmd_doc() {
   local DOC_NAME="$1"
   local DOC_PATH="$2"
@@ -256,22 +478,67 @@ cmd_doc() {
     return 1
   fi
 
-  if [ ! -f "$DOC_PATH" ]; then
-    error "File not found: $DOC_PATH"
+  local CONTENT=""
+  local IS_REMOTE=false
+
+  # Check if path is remote (server:path format or /home/* on different server)
+  if [[ "$DOC_PATH" == *:* ]]; then
+    # Explicit server:path format
+    IS_REMOTE=true
+    local REMOTE_SERVER="${DOC_PATH%%:*}"
+    local REMOTE_FILE="${DOC_PATH#*:}"
+    log "Fetching from remote: $REMOTE_SERVER:$REMOTE_FILE"
+    CONTENT=$(ssh -n -o ConnectTimeout=30 -o BatchMode=yes "$REMOTE_SERVER" "cat \"$REMOTE_FILE\"" 2>/dev/null)
+    if [ -z "$CONTENT" ]; then
+      error "Failed to fetch remote file: $DOC_PATH"
+      return 1
+    fi
+  elif [[ "$DOC_PATH" == /home/* ]]; then
+    # Remote path on session's server
+    local sf=$(get_session_file)
+    local REMOTE_SERVER=$(jq -r '.server // empty' "$sf" 2>/dev/null)
+    if [ -n "$REMOTE_SERVER" ] && [ "$REMOTE_SERVER" != "dolovdev" ]; then
+      IS_REMOTE=true
+      log "Fetching from $REMOTE_SERVER:$DOC_PATH"
+      CONTENT=$(ssh -n -o ConnectTimeout=30 -o BatchMode=yes "$REMOTE_SERVER" "cat \"$DOC_PATH\"" 2>/dev/null)
+      if [ -z "$CONTENT" ]; then
+        error "Failed to fetch remote file: $REMOTE_SERVER:$DOC_PATH"
+        return 1
+      fi
+    fi
+  fi
+
+  # Fallback to local file if not remote
+  if [ "$IS_REMOTE" = false ]; then
+    if [ ! -f "$DOC_PATH" ]; then
+      error "File not found: $DOC_PATH"
+      return 1
+    fi
+    CONTENT=$(cat "$DOC_PATH")
+  fi
+
+  if [ -z "$CONTENT" ]; then
+    error "Empty content from: $DOC_PATH"
     return 1
   fi
 
-  local CONTENT=$(cat "$DOC_PATH")
+  local CONTENT=$(echo "$CONTENT")
   local CONTENT_SIZE=$(echo "$CONTENT" | wc -c | tr -d ' ')
 
   log "Pushing document: $DOC_NAME ($CONTENT_SIZE bytes)"
 
-  local pf=$(get_phase_file)
-  local PHASE_NUM=""
-  local PHASE_NAME=""
-  if [ -f "$pf" ]; then
-    PHASE_NUM=$(jq -r '.phaseNum // empty' "$pf" 2>/dev/null)
-    PHASE_NAME=$(jq -r '.phaseName // empty' "$pf" 2>/dev/null)
+  # Auto-detect phase from document name
+  local PHASE_INFO=$(get_phase_for_doc "$DOC_NAME")
+  local PHASE_NUM=$(echo "$PHASE_INFO" | cut -d'|' -f1)
+  local PHASE_NAME=$(echo "$PHASE_INFO" | cut -d'|' -f2)
+
+  # Fallback to stored phase if not auto-detected
+  if [ "$PHASE_NUM" = "0" ] || [ -z "$PHASE_NAME" ]; then
+    local pf=$(get_phase_file)
+    if [ -f "$pf" ]; then
+      PHASE_NUM=$(jq -r '.phaseNum // 0' "$pf" 2>/dev/null)
+      PHASE_NAME=$(jq -r '.phaseName // ""' "$pf" 2>/dev/null)
+    fi
   fi
 
   RESPONSE=$(curl -s -X POST "$PDEV_LIVE_URL/sessions/$SESSION_ID/steps" \
@@ -343,7 +610,7 @@ cmd_status() {
     echo "Active session for: $project"
     cat "$sf" | jq .
     echo ""
-    echo "View at: https://walletsnack.com/pdev/live/session.html?id=$(get_session_id)"
+    echo "View at: $PDEV_BASE_URL/live/session.html?id=$(get_session_id)"
   else
     echo "No active session on $PDEV_SERVER"
     local sessions=$(ls -1 "$SESSIONS_DIR"/$PDEV_SERVER-*.json 2>/dev/null | grep -v phase)
@@ -478,6 +745,211 @@ cmd_manifest_get() {
   fi
 }
 
+cmd_share() {
+  local HOURS="${1:-24}"
+  local EMAIL="${2:-}"
+
+  # Validate HOURS is a positive integer (max 30 days)
+  if ! [[ "$HOURS" =~ ^[0-9]+$ ]] || [ "$HOURS" -lt 1 ] || [ "$HOURS" -gt 720 ]; then
+    error "HOURS must be a positive integer between 1 and 720"
+    return 1
+  fi
+
+  # Validate PDEV_LIVE_URL uses HTTPS
+  if [[ ! "$PDEV_LIVE_URL" =~ ^https:// ]]; then
+    error "PDEV_LIVE_URL must use HTTPS"
+    return 1
+  fi
+
+  # Get and validate session ID
+  local SESSION_ID=$(get_session_id)
+  if [ -z "$SESSION_ID" ]; then
+    error "No active session. Use: pdev-live start <command> <project>"
+    return 1
+  fi
+  if ! [[ "$SESSION_ID" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    error "Invalid session ID format"
+    return 1
+  fi
+
+  # Validate email format if provided
+  if [ -n "$EMAIL" ] && ! [[ "$EMAIL" =~ ^[^@]+@[^@]+\.[^@]+$ ]]; then
+    error "Invalid email format"
+    return 1
+  fi
+
+  # Get admin key
+  local ADMIN_KEY="${PDEV_ADMIN_KEY:-}"
+  if [ -z "$ADMIN_KEY" ]; then
+    if [ -f "$HOME/.pdev-admin-key" ]; then
+      local PERMS=$(stat -f "%OLp" "$HOME/.pdev-admin-key" 2>/dev/null || stat -c "%a" "$HOME/.pdev-admin-key" 2>/dev/null)
+      if [ "$PERMS" != "600" ] && [ "$PERMS" != "400" ]; then
+        error "~/.pdev-admin-key has insecure permissions ($PERMS). Run: chmod 600 ~/.pdev-admin-key"
+        return 1
+      fi
+      ADMIN_KEY=$(cat "$HOME/.pdev-admin-key")
+    else
+      error "PDEV_ADMIN_KEY not set. Create ~/.pdev-admin-key (chmod 600) or export PDEV_ADMIN_KEY"
+      return 1
+    fi
+  fi
+
+  log "Creating guest link (expires in ${HOURS}h)..."
+
+  # Build JSON safely using jq
+  local JSON_PAYLOAD=$(jq -n \
+    --arg sid "$SESSION_ID" \
+    --argjson hours "$HOURS" \
+    '{sessionId: $sid, expiresInHours: $hours}')
+
+  # Use temp file for admin key header (prevents exposure in ps)
+  local HEADER_FILE=$(mktemp)
+  chmod 600 "$HEADER_FILE"
+  printf "X-Admin-Key: %s" "$ADMIN_KEY" > "$HEADER_FILE"
+  trap "rm -f \"$HEADER_FILE\"" RETURN
+
+  local RESPONSE=$(curl -s --max-time 30 -X POST "$PDEV_LIVE_URL/guest-links" \
+    -H "Content-Type: application/json" \
+    -H @"$HEADER_FILE" \
+    -d "$JSON_PAYLOAD" 2>/dev/null)
+
+  rm -f "$HEADER_FILE"
+
+  if echo "$RESPONSE" | jq -e '.url' >/dev/null 2>&1; then
+    local URL=$(echo "$RESPONSE" | jq -r '.url')
+    local EXPIRES=$(echo "$RESPONSE" | jq -r '.expiresAt')
+    local PROJECT=$(get_current_project)
+
+    success "Guest link created!"
+    echo ""
+    echo "Share this link with your client:"
+    echo -e "${GREEN}$URL${NC}"
+    echo ""
+    echo "Expires: $EXPIRES"
+
+    # Send email if address provided
+    if [ -n "$EMAIL" ]; then
+      log "Sending link to $EMAIL..."
+      local SUBJECT="PDev Live Session: $PROJECT"
+      local BODY="You've been invited to view a PDev Live session.
+
+Project: $PROJECT
+Link: $URL
+
+This link expires: $EXPIRES
+
+--
+PDev Suite"
+
+      echo "$BODY" | mail -s "$SUBJECT" "$EMAIL" 2>/dev/null && \
+        success "Email sent to $EMAIL" || \
+        warn "Failed to send email (mail command not available)"
+    fi
+  else
+    local ERR=$(echo "$RESPONSE" | jq -r '.error // "Unknown error"')
+    error "Failed to create guest link: $ERR"
+    return 1
+  fi
+}
+
+# Get doc version and date info
+get_doc_info() {
+  local DOC_FILE="$1"
+  local VERSION=$(grep -m1 'pdev_version:' "$DOC_FILE" 2>/dev/null | sed 's/.*pdev_version:[[:space:]]*//' | tr -d '\r')
+  local MTIME=$(stat -f "%Sm" -t "%b %d" "$DOC_FILE" 2>/dev/null || stat -c "%y" "$DOC_FILE" 2>/dev/null | cut -d' ' -f1)
+
+  if [ -n "$VERSION" ]; then
+    echo "v$VERSION, $MTIME"
+  else
+    echo "$MTIME"
+  fi
+}
+
+# Seed session with existing PDev docs (with version info)
+cmd_seed() {
+  local DOCS_PATH="${1:-$PWD/docs}"
+  local SESSION_ID=$(get_session_id)
+  local QUIET="${2:-}"  # Pass "quiet" to suppress output (for auto-seed)
+
+  if [ -z "$SESSION_ID" ]; then
+    error "No active session. Use: pdev-live start <command> <project>"
+    return 1
+  fi
+
+  if [ ! -d "$DOCS_PATH" ]; then
+    # Try common locations
+    if [ -d "$PWD/docs" ]; then
+      DOCS_PATH="$PWD/docs"
+    elif [ -d "$PWD" ]; then
+      DOCS_PATH="$PWD"
+    else
+      [ -z "$QUIET" ] && warn "Docs directory not found: $DOCS_PATH"
+      return 0  # Not an error for auto-seed
+    fi
+  fi
+
+  [ -z "$QUIET" ] && log "Seeding session with existing docs from: $DOCS_PATH"
+
+  # PDev doc types in pipeline order
+  local DOC_ORDER="IDEATION BENCHMARK GAP_ANALYSIS INNOVATION CAPABILITIES PRODUCT_SPEC DESIGN_SYSTEM DEVELOPMENT_SOP PIPELINE_VALIDATION EVALUATION"
+  local FOUND=0
+  local DOC_LIST=""
+
+  for DOC_TYPE in $DOC_ORDER; do
+    # Find matching file (case insensitive)
+    local DOC_FILE=$(find "$DOCS_PATH" -maxdepth 1 -iname "*${DOC_TYPE}*.md" 2>/dev/null | head -1)
+
+    if [ -n "$DOC_FILE" ] && [ -f "$DOC_FILE" ]; then
+      local BASENAME=$(basename "$DOC_FILE")
+      local DOC_INFO=$(get_doc_info "$DOC_FILE")
+      DOC_LIST="${DOC_LIST}   • ${BASENAME} (${DOC_INFO})\n"
+      cmd_doc "$BASENAME" "$DOC_FILE" >/dev/null 2>&1
+      FOUND=$((FOUND + 1))
+    fi
+  done
+
+  if [ $FOUND -eq 0 ]; then
+    [ -z "$QUIET" ] && warn "No PDev docs found in: $DOCS_PATH"
+  else
+    if [ -z "$QUIET" ]; then
+      success "Seeded $FOUND documents:"
+      echo -e "$DOC_LIST"
+    else
+      log "Auto-seeded $FOUND existing docs"
+    fi
+  fi
+
+  return 0
+}
+
+# Sync/refresh: re-fetch all docs from remote and push to PDev Live
+cmd_sync() {
+  local SESSION_ID=$(get_session_id)
+
+  if [ -z "$SESSION_ID" ]; then
+    error "No active session. Use: pdev-live start <command> <project>"
+    return 1
+  fi
+
+  # Get remote info from session file
+  local sf=$(get_session_file)
+  local REMOTE_SERVER=$(jq -r '.server // empty' "$sf" 2>/dev/null)
+  local REMOTE_PATH=$(jq -r '.remotePath // empty' "$sf" 2>/dev/null)
+
+  if [ -z "$REMOTE_SERVER" ] || [ -z "$REMOTE_PATH" ]; then
+    error "No remote path configured for this session"
+    echo "Session file: $sf"
+    cat "$sf" 2>/dev/null
+    return 1
+  fi
+
+  log "Syncing docs from $REMOTE_SERVER:$REMOTE_PATH"
+
+  # Re-fetch all docs from remote
+  fetch_remote_docs "$REMOTE_SERVER" "$REMOTE_PATH" "$SESSION_ID"
+
+  success "Sync complete - PDev Live updated with latest docs"
+}
 
 case "${1:-}" in
   start) shift; cmd_start "$@" ;;
@@ -492,14 +964,19 @@ case "${1:-}" in
   manifest) shift; cmd_manifest "$@" ;;
   manifest-doc) shift; cmd_manifest_doc "$@" ;;
   manifest-get) cmd_manifest_get ;;
+  share) shift; cmd_share "$@" ;;
+  seed) shift; cmd_seed "$@" ;;
+  sync) cmd_sync ;;
   *)
-    echo "PDev Live Client (Multi-Session + Resume + Manifests)"
+    echo "PDev Live Client (Multi-Session + Sharing)"
     echo ""
     echo "Session Commands:"
     echo "  start <type> [project]   Start or resume session"
     echo "  step <content>           Add output step"
     echo "  doc <name> <path>        Push full document"
     echo "  phase <num> <name>       Set current phase"
+    echo "  seed [docs_path]         Seed session with existing PDev docs"
+    echo "  sync                     Re-fetch all docs from remote (refresh)"
     echo "  end [status]             End session"
     echo "  status                   Show current session"
     echo "  list                     List all active sessions"
@@ -510,6 +987,9 @@ case "${1:-}" in
     echo "  manifest [docs_path]     Set docs path for current project"
     echo "  manifest-doc <type> <file>  Register doc in manifest"
     echo "  manifest-get             Show manifest for current project"
+    echo ""
+    echo "Sharing Commands:"
+    echo "  share [hours] [email]    Create guest link (default 24h)"
     echo ""
     echo "Session behavior:"
     echo "  - Resumes existing active session by default"

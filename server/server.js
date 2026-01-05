@@ -9,6 +9,8 @@
  * - Markdown rendered server-side for consistent display
  */
 
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -17,18 +19,63 @@ const hljs = require('highlight.js');
 const { Pool } = require('pg');
 
 const app = express();
-const PORT = process.env.PORT || 3077;
+const PORT = parseInt(process.env.PORT || '3077', 10);
+
+// ============================================================================
+// BASE URL CONFIGURATION
+// ============================================================================
+const PDEV_BASE_URL_RAW = process.env.PDEV_BASE_URL || `http://localhost:${PORT}`;
+const PDEV_BASE_URL = PDEV_BASE_URL_RAW.replace(/\/$/, ''); // Remove trailing slash
+
+// Validate URL format
+try {
+  new URL(PDEV_BASE_URL);
+} catch (err) {
+  console.error('FATAL: PDEV_BASE_URL invalid format:', PDEV_BASE_URL);
+  console.error('Expected: http(s)://domain.com or http(s)://domain.com/path');
+  console.error('Error:', err.message);
+  process.exit(1);
+}
+
+// Production validation
+if (process.env.NODE_ENV === 'production') {
+  if (!process.env.PDEV_BASE_URL) {
+    console.error('🔴 FATAL: PDEV_BASE_URL required in production');
+    console.error('Set: export PDEV_BASE_URL=https://your-domain.com');
+    process.exit(1);
+  }
+
+  if (!PDEV_BASE_URL.startsWith('https://')) {
+    console.error('🔴 FATAL: PDEV_BASE_URL must use HTTPS in production');
+    console.error('Current:', PDEV_BASE_URL);
+    process.exit(1);
+  }
+}
 
 // PostgreSQL connection pool
 const pool = new Pool({
-  host: 'localhost',
-  port: 5432,
-  database: 'pdev_live',
-  user: 'pdev_app',
-  password: 'PdevLive2024',
+  host: process.env.PDEV_DB_HOST || 'localhost',
+  port: parseInt(process.env.PDEV_DB_PORT || '5432', 10),
+  database: process.env.PDEV_DB_NAME || 'pdev_live',
+  user: process.env.PDEV_DB_USER || 'pdev_app',
+  password: process.env.PDEV_DB_PASSWORD || (() => { console.error('FATAL: PDEV_DB_PASSWORD required'); process.exit(1); })(),
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
+});
+
+// Connection pool error handlers
+pool.on('error', (err, client) => {
+  console.error('Unexpected database error on idle client', err);
+  // Don't exit - log error and continue with remaining connections
+});
+
+pool.on('connect', (client) => {
+  console.log('Database connection established');
+});
+
+pool.on('remove', (client) => {
+  console.log('Database connection removed from pool');
 });
 
 // Configure marked for syntax highlighting
@@ -86,6 +133,9 @@ const PDEV_COMMANDS = [
 // Valid server origins
 const VALID_SERVERS = ['dolovdev', 'acme', 'ittz', 'dolov', 'wdress', 'cfree', 'rmlve', 'djm'];
 
+// Frontend directory for auto-update (environment-specific)
+const FRONTEND_DIR = process.env.PDEV_FRONTEND_DIR || path.join(__dirname, '..', 'frontend');
+
 // Admin key for protected operations (REQUIRED)
 const ADMIN_KEY = process.env.PDEV_ADMIN_KEY;
 if (!ADMIN_KEY || ADMIN_KEY.length < 32) {
@@ -98,6 +148,10 @@ if (!ADMIN_KEY || ADMIN_KEY.length < 32) {
 const guestTokens = new Map(); // token -> { sessionId, expiresAt, createdAt, createdBy }
 const MAX_GUEST_TOKENS = 1000;
 
+// Short-lived share tokens (in-memory, 5 minute expiry)
+const shareTokens = new Map(); // token -> { expiresAt, used }
+const MAX_SHARE_TOKENS = 100;
+
 // Cleanup expired tokens every minute
 const cleanupInterval = setInterval(() => {
   const now = Date.now();
@@ -105,6 +159,12 @@ const cleanupInterval = setInterval(() => {
     if (now > data.expiresAt) {
       guestTokens.delete(token);
       console.log('[TOKEN] Expired: ' + token.substring(0, 8) + '...');
+    }
+  }
+  // Cleanup share tokens
+  for (const [token, data] of shareTokens.entries()) {
+    if (now > data.expiresAt || data.used) {
+      shareTokens.delete(token);
     }
   }
 }, 60000);
@@ -115,13 +175,154 @@ process.on('SIGTERM', () => {
   process.exit(0);
 });
 
-app.use(cors());
+// CORS configuration - strict origin validation
+// Parse BASE_URL for secure CORS construction (origin only, no pathname)
+const baseUrlObj = new URL(PDEV_BASE_URL);
+const protocol = baseUrlObj.protocol; // 'https:'
+const hostname = baseUrlObj.hostname; // 'walletsnack.com' or 'partner-company.com'
+const port = baseUrlObj.port; // '' or '3077'
+
+const baseOrigin = `${protocol}//${hostname}${port ? ':' + port : ''}`;
+const wwwOrigin = hostname.startsWith('www.')
+  ? null
+  : `${protocol}//www.${hostname}${port ? ':' + port : ''}`;
+
+const ALLOWED_ORIGINS = [
+  baseOrigin,
+  wwwOrigin,
+  `http://localhost:${PORT}`,
+  `http://127.0.0.1:${PORT}`,
+  `http://[::1]:${PORT}` // IPv6 localhost
+].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i); // Deduplicate
+
+app.use(cors({
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, or same-origin)
+    if (!origin) return callback(null, true);
+    if (ALLOWED_ORIGINS.includes(origin)) {
+      return callback(null, true);
+    }
+    console.warn('[CORS] Blocked origin:', origin);
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'X-Admin-Key', 'X-Share-Token', 'X-User']
+}));
+
+// Rate limiting
+const rateLimit = require('express-rate-limit');
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  message: { error: 'Rate limit exceeded' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+const mutationLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: { error: 'Mutation rate limit exceeded' }
+});
+
+app.use(apiLimiter);
 app.use(express.json({ limit: '10mb' }));
+
+// ============================================================================
+// STATIC FILE SERVING (Partner Self-Hosted Mode)
+// ============================================================================
+// For partner deployments, serve frontend HTML/CSS/JS files
+// Walletsnack uses nginx to serve static files, so this is disabled there
+if (process.env.PDEV_SERVE_STATIC === 'true') {
+  const path = require('path');
+  const FRONTEND_DIR = process.env.PDEV_FRONTEND_DIR || path.join(__dirname, '..', 'frontend');
+
+  console.log('[Static] Serving frontend files from:', FRONTEND_DIR);
+
+  const staticOptions = {
+    dotfiles: 'ignore', // Don't serve .env, .git, etc.
+    index: 'index.html',
+    redirect: false,
+    setHeaders: (res, filePath) => {
+      // Prevent caching of HTML (always get latest)
+      if (filePath.endsWith('.html')) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('X-Frame-Options', 'DENY');
+      } else {
+        // Cache assets for 1 year
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+    }
+  };
+
+  // Serve static files at root (for nginx proxy with prefix stripping)
+  app.use(express.static(FRONTEND_DIR, staticOptions));
+
+  // Serve static files at /pdev/live/ (for guest links via regex location)
+  app.use('/pdev/live', express.static(FRONTEND_DIR, staticOptions));
+}
+
+// ============================================================================
+// HTTP BASIC AUTH (Partner Self-Hosted Mode - Backup Layer)
+// ============================================================================
+// Optional backup authentication layer for partner deployments
+// Primary auth should be at nginx level - this is defense-in-depth
+if (process.env.PDEV_HTTP_AUTH === 'true') {
+  const basicAuth = require('express-basic-auth');
+
+  const username = process.env.PDEV_USERNAME;
+  const password = process.env.PDEV_PASSWORD;
+
+  if (!username || !password) {
+    console.error('FATAL: PDEV_HTTP_AUTH=true but PDEV_USERNAME or PDEV_PASSWORD not set');
+    process.exit(1);
+  }
+
+  console.log('[Auth] HTTP Basic Auth enabled (backup layer)');
+
+  app.use(basicAuth({
+    users: { [username]: password },
+    challenge: true,
+    realm: 'PDev-Live'
+  }));
+}
 
 // API: Expose document contract (SINGLE SOURCE OF TRUTH for frontend)
 app.get('/contract', (req, res) => {
   res.json(DOC_CONTRACT);
 });
+
+// Generate short-lived share token (same-origin only, no secrets exposed)
+app.post('/share-token', (req, res) => {
+  // Rate limit: max 100 active tokens
+  if (shareTokens.size >= MAX_SHARE_TOKENS) {
+    return res.status(429).json({ error: 'Too many active share tokens' });
+  }
+
+  var crypto = require('crypto');
+  var token = crypto.randomBytes(32).toString('base64url');
+  var expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes
+
+  shareTokens.set(token, { expiresAt: expiresAt, used: false });
+  console.log('[SHARE] Token issued, expires: ' + new Date(expiresAt).toISOString());
+
+  res.json({ token: token, expiresIn: 300 });
+});
+
+// Validate share token (one-time use)
+function validateShareToken(token) {
+  if (!token || typeof token !== 'string') return false;
+  var data = shareTokens.get(token);
+  if (!data) return false;
+  if (Date.now() > data.expiresAt || data.used) {
+    shareTokens.delete(token);
+    return false;
+  }
+  // Mark as used (one-time)
+  data.used = true;
+  return true;
+}
 
 // Secure admin authentication middleware
 function requireAdmin(req, res, next) {
@@ -646,11 +847,16 @@ app.delete('/sessions/:sessionId', requireAdmin, async (req, res) => {
 // Soft delete all sessions
 app.delete('/sessions', requireAdmin, async (req, res) => {
   try {
-    var olderThanDays = req.query.olderThanDays ? parseInt(req.query.olderThanDays) : null;
-    var result;
+    const olderThanDays = req.query.olderThanDays ? parseInt(req.query.olderThanDays, 10) : null;
+    let result;
     if (olderThanDays) {
+      // Validate to prevent SQL injection - must be positive integer 1-365
+      if (isNaN(olderThanDays) || olderThanDays < 1 || olderThanDays > 365) {
+        return res.status(400).json({ error: 'olderThanDays must be between 1 and 365' });
+      }
       result = await pool.query(
-        "UPDATE pdev_sessions SET deleted_at = NOW() WHERE deleted_at IS NULL AND started_at < NOW() - INTERVAL '" + olderThanDays + " days' RETURNING id"
+        "UPDATE pdev_sessions SET deleted_at = NOW() WHERE deleted_at IS NULL AND started_at < NOW() - ($1 || ' days')::interval RETURNING id",
+        [olderThanDays]
       );
     } else {
       result = await pool.query('UPDATE pdev_sessions SET deleted_at = NOW() WHERE deleted_at IS NULL RETURNING id');
@@ -660,7 +866,7 @@ app.delete('/sessions', requireAdmin, async (req, res) => {
     res.json({ success: true, deleted: result.rowCount });
   } catch (err) {
     console.error('[Admin] Bulk delete error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Failed to delete sessions' });
   }
 });
 
@@ -668,8 +874,31 @@ app.delete('/sessions', requireAdmin, async (req, res) => {
 // GUEST TEMP LINK API
 // =============================================================================
 
-// Create guest link for a session (Admin only)
-app.post('/guest-links', requireAdmin, async (req, res) => {
+// Create guest link for a session (Admin or Share Token)
+app.post('/guest-links', async (req, res) => {
+  // Accept either admin key OR share token
+  var shareToken = req.headers['x-share-token'];
+  var adminKey = req.headers['x-admin-key'];
+
+  if (shareToken) {
+    if (!validateShareToken(shareToken)) {
+      return res.status(401).json({ error: 'Invalid or expired share token' });
+    }
+  } else if (adminKey) {
+    var crypto = require('crypto');
+    try {
+      var keyBuffer = Buffer.from(adminKey);
+      var adminBuffer = Buffer.from(ADMIN_KEY);
+      if (keyBuffer.length !== adminBuffer.length ||
+          !crypto.timingSafeEqual(keyBuffer, adminBuffer)) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+    } catch (err) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+  } else {
+    return res.status(401).json({ error: 'Missing authentication' });
+  }
   try {
     var sessionId = req.body.sessionId;
     var expiresInHours = req.body.expiresInHours || 24;
@@ -700,11 +929,15 @@ app.post('/guest-links', requireAdmin, async (req, res) => {
     });
     
     console.log('[Guest] Created link for session ' + sessionId + ', expires in ' + expiresInHours + 'h');
-    
+
+    // Construct guest URL safely using URL constructor
+    const guestUrl = new URL('/session.html', PDEV_BASE_URL);
+    guestUrl.searchParams.set('guest', token);
+
     res.json({
       success: true,
       token: token,
-      url: 'https://walletsnack.com/pdev/live/session.html?guest=' + token,
+      url: guestUrl.toString(),
       expiresAt: new Date(expiresAt).toISOString(),
       expiresInHours: expiresInHours
     });
@@ -714,8 +947,31 @@ app.post('/guest-links', requireAdmin, async (req, res) => {
   }
 });
 
-// Create share link for a project (Admin only)
-app.post('/project-share', requireAdmin, async (req, res) => {
+// Create share link for a project (Admin or Share Token)
+app.post('/project-share', async (req, res) => {
+  // Accept either admin key OR share token
+  var shareToken = req.headers['x-share-token'];
+  var adminKey = req.headers['x-admin-key'];
+
+  if (shareToken) {
+    if (!validateShareToken(shareToken)) {
+      return res.status(401).json({ error: 'Invalid or expired share token' });
+    }
+  } else if (adminKey) {
+    var crypto = require('crypto');
+    try {
+      var keyBuffer = Buffer.from(adminKey);
+      var adminBuffer = Buffer.from(ADMIN_KEY);
+      if (keyBuffer.length !== adminBuffer.length ||
+          !crypto.timingSafeEqual(keyBuffer, adminBuffer)) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+    } catch (err) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+  } else {
+    return res.status(401).json({ error: 'Missing authentication' });
+  }
   try {
     var server = req.body.server;
     var project = req.body.project;
@@ -744,10 +1000,16 @@ app.post('/project-share', requireAdmin, async (req, res) => {
 
     console.log('[Guest] Created project link for ' + server + '/' + project + ', expires in ' + expiresInHours + 'h');
 
+    // Construct project share URL safely using URL constructor
+    const shareUrl = new URL('/project.html', PDEV_BASE_URL);
+    shareUrl.searchParams.set('project', project);
+    shareUrl.searchParams.set('server', server);
+    shareUrl.searchParams.set('guest', token);
+
     res.json({
       success: true,
       token: token,
-      shareUrl: 'https://walletsnack.com/pdev/live/project.html?project=' + encodeURIComponent(project) + '&server=' + encodeURIComponent(server) + '&guest=' + token,
+      shareUrl: shareUrl.toString(),
       expiresAt: new Date(expiresAt).toISOString(),
       expiresInHours: expiresInHours
     });
@@ -829,7 +1091,7 @@ app.get('/guest/:token', async (req, res) => {
 // Legacy update endpoint - creates session if needed, adds step
 app.post('/update', async (req, res) => {
   try {
-    const { type, command, content, project, server } = req.body;
+    const { type, command, content, project, server, documentName } = req.body;
 
     // Get or create a session
     let sessionId;
@@ -897,6 +1159,96 @@ app.get('/session', async (req, res) => {
   }
 });
 
+// Legacy reset endpoint - marks all active sessions as completed (Admin only)
+app.post('/reset', requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `UPDATE pdev_sessions
+       SET session_status = $1, completed_at = NOW()
+       WHERE session_status = $2 AND deleted_at IS NULL
+       RETURNING id`,
+      ['completed', 'active']
+    );
+
+    const completed = result.rowCount || 0;
+    console.log('[Reset] Completed ' + completed + ' active sessions');
+
+    if (typeof broadcastGlobal === 'function') {
+      try {
+        broadcastGlobal({ type: 'reset' });
+      } catch (broadcastErr) {
+        console.error('[Reset] Broadcast failed:', broadcastErr.message);
+      }
+    }
+
+    res.json({ success: true, completed: completed });
+  } catch (err) {
+    console.error('[Reset] Database error:', err.message);
+    res.status(500).json({ error: 'Failed to reset sessions' });
+  }
+});
+
+// =============================================================================
+// VERSION & AUTO-UPDATE API
+// =============================================================================
+
+// Version info - used by remote servers to check for updates
+// INCREMENT version when making changes that should propagate to satellites
+const PDEV_VERSION = {
+  version: '2.2.0',
+  buildTime: new Date().toISOString(),
+  serverFiles: ['server.js', 'doc-contract.json'],
+  frontendFiles: ['project.html', 'session.html', 'index.html']
+};
+
+// Get current version (for update checks)
+app.get('/version', (req, res) => {
+  res.json({
+    version: PDEV_VERSION.version,
+    buildTime: PDEV_VERSION.buildTime,
+    serverFiles: PDEV_VERSION.serverFiles,
+    frontendFiles: PDEV_VERSION.frontendFiles
+  });
+});
+
+// Get file content for auto-update (admin only)
+app.get('/update-file/:filename', requireAdmin, (req, res) => {
+  const { filename } = req.params;
+  const allowedServerFiles = ['server.js', 'doc-contract.json'];
+  const allowedFrontendFiles = ['project.html', 'session.html', 'index.html'];
+  const allAllowed = [...allowedServerFiles, ...allowedFrontendFiles];
+
+  // Security: sanitize filename, prevent path traversal
+  const sanitizedFilename = path.basename(filename);
+  if (filename !== sanitizedFilename || filename.includes('..') || !allAllowed.includes(sanitizedFilename)) {
+    return res.status(400).json({ error: 'File not allowed: ' + filename });
+  }
+
+  // Determine file path based on type
+  let filePath;
+  if (allowedServerFiles.includes(sanitizedFilename)) {
+    filePath = path.join(__dirname, sanitizedFilename);
+  } else {
+    filePath = path.join(FRONTEND_DIR, sanitizedFilename);
+  }
+
+  try {
+    const content = fs.readFileSync(filePath, 'utf8');
+    const crypto = require('crypto');
+    const hash = crypto.createHash('sha256').update(content).digest('hex');
+
+    res.json({
+      filename: sanitizedFilename,
+      content: content,
+      hash: hash,
+      size: content.length,
+      version: PDEV_VERSION.version
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to read file: ' + err.message });
+  }
+});
+
 // =============================================================================
 // HEALTH & INFO
 // =============================================================================
@@ -910,6 +1262,9 @@ app.get('/health', async (req, res) => {
 
     res.json({
       status: 'ok',
+      version: '2.0.0',
+      baseUrl: PDEV_BASE_URL,
+      environment: process.env.NODE_ENV || 'development',
       database: 'connected',
       activeSessions: sessions.length,
       globalClients: globalClients.size,
@@ -917,7 +1272,8 @@ app.get('/health', async (req, res) => {
         sessionId: id,
         clients: clients.size
       })),
-      uptime: process.uptime()
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString()
     });
   } catch (err) {
     res.status(500).json({
@@ -925,6 +1281,112 @@ app.get('/health', async (req, res) => {
       database: 'disconnected',
       error: err.message
     });
+  }
+});
+
+// =============================================================================
+// SETTINGS API
+// =============================================================================
+
+// Get PDev git auto-commit settings
+app.get('/settings', requireAdmin, async (req, res) => {
+  try {
+    const fs = require('fs');
+    const os = require('os');
+    const configPath = path.join(os.homedir(), '.pdev-git-config');
+
+    // Default values
+    let pdevAutoGit = false;
+    let pdevGitRepos = [];
+    let pdevGitRemote = 'origin';
+
+    // Read config file if exists
+    if (fs.existsSync(configPath)) {
+      const configContent = fs.readFileSync(configPath, 'utf8');
+
+      // Parse environment variables from bash script
+      const autoGitMatch = configContent.match(/export PDEV_AUTO_GIT=(true|false)/);
+      const reposMatch = configContent.match(/export PDEV_GIT_REPOS="([^"]*)"/);
+      const remoteMatch = configContent.match(/export PDEV_GIT_REMOTE=(\w+)/);
+
+      if (autoGitMatch) pdevAutoGit = autoGitMatch[1] === 'true';
+      if (reposMatch) pdevGitRepos = reposMatch[1].split(':').filter(Boolean);
+      if (remoteMatch) pdevGitRemote = remoteMatch[1];
+    }
+
+    res.json({
+      pdevAutoGit,
+      pdevGitRepos,
+      pdevGitRemote
+    });
+  } catch (error) {
+    console.error('[Settings] Failed to read settings:', error);
+    res.status(500).json({ error: 'Failed to read settings' });
+  }
+});
+
+// Update PDev git auto-commit settings
+app.post('/settings', requireAdmin, async (req, res) => {
+  try {
+    const fs = require('fs');
+    const os = require('os');
+    const { pdevAutoGit, pdevGitRepos, pdevGitRemote } = req.body;
+
+    // Validate input
+    if (typeof pdevAutoGit !== 'boolean') {
+      return res.status(400).json({ error: 'pdevAutoGit must be boolean' });
+    }
+
+    if (!Array.isArray(pdevGitRepos)) {
+      return res.status(400).json({ error: 'pdevGitRepos must be array' });
+    }
+
+    if (typeof pdevGitRemote !== 'string' || !pdevGitRemote.match(/^[a-zA-Z0-9_-]+$/)) {
+      return res.status(400).json({ error: 'pdevGitRemote must be valid remote name' });
+    }
+
+    // Validate repository paths
+    for (const repo of pdevGitRepos) {
+      // Check absolute path
+      if (!path.isAbsolute(repo)) {
+        return res.status(400).json({ error: `Invalid path: ${repo} (must be absolute)` });
+      }
+
+      // Resolve path (prevents path traversal via symlinks)
+      let resolvedRepo;
+      try {
+        resolvedRepo = fs.realpathSync(repo);
+      } catch (err) {
+        return res.status(400).json({ error: `Repository not found: ${repo}` });
+      }
+
+      // Check is git repository
+      const gitDir = path.join(resolvedRepo, '.git');
+      if (!fs.existsSync(gitDir)) {
+        return res.status(400).json({ error: `Not a git repository: ${repo}` });
+      }
+    }
+
+    // Write to ~/.pdev-git-config
+    const configPath = path.join(os.homedir(), '.pdev-git-config');
+    const configContent = `# PDev Git Auto-Commit Configuration
+# Generated by PDev Live Settings UI
+# Last updated: ${new Date().toISOString()}
+
+export PDEV_AUTO_GIT=${pdevAutoGit}
+export PDEV_GIT_REPOS="${pdevGitRepos.join(':')}"
+export PDEV_GIT_REMOTE=${pdevGitRemote}
+`;
+
+    // Write with owner-only permissions (600)
+    fs.writeFileSync(configPath, configContent, { mode: 0o600 });
+
+    console.log('[Settings] Saved PDev git auto-commit settings:', { pdevAutoGit, repoCount: pdevGitRepos.length, pdevGitRemote });
+
+    res.json({ success: true, message: 'Settings saved successfully' });
+  } catch (error) {
+    console.error('[Settings] Failed to save settings:', error);
+    res.status(500).json({ error: 'Failed to save settings' });
   }
 });
 
@@ -1048,38 +1510,18 @@ app.get('/servers', (req, res) => {
 // =============================================================================
 
 app.listen(PORT, () => {
-  console.log(`[PDev Live v2] Server running on port ${PORT}`);
-  console.log(`[PDev Live v2] PostgreSQL connected to pdev_live`);
-  console.log(`[PDev Live v2] Valid servers: ${VALID_SERVERS.join(', ')}`);
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('🚀 PDev Live Mirror Server v2');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('Environment:', process.env.NODE_ENV || 'development');
+  console.log('Port:', PORT);
+  console.log('Base URL:', PDEV_BASE_URL);
+  console.log('CORS Origins:', ALLOWED_ORIGINS.length, 'configured');
+  console.log('Database: pdev_live @', process.env.PDEV_DB_HOST || 'localhost');
+  console.log('Valid servers:', VALID_SERVERS.join(', '));
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 });
 
-// Find active session by server + project (for resume functionality)
-app.get('/sessions/find-active', async (req, res) => {
-  try {
-    const { server, project } = req.query;
-    
-    if (!server || !project) {
-      return res.status(400).json({ error: 'Missing required params: server, project' });
-    }
-
-    const result = await pool.query(`
-      SELECT id, command_type, started_at,
-        (SELECT COUNT(*) FROM pdev_steps WHERE session_id = pdev_sessions.id) as step_count
-      FROM pdev_sessions
-      WHERE server_origin = \$1 AND project_name = \$2 
-        AND session_status = 'active' AND deleted_at IS NULL
-      ORDER BY started_at DESC LIMIT 1
-    `, [server, project]);
-
-    if (result.rows.length > 0) {
-      res.json({ found: true, session: result.rows[0] });
-    } else {
-      res.json({ found: false });
-    }
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 // =============================================================================
 // PROJECT-CENTRIC ENDPOINTS
 // =============================================================================
@@ -1154,13 +1596,21 @@ app.get('/projects/:server/:project/docs', async (req, res) => {
     if (!validation.valid) {
       return res.status(400).json({ error: validation.error });
     }
-    
+
+    // Prevent browser caching of API response
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
     // Query both explicit documents AND output steps with PDev doc headers
+    // Normalize document_name: UPPER, TRIM whitespace/newlines, remove .md suffix
     const result = await pool.query(`
       WITH doc_steps AS (
         -- Explicit document steps
         SELECT
-          document_name,
+          id as step_id,
+          UPPER(REGEXP_REPLACE(TRIM(BOTH E'\\n\\r\\t ' FROM document_name), '\\.md$', '', 'i')) as normalized_name,
+          document_name as original_name,
           content_markdown as content,
           created_at as modified,
           phase_number,
@@ -1177,7 +1627,9 @@ app.get('/projects/:server/:project/docs', async (req, res) => {
 
         -- Output steps with PDev document headers (document: IDEATION, etc)
         SELECT
-          UPPER(TRIM(SUBSTRING(content_markdown FROM 'document:\\s*([A-Z_]+)'))) as document_name,
+          id as step_id,
+          UPPER(TRIM(SUBSTRING(content_markdown FROM 'document:\\s*([A-Z_]+)'))) as normalized_name,
+          UPPER(TRIM(SUBSTRING(content_markdown FROM 'document:\\s*([A-Z_]+)'))) as original_name,
           content_markdown as content,
           created_at as modified,
           phase_number,
@@ -1191,43 +1643,50 @@ app.get('/projects/:server/:project/docs', async (req, res) => {
         AND content_markdown ~ '^---\\s*\\npdev_version:'
         AND content_markdown ~ 'document:\\s*[A-Z_]+'
       )
-      SELECT DISTINCT ON (document_name)
-        document_name,
+      SELECT DISTINCT ON (normalized_name)
+        step_id,
+        normalized_name as document_name,
+        original_name,
         content,
         modified,
         phase_number,
         phase_name
       FROM doc_steps
-      WHERE document_name IS NOT NULL
-      ORDER BY document_name, modified DESC
+      WHERE normalized_name IS NOT NULL AND normalized_name != ''
+      ORDER BY normalized_name, modified DESC
     `, [server, project]);
     
     const docs = {};
     let lastModified = null;
-    
+
     result.rows.forEach(row => {
       const rawDocType = row.document_name.replace(/[\r\n]/g, '').trim().replace(/\.md$/i, '').toUpperCase();
       const docType = normalizeDocType(rawDocType); // Normalize to canonical form
       let version = null;
+
       if (row.content) {
         const versionMatch = row.content.match(/pdev_version:\s*([0-9.]+)/);
         if (versionMatch) version = versionMatch[1];
       }
 
+      // Use database created_at timestamp (when doc was pushed) - includes time
+      const docModified = row.modified; // This is created_at from SQL
+
       // Only store if not already present (prefer first/latest occurrence)
       if (!docs[docType]) {
         docs[docType] = {
+          id: row.step_id,
           name: row.document_name.replace(/[\r\n]/g, '').trim(),
           version: version,
-          modified: row.modified,
+          modified: docModified,
           phase: row.phase_number,
           phaseName: row.phase_name ? row.phase_name.replace(/[\r\n]/g, '').trim() : null,
           hasContent: !!row.content
         };
       }
 
-      if (!lastModified || new Date(row.modified) > new Date(lastModified)) {
-        lastModified = row.modified;
+      if (!lastModified || new Date(docModified) > new Date(lastModified)) {
+        lastModified = docModified;
       }
     });
     
@@ -1246,19 +1705,27 @@ app.get('/projects/:server/:project/docs/:docType', async (req, res) => {
     if (!validation.valid) {
       return res.status(400).json({ error: validation.error });
     }
-    
+
     if (!docType || typeof docType !== 'string' || docType.length > 50) {
       return res.status(400).json({ error: 'Invalid document type' });
     }
-    
+
+    // Prevent browser caching of API response
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
     const safeDocType = escapeLikePattern(docType.toUpperCase());
 
     // Query both explicit documents AND output steps with PDev doc headers
+    // Normalize document_name: UPPER, TRIM whitespace/newlines, remove .md suffix
     const result = await pool.query(`
       WITH doc_steps AS (
         -- Explicit document steps
         SELECT
-          document_name,
+          id as step_id,
+          UPPER(REGEXP_REPLACE(TRIM(BOTH E'\\n\\r\\t ' FROM document_name), '\\.md$', '', 'i')) as normalized_name,
+          document_name as original_name,
           content_markdown as content,
           created_at as modified,
           phase_number,
@@ -1269,13 +1736,15 @@ app.get('/projects/:server/:project/docs/:docType', async (req, res) => {
           WHERE server_origin = $1 AND project_name = $2 AND deleted_at IS NULL
         )
         AND step_type = 'document'
-        AND UPPER(document_name) LIKE $3
+        AND document_name IS NOT NULL
 
         UNION ALL
 
         -- Output steps with matching PDev document header
         SELECT
-          UPPER(TRIM(SUBSTRING(content_markdown FROM 'document:\\s*([A-Z_]+)'))) as document_name,
+          id as step_id,
+          UPPER(TRIM(SUBSTRING(content_markdown FROM 'document:\\s*([A-Z_]+)'))) as normalized_name,
+          UPPER(TRIM(SUBSTRING(content_markdown FROM 'document:\\s*([A-Z_]+)'))) as original_name,
           content_markdown as content,
           created_at as modified,
           phase_number,
@@ -1287,10 +1756,11 @@ app.get('/projects/:server/:project/docs/:docType', async (req, res) => {
         )
         AND step_type = 'output'
         AND content_markdown ~ '^---\\s*\\npdev_version:'
-        AND UPPER(TRIM(SUBSTRING(content_markdown FROM 'document:\\s*([A-Z_]+)'))) LIKE $3
+        AND content_markdown ~ 'document:\\s*[A-Z_]+'
       )
-      SELECT * FROM doc_steps
-      WHERE document_name IS NOT NULL
+      SELECT step_id, normalized_name as document_name, original_name, content, modified, phase_number, phase_name
+      FROM doc_steps
+      WHERE normalized_name IS NOT NULL AND normalized_name LIKE $3
       ORDER BY modified DESC
       LIMIT 1
     `, [server, project, '%' + safeDocType + '%']);
@@ -1301,12 +1771,15 @@ app.get('/projects/:server/:project/docs/:docType', async (req, res) => {
     
     const row = result.rows[0];
     let version = null;
+
     if (row.content) {
       const versionMatch = row.content.match(/pdev_version:\s*([0-9.]+)/);
       if (versionMatch) version = versionMatch[1];
     }
-    
+
+    // Use database created_at timestamp (when doc was pushed) - includes time
     res.json({
+      id: row.step_id,
       name: row.document_name.replace(/[\r\n]/g, '').trim(),
       content: row.content,
       version: version,

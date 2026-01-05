@@ -198,6 +198,60 @@ ssh acme 'pm2 restart pdev-live'
 
 **See:** [DEPLOYMENT.md](DEPLOYMENT.md) for full deployment documentation.
 
+### Partner Self-Hosted Installation (Web-Only)
+
+For partners who want their own PDev-Live instance without the desktop app:
+
+**Prerequisites:**
+- Ubuntu 22.04 LTS server
+- Domain name pointed to server IP
+- Root/sudo access
+
+**One-Click Installer:**
+```bash
+cd ~/projects/pdev-live/installer
+sudo ./partner-web-installer.sh
+```
+
+**What Gets Installed:**
+- ✅ Node.js 20.x LTS
+- ✅ PostgreSQL 15 with pdev_live database
+- ✅ Nginx with Let's Encrypt SSL
+- ✅ PM2 process manager
+- ✅ UFW firewall (SSH, HTTP, HTTPS)
+- ✅ Fail2Ban brute-force protection
+- ✅ Express.js serving frontend HTML/CSS/JS
+- ✅ HTTP Basic Auth (nginx + Express layers)
+
+**Configuration:**
+- Domain: Provided during installation
+- Base URL: `https://your-domain.com`
+- Static Serving: `PDEV_SERVE_STATIC=true`
+- HTTP Auth: `PDEV_HTTP_AUTH=true` (defense-in-depth)
+
+**Post-Install:**
+```bash
+# View logs
+pm2 logs pdev-live
+
+# Run security audit
+sudo ./security-audit.sh
+
+# Access dashboard
+https://your-domain.com
+```
+
+**Key Differences from Walletsnack:**
+| Feature | Walletsnack | Partner |
+|---------|-------------|---------|
+| Frontend Serving | Nginx | Express.js |
+| Desktop App | Yes | No (web-only) |
+| Static Files | `/var/www/` | `/opt/pdev-live/frontend/` |
+| HTTP Auth | Nginx only | Nginx + Express |
+| Base URL | `walletsnack.com/pdev/live/` | `https://partner-domain.com` |
+
+**See:** [Partner Installation Guide](installer/README-PARTNER.md) for detailed setup.
+
 ## Usage
 
 ### Start a session

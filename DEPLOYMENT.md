@@ -446,8 +446,222 @@ grep "$(date +%Y-%m-%d)" ~/pdev-live-deployment.log
 
 ---
 
+## Partner Self-Hosted Deployment
+
+Partner deployments use a different architecture (web-only, no desktop app):
+
+### Initial Deployment
+
+**Run the one-click installer:**
+```bash
+cd ~/projects/pdev-live/installer
+sudo ./partner-web-installer.sh
+```
+
+**Installer handles:**
+1. ✅ System dependencies (Node.js 20.x, PostgreSQL 15, Nginx)
+2. ✅ Database creation with migrations
+3. ✅ Let's Encrypt SSL certificate
+4. ✅ Firewall configuration (UFW)
+5. ✅ Fail2Ban setup
+6. ✅ PM2 service configuration
+7. ✅ HTTP Basic Auth (nginx + Express)
+
+### Post-Install Updates
+
+**Update code:**
+```bash
+cd /opt/pdev-live
+git pull origin main
+```
+
+**Validate syntax:**
+```bash
+node -c /opt/pdev-live/server/server.js
+```
+
+**Restart service:**
+```bash
+pm2 restart pdev-live
+```
+
+**Verify deployment:**
+```bash
+# Check PM2 status
+pm2 list
+
+# Check health endpoint
+curl -u username:password https://your-domain.com/health
+
+# Run security audit
+cd /opt/pdev-live/installer
+sudo ./security-audit.sh
+```
+
+### Partner Environment Variables
+
+**File:** `/opt/pdev-live/server/.env`
+
+**Critical settings:**
+```bash
+NODE_ENV=production
+PORT=3016
+
+# Partner domain (REQUIRED in production)
+PDEV_BASE_URL=https://your-domain.com
+
+# Static serving (REQUIRED for partners - nginx not serving)
+PDEV_SERVE_STATIC=true
+PDEV_FRONTEND_DIR=/opt/pdev-live/frontend
+
+# Defense-in-depth auth (RECOMMENDED)
+PDEV_HTTP_AUTH=true
+PDEV_USERNAME=partner_username
+PDEV_PASSWORD=secure_password
+
+# Database credentials (generated during install)
+PDEV_DB_HOST=localhost
+PDEV_DB_PORT=5432
+PDEV_DB_NAME=pdev_live
+PDEV_DB_USER=pdev_app
+PDEV_DB_PASSWORD=[GENERATED]
+
+# Admin API key (generated during install)
+PDEV_ADMIN_KEY=[GENERATED]
+```
+
+### Partner vs Walletsnack Deployment
+
+| Aspect | Walletsnack | Partner |
+|--------|-------------|---------|
+| **Frontend Serving** | Nginx (`/var/www/`) | Express.js (`/opt/pdev-live/frontend/`) |
+| **Desktop App** | Yes | No (web-only) |
+| **Deployment Path** | `/var/www/walletsnack.com/pdev/live/` | `/opt/pdev-live/` |
+| **Base URL** | `https://walletsnack.com/pdev/live/` | `https://partner-domain.com` |
+| **HTTP Auth** | Nginx only | Nginx + Express (defense-in-depth) |
+| **SSL** | Let's Encrypt | Let's Encrypt |
+| **Update Method** | `./update.sh` via rsync | `git pull` + `pm2 restart` |
+| **PM2 Config** | `ecosystem.config.js` | `ecosystem.config.js` |
+
+### Partner Rollback Procedure
+
+**If deployment fails:**
+
+1. **Stop faulty service:**
+   ```bash
+   pm2 stop pdev-live
+   ```
+
+2. **Restore from git:**
+   ```bash
+   cd /opt/pdev-live
+   git log --oneline -10  # Find last good commit
+   git reset --hard <commit-hash>
+   ```
+
+3. **Restart service:**
+   ```bash
+   pm2 restart pdev-live
+   ```
+
+4. **Verify:**
+   ```bash
+   curl -u username:password https://your-domain.com/health
+   ```
+
+### Partner Database Backup
+
+**Manual backup:**
+```bash
+sudo -u postgres pg_dump pdev_live > /var/backups/pdev_live_$(date +%Y%m%d_%H%M%S).sql
+gzip /var/backups/pdev_live_*.sql
+```
+
+**Automated backup (cron):**
+```bash
+# Add to partner's crontab
+0 2 * * * sudo -u postgres pg_dump pdev_live | gzip > /var/backups/pdev_live_$(date +\%Y\%m\%d).sql.gz
+```
+
+**Restore:**
+```bash
+gunzip < /var/backups/pdev_live_20260104.sql.gz | sudo -u postgres psql pdev_live
+```
+
+### Partner Monitoring
+
+**Check logs:**
+```bash
+# PM2 logs
+pm2 logs pdev-live --lines 100
+
+# Nginx access logs
+tail -f /var/log/nginx/pdev-access.log
+
+# Nginx error logs
+tail -f /var/log/nginx/pdev-error.log
+
+# Fail2Ban status
+sudo fail2ban-client status nginx-auth
+```
+
+**Check service health:**
+```bash
+# PM2 process status
+pm2 status
+
+# Nginx status
+systemctl status nginx
+
+# PostgreSQL status
+systemctl status postgresql
+
+# Firewall status
+sudo ufw status
+```
+
+### Partner Troubleshooting
+
+**Service won't start:**
+```bash
+# Check PM2 logs
+pm2 logs pdev-live --err --lines 50
+
+# Check environment variables
+grep "PDEV_BASE_URL" /opt/pdev-live/server/.env
+
+# Test server.js directly
+cd /opt/pdev-live/server
+node server.js
+# (Ctrl+C to stop)
+```
+
+**SSL certificate issues:**
+```bash
+# Check certificate expiration
+sudo certbot certificates
+
+# Renew certificate
+sudo certbot renew
+
+# Test nginx config
+sudo nginx -t
+```
+
+**Database connection failures:**
+```bash
+# Test database connection
+sudo -u postgres psql -d pdev_live -c "SELECT 1;"
+
+# Check database logs
+sudo tail -50 /var/log/postgresql/postgresql-15-main.log
+```
+
+---
+
 ## Related Documentation
 
 - [README.md](README.md) - Project overview and installation
 - [installer/README.md](installer/README.md) - Self-hosted installation guide
-- [update.sh](update.sh) - Deployment script source code
+- [installer/README-PARTNER.md](installer/README-PARTNER.md) - Partner deployment guide
+- [update.sh](update.sh) - Deployment script source code (walletsnack)

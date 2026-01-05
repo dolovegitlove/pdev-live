@@ -19,9 +19,9 @@ module.exports = {
 
     // Environment
     env: {
-      NODE_ENV: 'production',
-      PORT: 3016,
-      PDEV_ADMIN_KEY: '5CG0k5JOyBmd//v8xqTDzKbJlSwXImB6y91SErZWfd0='
+      NODE_ENV: 'production'
+      // PORT loaded from .env via dotenv.config()
+      // PDEV_ADMIN_KEY must be set in .env file - NEVER hardcode secrets
     },
 
     // Logging

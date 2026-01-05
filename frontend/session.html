@@ -6,418 +6,8 @@
     <title>PDev Live - Session</title>
     <meta name="robots" content="noindex, nofollow">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        :root {
-            --bg: #0a0a0f;
-            --card: #12121a;
-            --border: #1e1e2e;
-            --text: #e4e4e7;
-            --muted: #71717a;
-            --accent: #6366f1;
-            --accent2: #818cf8;
-            --success: #22c55e;
-            --warn: #f59e0b;
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-            line-height: 1.6;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 1rem;
-        }
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem 0;
-            border-bottom: 1px solid var(--border);
-            margin-bottom: 1rem;
-        }
-        .logo {
-            font-size: 1.5rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, var(--accent), #a855f7);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        .status {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            font-size: 0.85rem;
-            color: var(--muted);
-        }
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--muted);
-        }
-        .status-dot.connected { background: var(--success); animation: pulse 2s infinite; }
-        .status-dot.active { background: var(--warn); animation: pulse 0.5s infinite; }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-
-        .session-header {
-            display: flex;
-            gap: 1rem;
-            padding: 1rem;
-            background: var(--card);
-            border-radius: 8px;
-            border: 1px solid var(--border);
-            margin-bottom: 1rem;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-        .session-header .badge {
-            padding: 0.25rem 0.75rem;
-            background: var(--accent);
-            color: white;
-            border-radius: 4px;
-            font-size: 0.8rem;
-            font-weight: 600;
-        }
-        .session-header .badge.completed { background: var(--success); }
-        .session-header .badge.interrupted { background: #ef4444; }
-        .session-meta {
-            font-size: 0.85rem;
-            color: var(--muted);
-        }
-        .session-meta strong { color: var(--text); }
-
-        .main-content {
-            display: grid;
-            grid-template-columns: 1fr 280px;
-            gap: 1rem;
-        }
-        @media (max-width: 900px) {
-            .main-content { grid-template-columns: 1fr; }
-            .sidebar { order: -1; }
-        }
-
-        .output-panel {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            overflow: hidden;
-        }
-        .output-header {
-            padding: 0.75rem 1rem;
-            background: var(--border);
-            font-weight: 600;
-            font-size: 0.9rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .output-body {
-            padding: 1.5rem;
-            max-height: 75vh;
-            overflow-y: auto;
-        }
-        .output-body::-webkit-scrollbar { width: 6px; }
-        .output-body::-webkit-scrollbar-track { background: var(--bg); }
-        .output-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-
-        /* Markdown rendering */
-        .output-body h1 { font-size: 1.8rem; margin: 1.5rem 0 1rem; color: var(--accent2); }
-        .output-body h2 { font-size: 1.4rem; margin: 1.5rem 0 0.75rem; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
-        .output-body h3 { font-size: 1.1rem; margin: 1rem 0 0.5rem; color: var(--text); }
-        .output-body p { margin: 0.75rem 0; }
-        .output-body li { margin: 0.25rem 0; }
-        .output-body code {
-            background: var(--bg);
-            padding: 0.15rem 0.4rem;
-            border-radius: 3px;
-            font-size: 0.85em;
-        }
-        .output-body pre {
-            background: var(--bg);
-            padding: 1rem;
-            border-radius: 6px;
-            overflow-x: auto;
-            margin: 1rem 0;
-        }
-        .output-body pre code {
-            background: none;
-            padding: 0;
-        }
-        .output-body blockquote {
-            border-left: 3px solid var(--accent);
-            padding-left: 1rem;
-            margin: 1rem 0;
-            color: var(--muted);
-        }
-        .output-body table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 1rem 0;
-        }
-        .output-body th, .output-body td {
-            padding: 0.5rem;
-            border: 1px solid var(--border);
-            text-align: left;
-        }
-        .output-body th { background: var(--border); }
-
-        .sidebar-card {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 1rem;
-            margin-bottom: 1rem;
-        }
-        .sidebar-card h3 {
-            font-size: 0.85rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: var(--muted);
-            margin-bottom: 0.75rem;
-        }
-        .step-list {
-            list-style: none;
-            font-size: 0.85rem;
-        }
-        .step-list li {
-            padding: 0.5rem 0;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            cursor: pointer;
-            transition: background 0.15s;
-        }
-        .step-list li:hover { background: var(--border); margin: 0 -1rem; padding: 0.5rem 1rem; }
-        .step-list li.active { background: var(--accent); margin: 0 -1rem; padding: 0.5rem 1rem; border-radius: 4px; }
-        .step-list li:last-child { border-bottom: none; }
-        /* Phase headers - section labels (no click) */
-        .phase-header {
-            font-size: 0.7rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            color: var(--muted);
-            padding: 0.75rem 0 0.35rem 0;
-            margin-top: 0.5rem;
-            border: none !important;
-            cursor: default;
-            user-select: none;
-        }
-        .phase-header:first-child { margin-top: 0; padding-top: 0; }
-        /* Document items - clickable entries */
-        .doc-item {
-            padding: 0.5rem 0.75rem 0.5rem 1.5rem;
-            margin: 0 -0.75rem;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.15s ease;
-        }
-        .doc-item:hover {
-            transform: translateX(4px);
-            background: rgba(99, 102, 241, 0.15);
-            color: var(--accent2);
-        }
-        .step-icon {
-            width: 18px;
-            height: 18px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.7rem;
-            flex-shrink: 0;
-        }
-        .step-icon.output { background: var(--accent); color: white; }
-        .step-icon.document { background: var(--success); color: white; }
-        .step-icon.system { background: var(--warn); color: black; }
-
-        .btn {
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            font-size: 0.85rem;
-            cursor: pointer;
-            border: none;
-            transition: all 0.2s;
-        }
-        .btn-outline {
-            background: transparent;
-            border: 1px solid var(--border);
-            color: var(--text);
-        }
-        .btn-outline:hover { background: var(--border); }
-        .btn-primary { background: var(--accent); color: white; }
-        .btn-primary:hover { background: var(--accent2); }
-        .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
-
-        /* Share Modal */
-        .modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0,0,0,0.7);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-        }
-        .modal-content {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            width: 90%;
-            max-width: 450px;
-        }
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem;
-            border-bottom: 1px solid var(--border);
-        }
-        .modal-header h3 { margin: 0; }
-        .modal-close {
-            background: none;
-            border: none;
-            color: var(--muted);
-            font-size: 1.5rem;
-            cursor: pointer;
-        }
-        .modal-close:hover { color: var(--text); }
-        .modal-body {
-            padding: 1rem;
-        }
-        .modal-footer {
-            display: flex;
-            justify-content: flex-end;
-            gap: 0.5rem;
-            padding: 1rem;
-            border-top: 1px solid var(--border);
-        }
-        .form-group {
-            margin-bottom: 1rem;
-        }
-        .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-size: 0.85rem;
-            color: var(--muted);
-        }
-        .form-group input, .form-group select {
-            width: 100%;
-            padding: 0.6rem;
-            background: var(--bg);
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            color: var(--text);
-            font-size: 0.9rem;
-        }
-        .form-group input:focus, .form-group select:focus {
-            outline: none;
-            border-color: var(--accent);
-        }
-        .hidden { display: none; }
-        .actions-list {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-        .action-link {
-            text-align: center;
-            text-decoration: none;
-        }
-        .share-btn { display: block; }
-        .guest-view .share-btn { display: none; }
-        .share-result { margin-top: 1rem; }
-        .share-link-row {
-            display: flex;
-            gap: 0.5rem;
-        }
-        .share-link-row input { flex: 1; }
-        .share-expires {
-            color: var(--muted);
-            font-size: 0.8rem;
-            margin-top: 0.5rem;
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 3rem;
-            color: var(--muted);
-        }
-        .empty-state .icon { font-size: 3rem; margin-bottom: 1rem; }
-        
-        .error-state {
-            text-align: center;
-            padding: 3rem;
-            color: #ef4444;
-        }
-        /* Navigation */
-        .nav-header {
-            background: var(--card);
-            border-bottom: 1px solid var(--border);
-            padding: 12px 24px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            position: sticky;
-            top: 0;
-            z-index: 100;
-        }
-        .nav-logo {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 18px;
-            font-weight: 600;
-            color: var(--accent);
-            text-decoration: none;
-        }
-        .nav-logo-icon {
-            width: 28px;
-            height: 28px;
-            background: linear-gradient(135deg, var(--accent), #a855f7);
-            border-radius: 6px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #fff;
-            font-weight: bold;
-            font-size: 14px;
-        }
-        .nav-links { display: flex; gap: 8px; }
-        .nav-link {
-            color: var(--muted);
-            text-decoration: none;
-            padding: 8px 16px;
-            border-radius: 6px;
-            font-size: 14px;
-            transition: all 0.2s;
-        }
-        .nav-link:hover { color: var(--text); background: var(--border); }
-        @media (max-width: 768px) {
-            .nav-header { padding: 10px 16px; }
-            .nav-links { gap: 4px; }
-            .nav-link { padding: 6px 10px; font-size: 13px; }
-        }
-        
-        /* Step label truncation */
-        .step-label {
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 180px;
-        }
-    </style>
+    <link rel="stylesheet" href="pdev-live.css">
+    <link rel="stylesheet" href="session-specific.css">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"></head>
 <body>
     <nav class="nav-header">
@@ -525,7 +115,18 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
     <script>
+        // Security: HTML escape helper for dynamic data
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
         const API_BASE = '/pdev/api';
         const params = new URLSearchParams(window.location.search);
         const sessionId = params.get('id') || params.get('guest');
@@ -612,7 +213,6 @@
                 }
 
                 session = await res.json();
-                session = session;
                 renderSession();
                 loadManifest();
                 renderSteps();
@@ -632,10 +232,15 @@
             }
         }
 
+        let sseReconnectAttempts = 0;
+        const SSE_MAX_RECONNECT = 10;
+        const SSE_BASE_DELAY = 3000;
+
         function connectSSE() {
             eventSource = new EventSource(`${API_BASE}/events/${sessionId}`);
 
             eventSource.onopen = () => {
+                sseReconnectAttempts = 0; // Reset on successful connection
                 document.getElementById('statusDot').className = 'status-dot connected';
                 document.getElementById('statusText').textContent = 'Live';
             };
@@ -646,10 +251,18 @@
             };
 
             eventSource.onerror = () => {
+                eventSource.close();
+                if (sseReconnectAttempts >= SSE_MAX_RECONNECT) {
+                    document.getElementById('statusDot').className = 'status-dot';
+                    document.getElementById('statusText').textContent = 'Disconnected';
+                    console.warn('SSE: Max reconnection attempts reached');
+                    return;
+                }
+                const delay = Math.min(SSE_BASE_DELAY * Math.pow(2, sseReconnectAttempts), 30000);
+                sseReconnectAttempts++;
                 document.getElementById('statusDot').className = 'status-dot';
                 document.getElementById('statusText').textContent = 'Reconnecting...';
-                eventSource.close();
-                setTimeout(connectSSE, 3000);
+                setTimeout(connectSSE, delay);
             };
         }
 
@@ -769,10 +382,11 @@
             title.textContent = extractStepLabel(step, index);
             
             // Use pre-rendered HTML if available, otherwise render markdown
+            // SECURITY: Always sanitize HTML content to prevent XSS
             if (step.content_html) {
-                body.innerHTML = step.content_html;
+                body.innerHTML = DOMPurify.sanitize(step.content_html);
             } else if (step.content_markdown || step.content) {
-                body.innerHTML = marked.parse(step.content_markdown || step.content || '');
+                body.innerHTML = DOMPurify.sanitize(marked.parse(step.content_markdown || step.content || ''));
             } else {
                 body.innerHTML = '<p style="color: var(--muted);">No content</p>';
             }
@@ -857,9 +471,6 @@
             }).join("");
         }
 
-
-        // Alias for hook-safe reference
-        session = null;
         // Render documents from steps (pushed via pdev-live doc)
         function renderDocSteps() {
             const card = document.getElementById("docsCard");
@@ -931,18 +542,20 @@
                 return;
             }
 
-            // Admin key for authenticated users (page is behind basic auth)
-            var adminKey = '5CG0k5JOyBmd//v8xqTDzKbJlSwXImB6y91SErZWfd0=';
-
             btn.disabled = true;
             btn.textContent = 'Creating...';
 
             try {
+                // Request share token from server (origin-validated)
+                var tokenRes = await fetch(API_BASE + '/share-token', { method: 'POST', credentials: 'same-origin' });
+                if (!tokenRes.ok) throw new Error('Not authorized to create share links');
+                var tokenData = await tokenRes.json();
+
                 var res = await fetch(API_BASE + '/guest-links', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-Admin-Key': adminKey
+                        'X-Share-Token': tokenData.token
                     },
                     body: JSON.stringify({
                         sessionId: sessionId,
@@ -1018,5 +631,6 @@
         init();
         checkShareAccess();
     </script>
+<script src="version-check.js"></script>
 </body>
 </html>

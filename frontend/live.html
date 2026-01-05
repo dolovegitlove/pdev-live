@@ -6,270 +6,7 @@
     <title>PDev Live</title>
     <meta name="robots" content="noindex, nofollow">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        :root {
-            --bg: #0a0a0f;
-            --card: #12121a;
-            --border: #1e1e2e;
-            --text: #e4e4e7;
-            --muted: #71717a;
-            --accent: #6366f1;
-            --accent2: #818cf8;
-            --success: #22c55e;
-            --warn: #f59e0b;
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-            line-height: 1.6;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 1rem;
-        }
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem 0;
-            border-bottom: 1px solid var(--border);
-            margin-bottom: 1rem;
-        }
-        .logo {
-            font-size: 1.5rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, var(--accent), #a855f7);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        .status {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            font-size: 0.85rem;
-            color: var(--muted);
-        }
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--muted);
-        }
-        .status-dot.connected { background: var(--success); animation: pulse 2s infinite; }
-        .status-dot.active { background: var(--warn); animation: pulse 0.5s infinite; }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-
-        .pipeline {
-            display: flex;
-            gap: 0.25rem;
-            padding: 1rem;
-            background: var(--card);
-            border-radius: 8px;
-            border: 1px solid var(--border);
-            margin-bottom: 1rem;
-            overflow-x: auto;
-            flex-wrap: wrap;
-        }
-        .pipe-step {
-            display: flex;
-            align-items: center;
-            gap: 0.25rem;
-        }
-        .pipe-cmd {
-            padding: 0.35rem 0.7rem;
-            background: var(--border);
-            border-radius: 4px;
-            font-family: monospace;
-            font-size: 0.8rem;
-            color: var(--muted);
-            transition: all 0.3s;
-        }
-        .pipe-cmd.active {
-            background: var(--accent);
-            color: white;
-            box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
-        }
-        .pipe-cmd.done {
-            background: var(--success);
-            color: white;
-        }
-        .pipe-arr { color: var(--muted); font-size: 0.7rem; }
-
-        .main-content {
-            display: grid;
-            grid-template-columns: 1fr 300px;
-            gap: 1rem;
-        }
-        @media (max-width: 900px) {
-            .main-content { grid-template-columns: 1fr; }
-            .sidebar { order: -1; }
-        }
-
-        .output-panel {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            overflow: hidden;
-        }
-        .output-header {
-            padding: 0.75rem 1rem;
-            background: var(--border);
-            font-weight: 600;
-            font-size: 0.9rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .output-body {
-            padding: 1.5rem;
-            max-height: 70vh;
-            overflow-y: auto;
-        }
-        .output-body::-webkit-scrollbar { width: 6px; }
-        .output-body::-webkit-scrollbar-track { background: var(--bg); }
-        .output-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-
-        /* Markdown rendering */
-        .output-body h1 { font-size: 1.8rem; margin: 1.5rem 0 1rem; color: var(--accent2); }
-        .output-body h2 { font-size: 1.4rem; margin: 1.5rem 0 0.75rem; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
-        .output-body h3 { font-size: 1.1rem; margin: 1rem 0 0.5rem; color: var(--text); }
-        .output-body p { margin: 0.75rem 0; }
-        .output-body ul, .output-body ol { margin: 0.75rem 0; padding-left: 1.5rem; }
-        .output-body li { margin: 0.25rem 0; }
-        .output-body code {
-            background: var(--bg);
-            padding: 0.15rem 0.4rem;
-            border-radius: 3px;
-            font-size: 0.85em;
-            color: var(--success);
-        }
-        .output-body pre {
-            background: var(--bg);
-            padding: 1rem;
-            border-radius: 6px;
-            overflow-x: auto;
-            margin: 1rem 0;
-        }
-        .output-body pre code {
-            background: none;
-            padding: 0;
-            color: var(--text);
-        }
-        .output-body table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 1rem 0;
-        }
-        .output-body th, .output-body td {
-            padding: 0.5rem;
-            border: 1px solid var(--border);
-            text-align: left;
-        }
-        .output-body th { background: var(--border); }
-        .output-body blockquote {
-            border-left: 3px solid var(--accent);
-            padding-left: 1rem;
-            margin: 1rem 0;
-            color: var(--muted);
-        }
-
-        .sidebar {
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-        }
-        .sidebar-card {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 1rem;
-        }
-        .sidebar-card h3 {
-            font-size: 0.85rem;
-            color: var(--muted);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 0.75rem;
-        }
-        .step-list {
-            list-style: none;
-            font-size: 0.9rem;
-        }
-        .step-list li {
-            padding: 0.5rem 0;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        .step-list li:last-child { border-bottom: none; }
-        .step-icon {
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.7rem;
-        }
-        .step-icon.done { background: var(--success); }
-        .step-icon.active { background: var(--accent); animation: pulse 1s infinite; }
-
-        .empty-state {
-            text-align: center;
-            padding: 3rem;
-            color: var(--muted);
-        }
-        .empty-state .icon {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-        }
-
-        .typing-indicator {
-            display: inline-flex;
-            gap: 4px;
-            padding: 0.5rem;
-        }
-        .typing-indicator span {
-            width: 6px;
-            height: 6px;
-            background: var(--accent);
-            border-radius: 50%;
-            animation: typing 1.4s infinite;
-        }
-        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
-        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
-        @keyframes typing {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-4px); }
-        }
-
-        .btn {
-            padding: 0.5rem 1rem;
-            background: var(--accent);
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 0.85rem;
-            transition: background 0.2s;
-        }
-        .btn:hover { background: var(--accent2); }
-        .btn-outline {
-            background: transparent;
-            border: 1px solid var(--border);
-            color: var(--text);
-        }
-        .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
-    </style>
+    <link rel="stylesheet" href="pdev-live.css">
 </head>
 <body>
     <div class="container">
@@ -303,7 +40,7 @@
                     <div class="empty-state">
                         <div class="icon">📡</div>
                         <p>Waiting for PDev commands...</p>
-                        <p style="font-size: 0.85rem; margin-top: 0.5rem;">Run a command in Claude Code to see live output here</p>
+                        <p class="empty-state-hint">Run a command in Claude Code to see live output here</p>
                     </div>
                 </div>
             </div>
@@ -312,22 +49,22 @@
                 <div class="sidebar-card">
                     <h3>Session</h3>
                     <div id="sessionInfo">
-                        <p style="color: var(--muted); font-size: 0.9rem;">No active session</p>
+                        <p class="muted-text-sm">No active session</p>
                     </div>
                 </div>
 
                 <div class="sidebar-card">
                     <h3>Steps</h3>
                     <ul class="step-list" id="stepList">
-                        <li style="color: var(--muted);">No steps yet</li>
+                        <li class="muted-text">No steps yet</li>
                     </ul>
                 </div>
 
                 <div class="sidebar-card">
                     <h3>Actions</h3>
-                    <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                    <div class="actions-container">
                         <button class="btn btn-outline" onclick="resetSession()">Reset Session</button>
-                        <a href="/pdev/" class="btn btn-outline" style="text-align: center; text-decoration: none;">View Docs</a>
+                        <a href="/pdev/" class="btn btn-outline action-link-centered">View Docs</a>
                     </div>
                 </div>
             </div>
@@ -335,6 +72,7 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
     <script>
         const API_BASE = '/pdev/api';
         let eventSource = null;
@@ -400,13 +138,13 @@
                     <p><strong>Duration:</strong> ${duration}s</p>
                 `;
             } else {
-                info.innerHTML = '<p style="color: var(--muted); font-size: 0.9rem;">No active session</p>';
+                info.innerHTML = '<p class="muted-text-sm">No active session</p>';
             }
 
             // Render any existing output
             const outputs = session.steps.filter(s => s.type === 'output' && s.html);
             if (outputs.length > 0) {
-                document.getElementById('outputBody').innerHTML = outputs.map(o => o.html).join('');
+                document.getElementById('outputBody').innerHTML = DOMPurify.sanitize(outputs.map(o => o.html).join(''));
             }
 
             renderSteps();
@@ -418,7 +156,7 @@
             const commands = session.steps.filter(s => s.type === 'command');
 
             if (commands.length === 0) {
-                list.innerHTML = '<li style="color: var(--muted);">No steps yet</li>';
+                list.innerHTML = '<li class="muted-text">No steps yet</li>';
                 return;
             }
 
@@ -462,7 +200,7 @@
             if (body.querySelector('.empty-state')) {
                 body.innerHTML = '';
             }
-            body.innerHTML = html;
+            body.innerHTML = DOMPurify.sanitize(html);
             body.scrollTop = body.scrollHeight;
 
             // Update status
@@ -479,7 +217,7 @@
                 <div class="empty-state">
                     <div class="icon">📡</div>
                     <p>Waiting for PDev commands...</p>
-                    <p style="font-size: 0.85rem; margin-top: 0.5rem;">Run a command in Claude Code to see live output here</p>
+                    <p class="empty-state-hint">Run a command in Claude Code to see live output here</p>
                 </div>
             `;
             document.getElementById('outputTitle').textContent = 'Output';
@@ -492,15 +230,33 @@
             alert('Copied to clipboard!');
         }
 
-        // Reset session via API
+        // Reset session via API (requires admin key)
+        // Security: Admin key is NOT stored client-side to prevent XSS exposure
         async function resetSession() {
-            if (confirm('Reset current session?')) {
-                await fetch(`${API_BASE}/reset`, { method: 'POST' });
+            if (!confirm('Reset all active sessions? This cannot be undone.')) return;
+            var adminKey = prompt('Enter admin key:');
+            if (!adminKey) return;
+            try {
+                const res = await fetch(`${API_BASE}/reset`, {
+                    method: 'POST',
+                    headers: { 'X-Admin-Key': adminKey }
+                });
+                if (res.status === 401) {
+                    alert('Invalid admin key. Please try again.');
+                } else if (res.ok) {
+                    const data = await res.json();
+                    alert('Reset ' + (data.completed || 0) + ' sessions');
+                } else {
+                    alert('Reset failed: Server returned ' + res.status);
+                }
+            } catch (err) {
+                alert('Reset failed: ' + err.message);
             }
         }
 
         // Initialize
         connect();
     </script>
+<script src="version-check.js"></script>
 </body>
 </html>
