@@ -16,7 +16,7 @@ tar -xzf pdev-partner-installer.tar.gz
 cd installer
 
 # Run installer
-sudo ./partner-web-installer.sh --domain pdev.yourdomain.com
+sudo ./pdl-installer.sh --domain pdev.yourdomain.com
 ```
 
 ---
@@ -82,7 +82,7 @@ cd installer
 ```
 
 **Package contents:**
-- `partner-web-installer.sh` - Main installer script
+- `pdl-installer.sh` - Main installer script
 - `nginx-partner-template.conf` - Nginx configuration template
 - `.env.partner.template` - Environment variable template
 - `security-audit.sh` - Post-install security validation
@@ -93,12 +93,12 @@ cd installer
 
 **Basic installation:**
 ```bash
-sudo ./partner-web-installer.sh --domain pdev.yourdomain.com
+sudo ./pdl-installer.sh --domain pdev.yourdomain.com
 ```
 
 **Advanced options:**
 ```bash
-sudo ./partner-web-installer.sh \
+sudo ./pdl-installer.sh \
   --domain pdev.yourdomain.com \
   --http-user myuser \
   --http-password mypassword \
@@ -108,7 +108,7 @@ sudo ./partner-web-installer.sh \
 
 **Test with dry-run (no changes made):**
 ```bash
-sudo ./partner-web-installer.sh --domain pdev.yourdomain.com --dry-run
+sudo ./pdl-installer.sh --domain pdev.yourdomain.com --dry-run
 ```
 
 ### Step 4: Save Credentials
@@ -373,7 +373,7 @@ pg_dump -U pdev_app pdev_live > /tmp/pdev_backup.sql
 cp /opt/pdev-live/.env /tmp/pdev_backup.env
 
 # Reinstall with --force
-sudo ./partner-web-installer.sh --domain pdev.yourdomain.com --force
+sudo ./pdl-installer.sh --domain pdev.yourdomain.com --force
 ```
 
 ---

@@ -210,7 +210,7 @@ For partners who want their own PDev-Live instance without the desktop app:
 **One-Click Installer:**
 ```bash
 cd ~/projects/pdev-live/installer
-sudo ./partner-web-installer.sh
+sudo ./pdl-installer.sh
 ```
 
 **What Gets Installed:**

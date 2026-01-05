@@ -455,7 +455,7 @@ Partner deployments use a different architecture (web-only, no desktop app):
 **Run the one-click installer:**
 ```bash
 cd ~/projects/pdev-live/installer
-sudo ./partner-web-installer.sh
+sudo ./pdl-installer.sh
 ```
 
 **Installer handles:**
