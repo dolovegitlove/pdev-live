@@ -208,22 +208,31 @@ ssh acme 'pm2 restart pdev-live'
 
 **See:** [DEPLOYMENT.md](DEPLOYMENT.md) for full deployment documentation.
 
-### Partner Self-Hosted Installation (Web-Only)
+### Partner Self-Hosted Installation
 
-For partners who want their own PDev-Live instance without the desktop app:
+The installer supports two modes:
 
-**Prerequisites:**
+**Source Server (Full Stack):** Hosts PDev-Live backend (database, nginx, PM2, API)
+**Project Server (Client Only):** Posts data to a source server
+
+**Prerequisites (Source Server):**
 - Ubuntu 22.04 LTS server
 - Domain name pointed to server IP
 - Root/sudo access
 
-**One-Click Installer:**
+**Source Server Installation:**
 ```bash
 cd ~/projects/pdev-live/installer
-sudo ./pdl-installer.sh
+sudo ./pdl-installer.sh --domain pdev.yourdomain.com
 ```
 
-**What Gets Installed:**
+**Project Server Installation:**
+```bash
+cd ~/projects/pdev-live/installer
+sudo ./pdl-installer.sh --source-url https://pdev.yourdomain.com/pdev/api
+```
+
+**What Gets Installed (Source Mode):**
 - ✅ Node.js 20.x LTS
 - ✅ PostgreSQL 15 with pdev_live database
 - ✅ Nginx with Let's Encrypt SSL
@@ -232,12 +241,21 @@ sudo ./pdl-installer.sh
 - ✅ Fail2Ban brute-force protection
 - ✅ Express.js serving frontend HTML/CSS/JS
 - ✅ HTTP Basic Auth (nginx + Express layers)
+- ✅ PDev Live client CLI tool
 
-**Configuration:**
+**What Gets Installed (Project Mode):**
+- ✅ PDev Live client CLI tool only (~/.claude/tools/pdev-live/client.sh)
+- ✅ Config file pointing to source server (~/.pdev-live-config)
+
+**Configuration (Source Mode):**
 - Domain: Provided during installation
 - Base URL: `https://your-domain.com`
 - Static Serving: `PDEV_SERVE_STATIC=true`
 - HTTP Auth: `PDEV_HTTP_AUTH=true` (defense-in-depth)
+
+**Configuration (Project Mode):**
+- Source URL: Points to your source server's API endpoint
+- Client posts data to source server automatically
 
 **Post-Install:**
 ```bash

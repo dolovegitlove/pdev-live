@@ -1,11 +1,37 @@
 # PDev-Live Partner Installation Guide
 
 **Version:** 1.0.0
-**Last Updated:** 2026-01-04
+**Last Updated:** 2026-01-05
+
+---
+
+## Installation Modes
+
+PDev-Live supports two installation modes:
+
+### Source Server (Full Stack)
+Hosts the PDev-Live backend (database, nginx, PM2, API server) that receives data from project servers.
+
+**When to use:** You want to host your own PDev-Live instance.
+
+```bash
+sudo ./pdl-installer.sh --domain pdev.yourdomain.com
+```
+
+### Project Server (Client Only)
+Installs only the CLI client that posts data to a source server.
+
+**When to use:** You have multiple project servers that need to report to a central source server.
+
+```bash
+sudo ./pdl-installer.sh --source-url https://pdev.yourdomain.com/pdev/api
+```
 
 ---
 
 ## Quick Start
+
+### Source Server Installation (Full Stack)
 
 ```bash
 # Download installer package
@@ -15,24 +41,45 @@ wget https://vyxenai.com/pdev/install/pdev-partner-installer.tar.gz
 tar -xzf pdev-partner-installer.tar.gz
 cd installer
 
-# Run installer
+# Install source server
 sudo ./pdl-installer.sh --domain pdev.yourdomain.com
+```
+
+### Project Server Installation (Client Only)
+
+```bash
+# Download installer package (same package)
+wget https://vyxenai.com/pdev/install/pdev-partner-installer.tar.gz
+
+# Extract
+tar -xzf pdev-partner-installer.tar.gz
+cd installer
+
+# Install project server client
+sudo ./pdl-installer.sh --source-url https://pdev.yourdomain.com/pdev/api
 ```
 
 ---
 
 ## Prerequisites
 
-### System Requirements
+### Source Server Requirements
 
 - **OS:** Ubuntu 20.04+ or Debian 11+
 - **RAM:** 1GB minimum (2GB recommended)
 - **Disk:** 2GB free space minimum
 - **Domain:** Registered domain pointed to your server IP
 
-### Required Software
+### Project Server Requirements
 
-Install these BEFORE running the installer:
+- **OS:** Any Linux with bash, curl
+- **RAM:** 256MB minimum
+- **Disk:** 50MB free space
+- **Network:** Access to source server URL
+
+### Required Software (Source Server Only)
+
+Install these BEFORE running the source server installer:
 
 **1. Node.js 18+**
 ```bash
@@ -64,6 +111,8 @@ sudo certbot certonly --nginx -d pdev.yourdomain.com
 sudo apt-get install -y apache2-utils
 ```
 
+**Project Server:** No prerequisites required (curl and bash included in all Linux distros)
+
 ---
 
 ## Installation
@@ -91,6 +140,10 @@ cd installer
 
 ### Step 3: Run Installer
 
+**Choose Your Mode:**
+
+#### Source Server (Full Stack)
+
 **Basic installation:**
 ```bash
 sudo ./pdl-installer.sh --domain pdev.yourdomain.com
@@ -111,9 +164,21 @@ sudo ./pdl-installer.sh \
 sudo ./pdl-installer.sh --domain pdev.yourdomain.com --dry-run
 ```
 
-### Step 4: Save Credentials
+#### Project Server (Client Only)
 
-**CRITICAL:** The installer displays credentials ONCE at the end. Save them immediately:
+**Basic installation:**
+```bash
+sudo ./pdl-installer.sh --source-url https://pdev.yourdomain.com/pdev/api
+```
+
+**Test with dry-run (no changes made):**
+```bash
+sudo ./pdl-installer.sh --source-url https://pdev.yourdomain.com/pdev/api --dry-run
+```
+
+### Step 4: Save Credentials (Source Mode Only)
+
+**CRITICAL (SOURCE MODE ONLY):** The installer displays credentials ONCE at the end. Save them immediately:
 
 - **URL:** https://pdev.yourdomain.com
 - **HTTP Auth Username**
@@ -126,24 +191,37 @@ These are stored in:
 - `/opt/pdev-live/.env` (600 permissions, owner-only)
 - `/etc/nginx/.htpasswd` (600 permissions, owner-only)
 
+**Project Mode:** No credentials generated - client posts to source server using source server's credentials
+
 ---
 
 ## Installer Options
 
 ```
-REQUIRED:
-  --domain DOMAIN          Your domain (e.g., pdev.example.com)
+REQUIRED (choose one):
+  --domain DOMAIN          Source server domain (installs full stack)
+  --source-url URL         Source server API URL (installs client only)
 
-OPTIONAL:
+OPTIONAL (source mode only):
   --db-password PASSWORD   PostgreSQL password (default: auto-generated)
   --admin-key KEY          Admin API key (default: auto-generated)
   --http-user USERNAME     HTTP auth username (default: admin)
   --http-password PASSWORD HTTP auth password (default: auto-generated)
   --install-dir PATH       Installation directory (default: /opt/pdev-live)
+
+OPTIONAL (all modes):
+  --mode MODE              Explicit mode override (source|project) [auto-detected]
   --dry-run                Preview changes without making them
   --non-interactive        No prompts (use defaults)
   --force                  Overwrite existing installation
   --help                   Show help message
+
+EXAMPLES:
+  # Source server (full stack on acme/walletsnack.com)
+  sudo ./pdl-installer.sh --domain walletsnack.com
+
+  # Project server (client only on ittz, posts to walletsnack.com)
+  sudo ./pdl-installer.sh --source-url https://walletsnack.com/pdev/api
 ```
 
 ---

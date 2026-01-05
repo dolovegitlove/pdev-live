@@ -48,7 +48,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="/tmp/pdl-installer-$(date +%s).log"
 
 # Runtime configuration
+MODE="${MODE:-}"  # Auto-detected from flags: 'source' or 'project'
 DOMAIN="${DOMAIN:-}"
+SOURCE_URL="${SOURCE_URL:-}"
 DB_PASSWORD="${DB_PASSWORD:-}"
 ADMIN_KEY="${ADMIN_KEY:-}"
 HTTP_USER="${HTTP_USER:-admin}"
@@ -184,19 +186,29 @@ rollback_installation() {
 # =============================================================================
 show_help() {
     cat <<EOF
-PDev-Live Partner Web Installer v$VERSION
+PDev-Live Installer v$VERSION (Dual Mode: Source Server + Project Server)
+
+INSTALLATION MODES:
+
+  SOURCE MODE (Full Stack - Database, nginx, PM2, Server):
+    sudo ./pdl-installer.sh --domain pdev.example.com
+
+  PROJECT MODE (Client Only - Posts to Source Server):
+    sudo ./pdl-installer.sh --source-url https://walletsnack.com/pdev/api
 
 USAGE:
-  sudo ./pdl-installer.sh --domain pdev.example.com [OPTIONS]
+  sudo ./pdl-installer.sh [--domain DOMAIN | --source-url URL] [OPTIONS]
 
-REQUIRED:
-  --domain DOMAIN          Partner domain (e.g., pdev.example.com)
+REQUIRED (choose one):
+  --domain DOMAIN          Source server domain (installs full stack)
+  --source-url URL         Source server API URL (installs client only)
 
 OPTIONAL:
-  --db-password PASSWORD   PostgreSQL password (default: auto-generated)
-  --admin-key KEY          Admin API key (default: auto-generated)
-  --http-user USERNAME     HTTP auth username (default: admin)
-  --http-password PASSWORD HTTP auth password (default: auto-generated)
+  --mode MODE              Explicit mode override (source|project) [auto-detected]
+  --db-password PASSWORD   PostgreSQL password (source mode, default: auto-generated)
+  --admin-key KEY          Admin API key (source mode, default: auto-generated)
+  --http-user USERNAME     HTTP auth username (source mode, default: admin)
+  --http-password PASSWORD HTTP auth password (source mode, default: auto-generated)
   --install-dir PATH       Installation directory (default: /opt/pdev-live)
   --dry-run                Show what would be done without making changes
   --non-interactive        No prompts (use defaults)
@@ -204,32 +216,35 @@ OPTIONAL:
   --help                   Show this help
 
 EXAMPLES:
-  # Basic installation
-  sudo ./pdl-installer.sh --domain pdev.example.com
+  # Source server (full stack on acme/walletsnack.com)
+  sudo ./pdl-installer.sh --domain walletsnack.com
 
-  # Non-interactive with custom settings
-  sudo ./pdl-installer.sh \\
-    --domain pdev.example.com \\
-    --http-user myuser \\
-    --http-password mypass \\
-    --non-interactive
+  # Project server (client only on ittz, posts to walletsnack.com)
+  sudo ./pdl-installer.sh --source-url https://walletsnack.com/pdev/api
+
+  # Explicit mode override
+  sudo ./pdl-installer.sh --mode=project --source-url https://example.com/pdev/api
 
   # Dry run to preview changes
   sudo ./pdl-installer.sh --domain pdev.example.com --dry-run
 
-SYSTEM REQUIREMENTS:
+SYSTEM REQUIREMENTS (Source Mode):
   - Ubuntu 20.04+ or Debian 11+
   - Node.js >= 18
   - PostgreSQL >= 14
   - nginx >= 1.18
-  - 2GB disk space
-  - 1GB RAM
+  - 2GB disk space, 1GB RAM
+
+SYSTEM REQUIREMENTS (Project Mode):
+  - curl, bash
+  - Network access to source server
+  - 50MB disk space
 
 SECURITY:
   - Credentials generated with openssl rand (192+ bits entropy)
-  - .env file permissions: 600 (owner-only)
-  - HTTPS enforced (HTTP redirects to HTTPS)
-  - Dual-layer auth: nginx + Express.js (defense-in-depth)
+  - Config file permissions: 600 (owner-only)
+  - HTTPS enforced in production
+  - Dual-layer auth (source mode): nginx + Express.js
   - Credentials NEVER logged to files
 
 EOF
@@ -261,14 +276,62 @@ validate_domain() {
     return 0
 }
 
+validate_source_url() {
+    local url="$1"
+
+    # Check URL format
+    if [[ ! "$url" =~ ^https?:// ]]; then
+        fail "Invalid source URL format: $url"
+        error "URL must start with http:// or https://"
+        return 1
+    fi
+
+    # Warn about HTTP (not HTTPS)
+    if [[ "$url" =~ ^http:// ]] && [[ "$url" != "http://localhost"* ]] && [[ "$url" != "http://127.0.0.1"* ]]; then
+        warn "Source URL uses HTTP (not HTTPS): $url"
+        warn "This is insecure for production use"
+        if [[ "$INTERACTIVE" == "true" ]]; then
+            read -p "Continue anyway? (y/n): " CONTINUE
+            [[ "$CONTINUE" != "y" ]] && return 1
+        fi
+    fi
+
+    # Test reachability
+    log "Testing source server reachability: $url"
+    local health_url="${url%/api}/health"  # Try /health endpoint
+    if ! curl -sf --max-time 10 "$health_url" >/dev/null 2>&1; then
+        # Try /api/health as fallback
+        health_url="$url/health"
+        if ! curl -sf --max-time 10 "$health_url" >/dev/null 2>&1; then
+            fail "Source server unreachable: $url"
+            error "Troubleshooting:"
+            error "  1. Check internet connectivity: ping $(echo $url | sed 's|https\?://||' | cut -d'/' -f1)"
+            error "  2. Verify URL is correct"
+            error "  3. Check firewall rules"
+            return 1
+        fi
+    fi
+
+    success "Source server reachable: $health_url"
+    return 0
+}
+
 # =============================================================================
 # ARGUMENT PARSING
 # =============================================================================
 parse_arguments() {
     while [[ $# -gt 0 ]]; do
         case $1 in
+            --mode)
+                MODE="$2"
+                shift 2
+                ;;
             --domain)
                 DOMAIN="$2"
+                shift 2
+                ;;
+            --source-url)
+                SOURCE_URL="$2"
                 shift 2
                 ;;
             --db-password)
@@ -315,30 +378,56 @@ parse_arguments() {
         esac
     done
 
-    # Validate required arguments
-    if [[ -z "$DOMAIN" ]]; then
-        fail "Missing required argument: --domain"
-        show_help
+    # Auto-detect mode from flags (if not explicitly set)
+    if [[ -z "$MODE" ]]; then
+        if [[ -n "$SOURCE_URL" ]]; then
+            MODE="project"
+            log "Auto-detected mode: PROJECT (client only)"
+        elif [[ -n "$DOMAIN" ]]; then
+            MODE="source"
+            log "Auto-detected mode: SOURCE (full stack)"
+        else
+            fail "Must specify --domain (source mode) or --source-url (project mode)"
+            echo "" >&2
+            echo "Examples:" >&2
+            echo "  Source:  sudo ./pdl-installer.sh --domain walletsnack.com" >&2
+            echo "  Project: sudo ./pdl-installer.sh --source-url https://walletsnack.com/pdev/api" >&2
+            exit 1
+        fi
+    fi
+
+    # Validate mode-specific requirements
+    if [[ "$MODE" == "source" ]]; then
+        if [[ -z "$DOMAIN" ]]; then
+            fail "Source mode requires --domain flag"
+            exit 1
+        fi
+        validate_domain "$DOMAIN" || exit 1
+
+        # Generate secure passwords for source mode (CRITICAL: Using openssl rand)
+        if [[ -z "$DB_PASSWORD" ]]; then
+            DB_PASSWORD=$(openssl rand -base64 32 | tr -d '/+=' | head -c 32)
+            log "Generated database password (32 chars, ~192 bits entropy)"
+        fi
+
+        if [[ -z "$ADMIN_KEY" ]]; then
+            ADMIN_KEY=$(openssl rand -base64 48 | tr -d '/+=' | head -c 48)
+            log "Generated admin API key (48 chars, ~288 bits entropy)"
+        fi
+
+        if [[ -z "$HTTP_PASSWORD" ]]; then
+            HTTP_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=' | head -c 24)
+            log "Generated HTTP auth password (24 chars, ~144 bits entropy)"
+        fi
+    elif [[ "$MODE" == "project" ]]; then
+        if [[ -z "$SOURCE_URL" ]]; then
+            fail "Project mode requires --source-url flag"
+            exit 1
+        fi
+        validate_source_url "$SOURCE_URL" || exit 1
+    else
+        fail "Invalid mode: $MODE (must be 'source' or 'project')"
         exit 1
-    fi
-
-    # Validate domain format
-    validate_domain "$DOMAIN" || exit 1
-
-    # Generate secure passwords if not provided (CRITICAL: Using openssl rand)
-    if [[ -z "$DB_PASSWORD" ]]; then
-        DB_PASSWORD=$(openssl rand -base64 32 | tr -d '/+=' | head -c 32)
-        log "Generated database password (32 chars, ~192 bits entropy)"
-    fi
-
-    if [[ -z "$ADMIN_KEY" ]]; then
-        ADMIN_KEY=$(openssl rand -base64 48 | tr -d '/+=' | head -c 48)
-        log "Generated admin API key (48 chars, ~288 bits entropy)"
-    fi
-
-    if [[ -z "$HTTP_PASSWORD" ]]; then
-        HTTP_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=' | head -c 24)
-        log "Generated HTTP auth password (24 chars, ~144 bits entropy)"
     fi
 }
 
@@ -1037,69 +1126,50 @@ run_security_audit() {
 }
 
 # =============================================================================
-# MAIN INSTALLATION FLOW
+# CLIENT INSTALLATION (Both Modes)
 # =============================================================================
-main() {
-    header "PDev-Live Partner Web Installer v$VERSION"
+install_client() {
+    header "Installing PDev Live Client"
 
     if [[ "$DRY_RUN" == "true" ]]; then
-        warn "DRY RUN MODE - No changes will be made"
-        warn "Remove --dry-run flag to perform actual installation"
-        echo ""
+        dry_run_msg "Would install client to ~/.claude/tools/pdev-live/"
+        dry_run_msg "Would create config: ~/.pdev-live-config"
+        return 0
     fi
 
-    # Parse arguments
-    parse_arguments "$@"
+    # Create client directory
+    local client_dir="$HOME/.claude/tools/pdev-live"
+    log "Creating client directory: $client_dir"
+    mkdir -p "$client_dir"
 
-    # Phase 1: System validation
-    check_system_requirements
+    # Copy client.sh from installer directory
+    local source_client="$SCRIPT_DIR/../client/client.sh"
+    if [[ ! -f "$source_client" ]]; then
+        fail "Client script not found: $source_client"
+        error "Installer package may be corrupted"
+        return 1
+    fi
 
-    # Phase 2: Database setup
-    setup_database
+    log "Installing client script..."
+    cp "$source_client" "$client_dir/client.sh"
+    chmod +x "$client_dir/client.sh"
+    success "Client installed: $client_dir/client.sh"
 
-    # Phase 3: Application installation
-    install_application
+    # Create symlink for easy access
+    if [[ -w /usr/local/bin ]]; then
+        ln -sf "$client_dir/client.sh" /usr/local/bin/pdev-client 2>/dev/null || true
+        if [[ -L /usr/local/bin/pdev-client ]]; then
+            success "Symlink created: /usr/local/bin/pdev-client"
+        fi
+    fi
 
-    # Phase 4: Nginx configuration
-    configure_nginx
-
-    # Phase 5: PM2 process management
-    start_pm2_process
-
-    # Phase 6: Post-deployment validation
-    verify_deployment
-
-    # Phase 7: Security audit
-    run_security_audit
-
-    # Installation complete
-    header "Installation Complete ✅"
-
-    # CRITICAL: Display credentials ONCE, never log to file (infrastructure-security-agent requirement)
-    echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "⚠️  CRITICAL: SAVE THESE CREDENTIALS NOW (shown once only)"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo ""
-    echo "🌐 URL:            https://$DOMAIN"
-    echo "🔐 HTTP Auth User: $HTTP_USER"
-    echo "🔐 HTTP Auth Pass: $HTTP_PASSWORD"
-    echo "🔑 Database Pass:  $DB_PASSWORD"
-    echo "🔑 Admin API Key:  $ADMIN_KEY"
-    echo ""
-    echo "📁 Install Dir:    $INSTALL_DIR"
-    echo "📋 Log File:       $LOG_FILE (NO credentials logged - secure)"
-    echo ""
-    echo "CREDENTIALS STORED IN (600 permissions, owner-only):"
-    echo "  - $INSTALL_DIR/.env"
-    echo "  - /etc/nginx/.htpasswd"
-    echo ""
-
-    # Generate client config file for pdev-live CLI tool
-    log "Generating client configuration file..."
-    cat > "$HOME/.pdev-live-config" <<EOF
+    # Generate config file (mode-specific)
+    log "Generating client configuration..."
+    if [[ "$MODE" == "source" ]]; then
+        # Source mode: use domain
+        cat > "$HOME/.pdev-live-config" <<EOF
 # PDev Live Client Configuration
-# Generated by pdl-installer.sh v$VERSION
+# Generated by pdl-installer.sh v$VERSION (source mode)
 # Last updated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # Primary API URL (required)
@@ -1108,36 +1178,182 @@ PDEV_LIVE_URL=https://$DOMAIN/pdev/api
 # Dashboard base URL (auto-derived if not set)
 PDEV_BASE_URL=https://$DOMAIN/pdev
 EOF
+    elif [[ "$MODE" == "project" ]]; then
+        # Project mode: use source URL
+        local base_url="${SOURCE_URL%/api}"
+        cat > "$HOME/.pdev-live-config" <<EOF
+# PDev Live Client Configuration
+# Generated by pdl-installer.sh v$VERSION (project mode)
+# Last updated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+# Primary API URL (required)
+PDEV_LIVE_URL=$SOURCE_URL
+
+# Dashboard base URL (auto-derived if not set)
+PDEV_BASE_URL=$base_url
+EOF
+    fi
 
     chmod 600 "$HOME/.pdev-live-config"
     success "Client config: $HOME/.pdev-live-config (600 permissions)"
+}
 
-    echo ""
-    echo "NEVER log, email, or share these credentials insecurely."
-    echo ""
-    read -p "Press ENTER after saving credentials to continue..." confirm
+# =============================================================================
+# MAIN INSTALLATION FLOW
+# =============================================================================
+main() {
+    header "PDev-Live Installer v$VERSION"
 
-    # Clear screen after user confirms
-    clear
+    if [[ "$DRY_RUN" == "true" ]]; then
+        warn "DRY RUN MODE - No changes will be made"
+        warn "Remove --dry-run flag to perform actual installation"
+        echo ""
+    fi
 
+    # Parse arguments (includes mode auto-detection)
+    parse_arguments "$@"
+
+    # Display installation mode
+    if [[ "$MODE" == "source" ]]; then
+        log "Installation Mode: SOURCE SERVER (full stack)"
+        log "  - PostgreSQL database"
+        log "  - nginx web server"
+        log "  - PM2 process manager"
+        log "  - Node.js server"
+        log "  - Client CLI tool"
+    elif [[ "$MODE" == "project" ]]; then
+        log "Installation Mode: PROJECT SERVER (client only)"
+        log "  - Client CLI tool"
+        log "  - Config file pointing to: $SOURCE_URL"
+    fi
     echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "PDev-Live Server Installed Successfully"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo ""
-    echo "NEXT STEPS:"
-    echo "  1. Test access: curl -u $HTTP_USER:*** https://$DOMAIN/health"
-    echo "  2. Configure desktop client: PDev Live -> Settings -> Server URL"
-    echo "  3. Monitor logs: pm2 logs pdev-live"
-    echo "  4. Check status: pm2 status"
-    echo ""
-    echo "SUPPORT:"
-    echo "  Documentation: $INSTALL_DIR/README.md"
-    echo "  Logs: pm2 logs pdev-live"
-    echo "  Status: pm2 status"
-    echo "  Restart: pm2 restart pdev-live"
-    echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    # Phase 1: System validation (mode-specific)
+    if [[ "$MODE" == "source" ]]; then
+        check_system_requirements
+    else
+        # Project mode: minimal validation
+        header "Phase 1: System Requirements Validation (Project Mode)"
+        if [[ $EUID -ne 0 ]]; then
+            fail "This script must be run as root (use sudo)"
+            exit 1
+        fi
+        success "Running as root"
+    fi
+
+    # Phase 2-5: Source mode only (skip in project mode)
+    if [[ "$MODE" == "source" ]]; then
+        # Phase 2: Database setup
+        setup_database
+
+        # Phase 3: Application installation
+        install_application
+
+        # Phase 4: Nginx configuration
+        configure_nginx
+
+        # Phase 5: PM2 process management
+        start_pm2_process
+
+        # Phase 6: Post-deployment validation
+        verify_deployment
+
+        # Phase 7: Security audit
+        run_security_audit
+    fi
+
+    # Install client (both modes)
+    install_client
+
+    # Installation complete
+    header "Installation Complete ✅"
+
+    # Mode-specific completion messages
+    if [[ "$MODE" == "source" ]]; then
+        # SOURCE MODE: Display credentials and next steps
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "⚠️  CRITICAL: SAVE THESE CREDENTIALS NOW (shown once only)"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
+        echo "🌐 URL:            https://$DOMAIN"
+        echo "🔐 HTTP Auth User: $HTTP_USER"
+        echo "🔐 HTTP Auth Pass: $HTTP_PASSWORD"
+        echo "🔑 Database Pass:  $DB_PASSWORD"
+        echo "🔑 Admin API Key:  $ADMIN_KEY"
+        echo ""
+        echo "📁 Install Dir:    $INSTALL_DIR"
+        echo "📋 Log File:       $LOG_FILE (NO credentials logged - secure)"
+        echo ""
+        echo "CREDENTIALS STORED IN (600 permissions, owner-only):"
+        echo "  - $INSTALL_DIR/.env"
+        echo "  - /etc/nginx/.htpasswd"
+        echo "  - $HOME/.pdev-live-config"
+        echo ""
+        echo "NEVER log, email, or share these credentials insecurely."
+        echo ""
+
+        if [[ "$INTERACTIVE" == "true" ]]; then
+            read -p "Press ENTER after saving credentials to continue..." confirm
+            clear
+        fi
+
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "PDev-Live Source Server Installed Successfully"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
+        echo "NEXT STEPS:"
+        echo "  1. Test health: curl http://localhost:3016/health"
+        echo "  2. Test HTTPS: curl -u $HTTP_USER:*** https://$DOMAIN/health"
+        echo "  3. Monitor logs: pm2 logs pdev-live"
+        echo "  4. Check status: pm2 status"
+        echo ""
+        echo "PROJECT SERVERS:"
+        echo "  Install client on project servers with:"
+        echo "  sudo ./pdl-installer.sh --source-url https://$DOMAIN/pdev/api"
+        echo ""
+        echo "SUPPORT:"
+        echo "  Documentation: $INSTALL_DIR/README.md"
+        echo "  Logs: pm2 logs pdev-live"
+        echo "  Status: pm2 status"
+        echo "  Restart: pm2 restart pdev-live"
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    elif [[ "$MODE" == "project" ]]; then
+        # PROJECT MODE: Display client installation confirmation
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "PDev-Live Project Server Installed Successfully"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
+        echo "✅ Client installed: $HOME/.claude/tools/pdev-live/client.sh"
+        echo "✅ Config file: $HOME/.pdev-live-config (600 permissions)"
+        echo "✅ Source server: $SOURCE_URL"
+        echo ""
+        if [[ -L /usr/local/bin/pdev-client ]]; then
+            echo "✅ Symlink: /usr/local/bin/pdev-client"
+            echo ""
+        fi
+        echo "NEXT STEPS:"
+        echo "  1. Test client: $HOME/.claude/tools/pdev-live/client.sh --help"
+        echo "  2. Start session: client.sh start <project> <command>"
+        echo "  3. Push step: client.sh step \"output\" \"content\""
+        echo "  4. View at: ${SOURCE_URL%/api}/live/"
+        echo ""
+        echo "USAGE:"
+        echo "  # Start PDev session"
+        echo "  ~/.claude/tools/pdev-live/client.sh start myproject /spec"
+        echo ""
+        echo "  # Push pipeline document"
+        echo "  ~/.claude/tools/pdev-live/client.sh doc IDEATION /path/to/IDEATION.md"
+        echo ""
+        echo "  # End session"
+        echo "  ~/.claude/tools/pdev-live/client.sh end"
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    fi
 }
 
 # Run main installation
