@@ -125,14 +125,14 @@ pdev-live-bundle/
 │   ├── TROUBLESHOOTING.md     # Common issues and fixes
 │   └── ROLLBACK.md            # How to revert failed installation
 └── desktop/                   # Desktop binaries downloaded automatically
-    └── (binaries downloaded from walletsnack.com/pdev/releases/)
+    └── (binaries downloaded from vyxenai.com/pdev/releases/)
 ```
 
 **Note:** Desktop app binaries (DMG/exe/deb) are **not** included in this bundle.
 They are downloaded automatically during installation from:
-- `https://walletsnack.com/pdev/releases/PDev-Live-1.0.0.dmg` (macOS)
-- `https://walletsnack.com/pdev/releases/PDev-Live-1.0.0.exe` (Windows)
-- `https://walletsnack.com/pdev/releases/PDev-Live-1.0.0.deb` (Linux)
+- `https://vyxenai.com/pdev/releases/PDev-Live-1.0.0.dmg` (macOS)
+- `https://vyxenai.com/pdev/releases/PDev-Live-1.0.0.exe` (Windows)
+- `https://vyxenai.com/pdev/releases/PDev-Live-1.0.0.deb` (Linux)
 
 ---
 

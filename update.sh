@@ -5,8 +5,8 @@ set -euo pipefail
 
 # Configuration
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-BACKUP_DIR="/var/www/walletsnack.com/pdev/live-backups/$TIMESTAMP"
-DEPLOY_DIR="/var/www/walletsnack.com/pdev/live"
+BACKUP_DIR="/var/www/vyxenai.com/pdev-backups/$TIMESTAMP"
+DEPLOY_DIR="/var/www/vyxenai.com/pdev"
 SERVICE_DIR="/opt/services/pdev-live"
 DEPLOY_LOG="$HOME/pdev-live-deployment.log"
 PROJECT_DIR="$HOME/projects/pdev-live"
@@ -140,7 +140,7 @@ for css_file in pdev-live.css session-specific.css project-specific.css index-sp
 done
 
 # Check HTTP accessibility (basic)
-if ! curl -f -s https://walletsnack.com/pdev/live/pdev-live.css > /dev/null 2>&1; then
+if ! curl -f -s https://vyxenai.com/pdev/pdev-live.css > /dev/null 2>&1; then
     echo "⚠️  Warning: HTTP verification failed - CSS may not be accessible yet"
     echo "   This could be a temporary DNS/cache issue"
 fi
@@ -152,10 +152,10 @@ echo ""
 echo "🧹 Phase 8: Cleaning up old backups..."
 
 # Keep only last 10 backups
-ssh acme "cd /var/www/walletsnack.com/pdev/live-backups && ls -t | tail -n +11 | xargs -r rm -rf"
+ssh acme "cd /var/www/vyxenai.com/pdev-backups && ls -t | tail -n +11 | xargs -r rm -rf"
 
 # Delete backups older than 30 days
-ssh acme "find /var/www/walletsnack.com/pdev/live-backups -type d -mtime +30 -delete 2>/dev/null || true"
+ssh acme "find /var/www/vyxenai.com/pdev-backups -type d -mtime +30 -delete 2>/dev/null || true"
 
 # Delete old service backups (keep last 5)
 ssh acme "cd $SERVICE_DIR && ls -t server.js.bak-* 2>/dev/null | tail -n +6 | xargs -r rm -f"
@@ -181,8 +181,8 @@ echo "   Backup: $BACKUP_DIR"
 echo "   Log: $DEPLOY_LOG"
 echo ""
 echo "📋 Post-deployment checklist:"
-echo "   [ ] Run: /cache-bust https://walletsnack.com/pdev/live/"
-echo "   [ ] Test: https://walletsnack.com/pdev/live/ (Ctrl+Shift+R)"
+echo "   [ ] Run: /cache-bust https://vyxenai.com/pdev/"
+echo "   [ ] Test: https://vyxenai.com/pdev/ (Ctrl+Shift+R)"
 echo "   [ ] Verify: F12 console has zero CSS 404 errors"
 echo "   [ ] Check all pages: index.html, session.html, project.html"
 echo ""

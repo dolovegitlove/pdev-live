@@ -48,7 +48,7 @@ cat > "$TEMP_BUNDLE/desktop/README.txt" <<EOF
 Desktop App Binaries
 
 These files are downloaded automatically during installation from:
-https://walletsnack.com/pdev/releases/
+https://vyxenai.com/pdev/releases/
 
 Files:
 - PDev-Live-${VERSION}.dmg (macOS)
@@ -102,10 +102,10 @@ echo "File sizes:"
 du -h "$OUTPUT_DIR/${BUNDLE_NAME}".*
 echo ""
 echo "Upload to:"
-echo "  https://walletsnack.com/pdev/install/${BUNDLE_NAME}.zip"
-echo "  https://walletsnack.com/pdev/install/${BUNDLE_NAME}.tar.gz"
+echo "  https://vyxenai.com/pdev/install/${BUNDLE_NAME}.zip"
+echo "  https://vyxenai.com/pdev/install/${BUNDLE_NAME}.tar.gz"
 echo ""
 echo "Single download URL:"
-echo "  https://walletsnack.com/pdev/install/pdev-complete-latest.zip"
+echo "  https://vyxenai.com/pdev/install/pdev-complete-latest.zip"
 echo "  (symlink to latest version)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

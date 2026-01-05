@@ -20,14 +20,14 @@ That's it! The update.sh script handles everything automatically.
 **What happens:**
 ```bash
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-BACKUP_DIR="/var/www/walletsnack.com/pdev/live-backups/$TIMESTAMP"
+BACKUP_DIR="/var/www/vyxenai.com/pdev-backups/$TIMESTAMP"
 ssh acme "mkdir -p $BACKUP_DIR && cp $DEPLOY_DIR/*.{html,css,js} $BACKUP_DIR/"
 ```
 
 **Why:** Safe rollback if deployment fails
 
 **Backup locations:**
-- Frontend: `/var/www/walletsnack.com/pdev/live-backups/YYYYMMDD_HHMMSS/`
+- Frontend: `/var/www/vyxenai.com/pdev-backups/YYYYMMDD_HHMMSS/`
 - Backend: `/opt/services/pdev-live/server.js.bak-YYYYMMDD_HHMMSS`
 - Config: `/opt/services/pdev-live/doc-contract.json.bak-YYYYMMDD_HHMMSS`
 
@@ -119,7 +119,7 @@ rsync -avz --checksum \
   --include='*.js' \
   --exclude='*.bak' \
   --exclude='node_modules/' \
-  frontend/ acme:/var/www/walletsnack.com/pdev/live/
+  frontend/ acme:/var/www/vyxenai.com/pdev/
 ```
 
 **Why:** Atomic deployment prevents race conditions
@@ -140,7 +140,7 @@ rsync -avz --checksum \
 
 **Permissions:**
 ```bash
-ssh acme "chmod 644 /var/www/walletsnack.com/pdev/live/*.{html,css,js}"
+ssh acme "chmod 644 /var/www/vyxenai.com/pdev/*.{html,css,js}"
 ```
 
 **Cleanup:**
@@ -177,11 +177,11 @@ ssh acme 'pm2 describe pdev-live | grep -q "status.*online"'
 
 # Verify all CSS files exist
 for css_file in pdev-live.css session-specific.css project-specific.css index-specific.css; do
-  ssh acme "test -f /var/www/walletsnack.com/pdev/live/$css_file"
+  ssh acme "test -f /var/www/vyxenai.com/pdev/$css_file"
 done
 
 # Check HTTP accessibility (basic)
-curl -f -s https://walletsnack.com/pdev/live/pdev-live.css > /dev/null
+curl -f -s https://vyxenai.com/pdev/pdev-live.css > /dev/null
 ```
 
 **Why:** Ensure deployment succeeded before marking complete
@@ -203,10 +203,10 @@ curl -f -s https://walletsnack.com/pdev/live/pdev-live.css > /dev/null
 **What happens:**
 ```bash
 # Keep only last 10 backups
-ssh acme "cd /var/www/walletsnack.com/pdev/live-backups && ls -t | tail -n +11 | xargs -r rm -rf"
+ssh acme "cd /var/www/vyxenai.com/pdev-backups && ls -t | tail -n +11 | xargs -r rm -rf"
 
 # Delete backups older than 30 days
-ssh acme "find /var/www/walletsnack.com/pdev/live-backups -type d -mtime +30 -delete"
+ssh acme "find /var/www/vyxenai.com/pdev-backups -type d -mtime +30 -delete"
 
 # Delete old service backups (keep last 5)
 ssh acme "cd /opt/services/pdev-live && ls -t server.js.bak-* | tail -n +6 | xargs -r rm -f"
@@ -244,7 +244,7 @@ echo "❌ PM2 process not online - triggering rollback"
 echo "🔄 Rolling back..."
 
 # Restore frontend files
-ssh acme "cp $BACKUP_DIR/* /var/www/walletsnack.com/pdev/live/"
+ssh acme "cp $BACKUP_DIR/* /var/www/vyxenai.com/pdev/"
 
 # Restore backend
 ssh acme "cp /opt/services/pdev-live/server.js.bak-$TIMESTAMP /opt/services/pdev-live/server.js"
@@ -269,7 +269,7 @@ After successful deployment:
 ### 1. Cache Busting (MANDATORY)
 
 ```bash
-/cache-bust https://walletsnack.com/pdev/live/
+/cache-bust https://vyxenai.com/pdev/
 ```
 
 **Why:** Invalidate Cloudflare cache so users get new CSS/JS files
@@ -282,7 +282,7 @@ After successful deployment:
 ### 2. Browser Testing
 
 **Test in browser:**
-1. Navigate to https://walletsnack.com/pdev/live/
+1. Navigate to https://vyxenai.com/pdev/
 2. Hard refresh: `Ctrl+Shift+R` (Windows/Linux) or `Cmd+Shift+R` (Mac)
 3. Open F12 Developer Tools → Console
 4. Verify: **Zero CSS 404 errors**
@@ -290,10 +290,10 @@ After successful deployment:
 ### 3. Page Verification
 
 Test all 4 pages:
-- [ ] https://walletsnack.com/pdev/live/ (index.html - dashboard)
-- [ ] https://walletsnack.com/pdev/live/session.html (session viewer)
-- [ ] https://walletsnack.com/pdev/live/project.html (project viewer)
-- [ ] https://walletsnack.com/pdev/live/live.html (live streaming)
+- [ ] https://vyxenai.com/pdev/ (index.html - dashboard)
+- [ ] https://vyxenai.com/pdev/session.html (session viewer)
+- [ ] https://vyxenai.com/pdev/project.html (project viewer)
+- [ ] https://vyxenai.com/pdev/live.html (live streaming)
 
 **For each page:**
 - ✅ Page loads without errors
@@ -323,11 +323,11 @@ If update.sh is unavailable:
 ssh acme
 
 # 2. Backup current files
-mkdir -p /var/www/walletsnack.com/pdev/live-backups/manual-$(date +%Y%m%d_%H%M%S)
-cp /var/www/walletsnack.com/pdev/live/*.{html,css,js} /var/www/walletsnack.com/pdev/live-backups/manual-$(date +%Y%m%d_%H%M%S)/
+mkdir -p /var/www/vyxenai.com/pdev-backups/manual-$(date +%Y%m%d_%H%M%S)
+cp /var/www/vyxenai.com/pdev/*.{html,css,js} /var/www/vyxenai.com/pdev-backups/manual-$(date +%Y%m%d_%H%M%S)/
 
 # 3. From local machine, deploy frontend
-rsync -avz --checksum frontend/ acme:/var/www/walletsnack.com/pdev/live/
+rsync -avz --checksum frontend/ acme:/var/www/vyxenai.com/pdev/
 
 # 4. Deploy backend
 scp server/server.js acme:/opt/services/pdev-live/server.js
@@ -339,7 +339,7 @@ ssh acme 'pm2 restart pdev-live'
 ssh acme 'pm2 status pdev-live'
 
 # 7. Cache bust
-/cache-bust https://walletsnack.com/pdev/live/
+/cache-bust https://vyxenai.com/pdev/
 ```
 
 **⚠️  WARNING:** Manual deployment skips:
@@ -384,9 +384,9 @@ ssh acme 'pm2 describe pdev-live'
 **Symptom:** Browser F12 console shows "Failed to load resource: 404"
 
 **Fix:**
-1. Verify files exist: `ssh acme 'ls -la /var/www/walletsnack.com/pdev/live/*.css'`
-2. Check permissions: `ssh acme 'ls -l /var/www/walletsnack.com/pdev/live/*.css'`
-3. Run cache bust: `/cache-bust https://walletsnack.com/pdev/live/`
+1. Verify files exist: `ssh acme 'ls -la /var/www/vyxenai.com/pdev/*.css'`
+2. Check permissions: `ssh acme 'ls -l /var/www/vyxenai.com/pdev/*.css'`
+3. Run cache bust: `/cache-bust https://vyxenai.com/pdev/`
 4. Hard refresh browser: `Ctrl+Shift+R`
 
 ### Backup Rotation Fails
@@ -395,8 +395,8 @@ ssh acme 'pm2 describe pdev-live'
 
 **Fix:**
 ```bash
-ssh acme 'ls -la /var/www/walletsnack.com/pdev/live-backups/'
-ssh acme 'sudo chown -R acme:acme /var/www/walletsnack.com/pdev/live-backups/'
+ssh acme 'ls -la /var/www/vyxenai.com/pdev-backups/'
+ssh acme 'sudo chown -R acme:acme /var/www/vyxenai.com/pdev-backups/'
 ```
 
 ---
@@ -405,21 +405,21 @@ ssh acme 'sudo chown -R acme:acme /var/www/walletsnack.com/pdev/live-backups/'
 
 | Component | Location | Port |
 |-----------|----------|------|
-| Frontend | acme:/var/www/walletsnack.com/pdev/live/ | 443 (nginx) |
+| Frontend | acme:/var/www/vyxenai.com/pdev/ | 443 (nginx) |
 | Backend | acme:/opt/services/pdev-live/ | 3016 (internal) |
-| Backups | acme:/var/www/walletsnack.com/pdev/live-backups/ | - |
+| Backups | acme:/var/www/vyxenai.com/pdev-backups/ | - |
 | Logs | acme:/opt/services/pdev-live/logs/ | - |
 | Deployment Log | dolovdev:~/pdev-live-deployment.log | - |
 
 **Production URLs:**
-- https://walletsnack.com/pdev/live/ (frontend)
-- https://walletsnack.com/pdev/api/ (backend API)
+- https://vyxenai.com/pdev/ (frontend)
+- https://vyxenai.com/pdev/api/ (backend API)
 
 **Authentication:**
 - Username: `pdev`
 - Password: `PdevLive0987@@`
 - Auth type: HTTP Basic Authentication (.htpasswd)
-- Auth file: `/var/www/walletsnack.com/.htpasswd_pdev`
+- Auth file: `/var/www/vyxenai.com/.htpasswd_pdev`
 
 ---
 
@@ -536,8 +536,8 @@ PDEV_ADMIN_KEY=[GENERATED]
 |--------|-------------|---------|
 | **Frontend Serving** | Nginx (`/var/www/`) | Express.js (`/opt/pdev-live/frontend/`) |
 | **Desktop App** | Yes | No (web-only) |
-| **Deployment Path** | `/var/www/walletsnack.com/pdev/live/` | `/opt/pdev-live/` |
-| **Base URL** | `https://walletsnack.com/pdev/live/` | `https://partner-domain.com` |
+| **Deployment Path** | `/var/www/vyxenai.com/pdev/` | `/opt/pdev-live/` |
+| **Base URL** | `https://vyxenai.com/pdev/` | `https://partner-domain.com` |
 | **HTTP Auth** | Nginx only | Nginx + Express (defense-in-depth) |
 | **SSL** | Let's Encrypt | Let's Encrypt |
 | **Update Method** | `./update.sh` via rsync | `git pull` + `pm2 restart` |
@@ -664,4 +664,4 @@ sudo tail -50 /var/log/postgresql/postgresql-15-main.log
 - [README.md](README.md) - Project overview and installation
 - [installer/README.md](installer/README.md) - Self-hosted installation guide
 - [installer/README-PARTNER.md](installer/README-PARTNER.md) - Partner deployment guide
-- [update.sh](update.sh) - Deployment script source code (walletsnack)
+- [update.sh](update.sh) - Deployment script source code (vyxenai)

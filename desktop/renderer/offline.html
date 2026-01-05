@@ -135,7 +135,7 @@
 
       // Attempt to reload after a brief delay
       setTimeout(() => {
-        window.location.href = 'https://walletsnack.com/pdev/live/';
+        window.location.href = 'https://vyxenai.com/pdev/';
       }, 1000);
     }
 
@@ -144,7 +144,7 @@
       const status = document.getElementById('status');
       status.textContent = 'Checking connection...';
 
-      fetch('https://walletsnack.com/pdev/api/health', { mode: 'no-cors' })
+      fetch('https://vyxenai.com/pdev/api/health', { mode: 'no-cors' })
         .then(() => {
           retry();
         })

@@ -9,7 +9,7 @@ set -e
 CONFIG_FILE="${CONFIG_FILE:-/opt/services/pdev-live/.update-config}"
 [ -f "$CONFIG_FILE" ] && source "$CONFIG_FILE"
 
-MASTER_URL="${PDEV_MASTER_URL:-https://walletsnack.com/pdev/api}"
+MASTER_URL="${PDEV_MASTER_URL:-https://vyxenai.com/pdev/api}"
 LOCAL_DIR="${PDEV_LOCAL_DIR:-/opt/services/pdev-live/server}"
 FRONTEND_DIR="${PDEV_FRONTEND_DIR:-/opt/services/pdev-live/frontend}"
 LOG_FILE="${PDEV_LOG_FILE:-/var/log/pdev-update.log}"

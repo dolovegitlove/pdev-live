@@ -91,8 +91,8 @@ load_pdev_config() {
   echo "  2. Create config file (~/.pdev-live-config):" >&2
   echo "     cat > ~/.pdev-live-config <<EOF" >&2
   echo "# PDev Live Client Configuration" >&2
-  echo "PDEV_LIVE_URL=https://walletsnack.com/pdev/api" >&2
-  echo "PDEV_BASE_URL=https://walletsnack.com/pdev" >&2
+  echo "PDEV_LIVE_URL=https://vyxenai.com/pdev/api" >&2
+  echo "PDEV_BASE_URL=https://vyxenai.com/pdev" >&2
   echo "EOF" >&2
   echo "     chmod 600 ~/.pdev-live-config" >&2
   echo "" >&2

@@ -127,7 +127,7 @@ pdev-complete-v1.0.0.zip (28KB)
 └── SHA256SUMS                  # Integrity checksums
 ```
 
-**Desktop binaries:** Downloaded automatically from walletsnack.com/pdev/releases/
+**Desktop binaries:** Downloaded automatically from vyxenai.com/pdev/releases/
 
 ---
 
@@ -140,18 +140,18 @@ pdev-complete-v1.0.0.zip (28KB)
 cd /Users/dolovdev/projects/pdev-live/installer
 ./create-bundle.sh 1.0.0
 
-# Upload to walletsnack.com
-scp dist/pdev-complete-v1.0.0.zip acme:/var/www/walletsnack.com/pdev/install/
+# Upload to vyxenai.com
+scp dist/pdev-complete-v1.0.0.zip acme:/var/www/vyxenai.com/pdev/install/
 
 # Create "latest" symlink
-ssh acme "cd /var/www/walletsnack.com/pdev/install && ln -sf pdev-complete-v1.0.0.zip pdev-complete-latest.zip"
+ssh acme "cd /var/www/vyxenai.com/pdev/install && ln -sf pdev-complete-v1.0.0.zip pdev-complete-latest.zip"
 ```
 
 ### User Installation
 
 **Interactive mode:**
 ```bash
-curl -L https://walletsnack.com/pdev/install/pdev-complete-latest.zip -o pdev-install.zip
+curl -L https://vyxenai.com/pdev/install/pdev-complete-latest.zip -o pdev-install.zip
 unzip pdev-install.zip
 cd pdev-complete-v1.0.0
 ./pdev-bundled-installer.sh
@@ -214,12 +214,12 @@ cd pdev-complete-v1.0.0
 
 2. **Upload binaries to releases:**
    ```bash
-   scp dist/*.dmg dist/*.exe dist/*.deb acme:/var/www/walletsnack.com/pdev/releases/
+   scp dist/*.dmg dist/*.exe dist/*.deb acme:/var/www/vyxenai.com/pdev/releases/
    ```
 
 3. **Generate checksums:**
    ```bash
-   ssh acme "cd /var/www/walletsnack.com/pdev/releases && shasum -a 256 PDev-Live-*.* > SHA256SUMS"
+   ssh acme "cd /var/www/vyxenai.com/pdev/releases && shasum -a 256 PDev-Live-*.* > SHA256SUMS"
    ```
 
 4. **Create new bundle:**
@@ -230,8 +230,8 @@ cd pdev-complete-v1.0.0
 
 5. **Upload bundle:**
    ```bash
-   scp dist/pdev-complete-v1.1.0.zip acme:/var/www/walletsnack.com/pdev/install/
-   ssh acme "cd /var/www/walletsnack.com/pdev/install && ln -sf pdev-complete-v1.1.0.zip pdev-complete-latest.zip"
+   scp dist/pdev-complete-v1.1.0.zip acme:/var/www/vyxenai.com/pdev/install/
+   ssh acme "cd /var/www/vyxenai.com/pdev/install && ln -sf pdev-complete-v1.1.0.zip pdev-complete-latest.zip"
    ```
 
 ### Version Compatibility
@@ -285,7 +285,7 @@ cd pdev-complete-v1.0.0
 ---
 
 **Status:** Ready for production deployment
-**Next Step:** Upload bundle to walletsnack.com and test on all target platforms
+**Next Step:** Upload bundle to vyxenai.com and test on all target platforms
 
 ---
 

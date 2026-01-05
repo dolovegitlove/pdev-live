@@ -162,8 +162,8 @@ chmod +x ~/.claude/tools/pdev-live/client.sh
 # Configure PDev Live server URL
 cat > ~/.pdev-live-config <<EOF
 # PDev Live Client Configuration
-PDEV_LIVE_URL=https://walletsnack.com/pdev/api
-PDEV_BASE_URL=https://walletsnack.com/pdev
+PDEV_LIVE_URL=https://vyxenai.com/pdev/api
+PDEV_BASE_URL=https://vyxenai.com/pdev
 EOF
 chmod 600 ~/.pdev-live-config
 ```
@@ -193,15 +193,15 @@ cd ~/projects/pdev-live
 **Rollback:** If deployment fails, update.sh automatically restores from backup.
 
 **Post-Deployment Checklist:**
-- [ ] Run: `/cache-bust https://walletsnack.com/pdev/live/`
-- [ ] Test: https://walletsnack.com/pdev/live/ (Ctrl+Shift+R)
+- [ ] Run: `/cache-bust https://vyxenai.com/pdev/`
+- [ ] Test: https://vyxenai.com/pdev/ (Ctrl+Shift+R)
 - [ ] Verify: F12 console has zero CSS 404 errors
 - [ ] Check all pages: index.html, session.html, project.html, live.html
 
 **Manual Deployment (not recommended):**
 ```bash
 # Only if update.sh unavailable
-rsync -avz --checksum frontend/ acme:/var/www/walletsnack.com/pdev/live/
+rsync -avz --checksum frontend/ acme:/var/www/vyxenai.com/pdev/
 scp server/server.js acme:/opt/services/pdev-live/server.js
 ssh acme 'pm2 restart pdev-live'
 ```
@@ -269,14 +269,14 @@ sudo ./security-audit.sh
 https://your-domain.com
 ```
 
-**Key Differences from Walletsnack:**
-| Feature | Walletsnack | Partner |
-|---------|-------------|---------|
+**Key Differences from Vyxenai:**
+| Feature | Vyxenai | Partner |
+|---------|---------|---------|
 | Frontend Serving | Nginx | Express.js |
 | Desktop App | Yes | No (web-only) |
 | Static Files | `/var/www/` | `/opt/pdev-live/frontend/` |
 | HTTP Auth | Nginx only | Nginx + Express |
-| Base URL | `walletsnack.com/pdev/live/` | `https://partner-domain.com` |
+| Base URL | `vyxenai.com/pdev/` | `https://partner-domain.com` |
 
 **See:** [Partner Installation Guide](installer/README-PARTNER.md) for detailed setup.
 
@@ -341,8 +341,8 @@ Defined in `server/doc-contract.json`:
 |-----------|----------|------|
 | PDev API | acme:/home/acme/pdev-api | 3016 |
 | PDev Live | acme:/opt/services/pdev-live | internal |
-| Frontend | walletsnack.com/pdev/live/ | 443 |
-| API URL | walletsnack.com/pdev/api/ | 443 |
+| Frontend | vyxenai.com/pdev/ | 443 |
+| API URL | vyxenai.com/pdev/api/ | 443 |
 
 ## PM2 Commands
 

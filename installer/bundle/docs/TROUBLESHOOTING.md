@@ -142,7 +142,7 @@ pm2 logs pdev-live-server --lines 100
 **Download failed:**
 ```bash
 # Test manually
-curl -I https://walletsnack.com/pdev/releases/PDev-Live-1.0.0.dmg
+curl -I https://vyxenai.com/pdev/releases/PDev-Live-1.0.0.dmg
 
 # Check internet connection
 # Verify DNS resolution
@@ -258,7 +258,7 @@ sudo -u postgres dropuser pdev_app
 
 **Desktop app only:**
 ```bash
-curl -L https://walletsnack.com/pdev/releases/PDev-Live-1.0.0.dmg -o ~/Downloads/pdev.dmg
+curl -L https://vyxenai.com/pdev/releases/PDev-Live-1.0.0.dmg -o ~/Downloads/pdev.dmg
 open ~/Downloads/pdev.dmg
 
 # Create config

@@ -116,12 +116,12 @@ PDev Live has **two deployment scripts** - make sure you use the correct one:
 ### pdev-update.sh (Self-Hosted Auto-Updater)
 - **Purpose:** Updates self-hosted installations
 - **Usage:** `./pdev-update.sh` (run on your own server)
-- **Source:** Pulls updates from walletsnack.com/pdev/api/version
+- **Source:** Pulls updates from vyxenai.com/pdev/api/version
 - **Location:** `installer/pdev-update.sh`
 - **Use When:** You installed PDev Live via `install.sh` and want to update to latest version
 
 ### update.sh (Production Deployment Script)
-- **Purpose:** Deploy changes to production (walletsnack.com)
+- **Purpose:** Deploy changes to production (vyxenai.com)
 - **Usage:** `./update.sh` (run from laptop, deploys to acme server)
 - **Source:** Deploys from local git repository
 - **Location:** Root `update.sh`

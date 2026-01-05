@@ -194,7 +194,7 @@ INSTALLATION MODES:
     sudo ./pdl-installer.sh --domain pdev.example.com
 
   PROJECT MODE (Client Only - Posts to Source Server):
-    sudo ./pdl-installer.sh --source-url https://walletsnack.com/pdev/api
+    sudo ./pdl-installer.sh --source-url https://vyxenai.com/pdev/api
 
 USAGE:
   sudo ./pdl-installer.sh [--domain DOMAIN | --source-url URL] [OPTIONS]
@@ -216,11 +216,11 @@ OPTIONAL:
   --help                   Show this help
 
 EXAMPLES:
-  # Source server (full stack on acme/walletsnack.com)
-  sudo ./pdl-installer.sh --domain walletsnack.com
+  # Source server (full stack on acme/vyxenai.com)
+  sudo ./pdl-installer.sh --domain vyxenai.com
 
-  # Project server (client only on ittz, posts to walletsnack.com)
-  sudo ./pdl-installer.sh --source-url https://walletsnack.com/pdev/api
+  # Project server (client only on ittz, posts to vyxenai.com)
+  sudo ./pdl-installer.sh --source-url https://vyxenai.com/pdev/api
 
   # Explicit mode override
   sudo ./pdl-installer.sh --mode=project --source-url https://example.com/pdev/api
@@ -390,8 +390,8 @@ parse_arguments() {
             fail "Must specify --domain (source mode) or --source-url (project mode)"
             echo "" >&2
             echo "Examples:" >&2
-            echo "  Source:  sudo ./pdl-installer.sh --domain walletsnack.com" >&2
-            echo "  Project: sudo ./pdl-installer.sh --source-url https://walletsnack.com/pdev/api" >&2
+            echo "  Source:  sudo ./pdl-installer.sh --domain vyxenai.com" >&2
+            echo "  Project: sudo ./pdl-installer.sh --source-url https://vyxenai.com/pdev/api" >&2
             exit 1
         fi
     fi

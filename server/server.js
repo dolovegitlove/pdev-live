@@ -14,11 +14,16 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const http = require('http');
 const { marked } = require('marked');
 const hljs = require('highlight.js');
 const { Pool } = require('pg');
+const WebSocket = require('ws');
+const { Client } = require('ssh2');
+const validator = require('validator');
 
 const app = express();
+const server = http.createServer(app);
 const PORT = parseInt(process.env.PORT || '3077', 10);
 
 // ============================================================================
@@ -179,7 +184,7 @@ process.on('SIGTERM', () => {
 // Parse BASE_URL for secure CORS construction (origin only, no pathname)
 const baseUrlObj = new URL(PDEV_BASE_URL);
 const protocol = baseUrlObj.protocol; // 'https:'
-const hostname = baseUrlObj.hostname; // 'walletsnack.com' or 'partner-company.com'
+const hostname = baseUrlObj.hostname; // 'vyxenai.com' or 'partner-company.com'
 const port = baseUrlObj.port; // '' or '3077'
 
 const baseOrigin = `${protocol}//${hostname}${port ? ':' + port : ''}`;
@@ -1506,10 +1511,358 @@ app.get('/servers', (req, res) => {
 });
 
 // =============================================================================
+// WEBSSH INSTALLER ENDPOINT
+// =============================================================================
+
+const wss = new WebSocket.Server({ noServer: true });
+const INSTALL_SCRIPT_URL = 'https://vyxenai.com/pdev/install.sh';
+
+// Session storage for WebSocket authentication
+const installerTokens = new Map(); // Map<token, { ip, createdAt, used }>
+const wsRateLimiter = new Map(); // Map<ip, { count, resetAt }>
+
+let activeWSConnections = 0;
+const MAX_CONCURRENT_WS = 10;
+
+// Cleanup rate limiter every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, limit] of wsRateLimiter.entries()) {
+    if (now > limit.resetAt + 60000) {
+      wsRateLimiter.delete(ip);
+    }
+  }
+}, 5 * 60 * 1000);
+
+// Shell escaping for command parameters
+function escapeShellArg(arg) {
+  if (typeof arg !== 'string') return '';
+  return "'" + arg.replace(/'/g, "'\\''") + "'";
+}
+
+// Validate FQDN for domain input
+function isValidFQDN(domain) {
+  if (!domain || typeof domain !== 'string') return false;
+  return validator.isFQDN(domain, { require_tld: true, allow_underscores: false });
+}
+
+// Validate source URL (must be HTTPS)
+function isValidSourceURL(url) {
+  if (!url || typeof url !== 'string') return false;
+  if (!url.startsWith('https://')) return false;
+  try {
+    const parsed = new URL(url);
+    return isValidFQDN(parsed.hostname);
+  } catch (e) {
+    return false;
+  }
+}
+
+// Check WebSocket rate limit (5 connections per 60 seconds per IP)
+function checkWSRateLimit(ip) {
+  const now = Date.now();
+  const limit = wsRateLimiter.get(ip);
+
+  if (!limit || now > limit.resetAt) {
+    wsRateLimiter.set(ip, { count: 1, resetAt: now + 60000 });
+    return true;
+  }
+
+  if (limit.count >= 5) {
+    return false;
+  }
+
+  limit.count++;
+  return true;
+}
+
+// Generate auth token for WebSocket upgrade
+function generateWSAuthToken() {
+  return require('crypto').randomBytes(32).toString('hex');
+}
+
+// Validate auth message
+function validateAuthMessage(data) {
+  const errors = [];
+
+  if (!data.host || typeof data.host !== 'string' || data.host.length > 253) {
+    errors.push('Invalid host');
+  }
+
+  if (data.port && (typeof data.port !== 'number' || data.port < 1 || data.port > 65535)) {
+    errors.push('Invalid port');
+  }
+
+  if (!data.username || typeof data.username !== 'string' || data.username.length > 32) {
+    errors.push('Invalid username');
+  }
+
+  if (!['password', 'key'].includes(data.authMethod)) {
+    errors.push('Invalid authMethod');
+  }
+
+  if (!['source', 'project'].includes(data.mode)) {
+    errors.push('Invalid mode');
+  }
+
+  if (data.mode === 'source' && (!data.domain || typeof data.domain !== 'string' || data.domain.length > 253)) {
+    errors.push('Invalid domain');
+  }
+
+  if (data.mode === 'project' && (!data.sourceUrl || typeof data.sourceUrl !== 'string' || data.sourceUrl.length > 2048)) {
+    errors.push('Invalid sourceUrl');
+  }
+
+  if (data.authMethod === 'password' && !data.password) {
+    errors.push('Password required');
+  }
+
+  if (data.authMethod === 'key' && !data.privateKey) {
+    errors.push('Private key required');
+  }
+
+  return errors;
+}
+
+// Create WebSocket session endpoint (REST API)
+app.post('/installer/token', (req, res) => {
+  const clientIP = req.socket.remoteAddress;
+
+  // Rate limit check
+  if (!checkWSRateLimit(clientIP)) {
+    return res.status(429).json({ error: 'Too many connection attempts. Try again in 1 minute.' });
+  }
+
+  // Generate session token
+  const token = generateWSAuthToken();
+  installerTokens.set(token, {
+    ip: clientIP,
+    createdAt: Date.now(),
+    used: false
+  });
+
+  // Expire token after 15 minutes
+  setTimeout(() => {
+    installerTokens.delete(token);
+  }, 15 * 60 * 1000);
+
+  res.json({ token });
+});
+
+// WebSocket upgrade handler
+server.on('upgrade', (request, socket, head) => {
+  const url = new URL(request.url, `http://${request.headers.host}`);
+
+  if (url.pathname === '/webssh') {
+    // Enforce WSS in production
+    if (process.env.NODE_ENV === 'production' && !request.headers['x-forwarded-proto']?.includes('https')) {
+      socket.write('HTTP/1.1 426 Upgrade Required\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
+    const clientIP = request.socket.remoteAddress;
+    const token = url.searchParams.get('token');
+
+    // Validate token
+    const session = installerTokens.get(token);
+    if (!session) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
+    // Validate IP matches
+    if (session.ip !== clientIP) {
+      socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+      socket.destroy();
+      installerTokens.delete(token);
+      return;
+    }
+
+    // Token can only be used once
+    if (session.used) {
+      socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
+    session.used = true;
+
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request, token);
+    });
+  } else {
+    socket.destroy();
+  }
+});
+
+// WebSocket connection handler
+wss.on('connection', (ws, request, token) => {
+  console.log('[WebSSH] Client connected');
+
+  // Check max concurrent connections
+  if (activeWSConnections >= MAX_CONCURRENT_WS) {
+    ws.send(JSON.stringify({ type: 'error', message: 'Server capacity reached. Try again later.' }));
+    ws.close(1008, 'Too many connections');
+    return;
+  }
+
+  activeWSConnections++;
+
+  let sshConn = null;
+  let sshStream = null;
+  let installTimeout = null;
+
+  ws.on('message', async (message) => {
+    let data;
+    try {
+      data = JSON.parse(message);
+    } catch (e) {
+      ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }));
+      ws.close(1008, 'Invalid JSON');
+      return;
+    }
+
+    if (data.type === 'auth') {
+      // Validate all inputs
+      const validationErrors = validateAuthMessage(data);
+      if (validationErrors.length > 0) {
+        ws.send(JSON.stringify({ type: 'error', message: validationErrors.join(', ') }));
+        ws.close(1008, 'Validation failed');
+        return;
+      }
+
+      const { host, port, username, authMethod, password, privateKey, mode, domain, sourceUrl } = data;
+
+      // Validate mode-specific parameters
+      if (mode === 'source' && !isValidFQDN(domain)) {
+        ws.send(JSON.stringify({ type: 'error', message: 'Invalid domain format' }));
+        ws.close(1008, 'Invalid domain');
+        return;
+      }
+
+      if (mode === 'project' && !isValidSourceURL(sourceUrl)) {
+        ws.send(JSON.stringify({ type: 'error', message: 'Invalid source URL (must be HTTPS)' }));
+        ws.close(1008, 'Invalid source URL');
+        return;
+      }
+
+      // Build install command with proper shell escaping
+      let installCmd = `curl -fsSL ${INSTALL_SCRIPT_URL} | sudo bash -s --`;
+      if (mode === 'source') {
+        installCmd += ` --domain ${escapeShellArg(domain)}`;
+      } else {
+        installCmd += ` --source-url ${escapeShellArg(sourceUrl)}`;
+      }
+
+      // Create SSH connection
+      sshConn = new Client();
+
+      sshConn.on('ready', () => {
+        ws.send(JSON.stringify({ type: 'output', data: '\r\n\x1b[32m✅ SSH connected\x1b[0m\r\n' }));
+        ws.send(JSON.stringify({ type: 'output', data: '\x1b[33mStarting installation...\x1b[0m\r\n\r\n' }));
+
+        // Execute install command
+        sshConn.exec(installCmd, { pty: true }, (err, stream) => {
+          if (err) {
+            ws.send(JSON.stringify({ type: 'error', message: `Failed to execute command: ${err.message}` }));
+            sshConn.end();
+            ws.close(1011, 'Exec error');
+            return;
+          }
+
+          sshStream = stream;
+
+          // Set installation timeout (5 minutes)
+          installTimeout = setTimeout(() => {
+            if (sshConn) {
+              sshConn.end();
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Installation timeout (5 minutes). Please check server logs.'
+              }));
+              ws.close(1011, 'Timeout');
+            }
+          }, 5 * 60 * 1000);
+
+          stream.on('data', (data) => {
+            ws.send(JSON.stringify({ type: 'output', data: data.toString() }));
+          });
+
+          stream.stderr.on('data', (data) => {
+            ws.send(JSON.stringify({ type: 'output', data: data.toString() }));
+          });
+
+          stream.on('close', (code) => {
+            if (installTimeout) clearTimeout(installTimeout);
+
+            if (code === 0) {
+              ws.send(JSON.stringify({ type: 'success', message: 'Installation completed successfully!' }));
+              console.log('[WebSSH] Installation succeeded:', { mode, domain, sourceUrl });
+            } else {
+              ws.send(JSON.stringify({ type: 'error', message: `Installation failed with exit code ${code}` }));
+              console.error('[WebSSH] Installation failed:', { code, mode, domain, sourceUrl });
+            }
+            sshConn.end();
+          });
+        });
+      });
+
+      sshConn.on('error', (err) => {
+        ws.send(JSON.stringify({ type: 'error', message: `SSH connection failed: ${err.message}` }));
+        ws.close(1011, 'SSH error');
+        console.error('[WebSSH] SSH error:', err.message);
+      });
+
+      sshConn.on('timeout', () => {
+        ws.send(JSON.stringify({ type: 'error', message: 'SSH connection timeout' }));
+        sshConn.end();
+        ws.close(1011, 'Timeout');
+        console.error('[WebSSH] SSH timeout');
+      });
+
+      // Connect to SSH server
+      const connConfig = {
+        host,
+        port: port || 22,
+        username,
+        readyTimeout: 30000
+      };
+
+      if (authMethod === 'password') {
+        connConfig.password = password;
+      } else {
+        connConfig.privateKey = privateKey;
+      }
+
+      sshConn.connect(connConfig);
+    }
+  });
+
+  ws.on('close', () => {
+    console.log('[WebSSH] Client disconnected');
+    if (installTimeout) clearTimeout(installTimeout);
+    if (sshStream) sshStream.end();
+    if (sshConn) sshConn.end();
+    installerTokens.delete(token);
+    activeWSConnections--;
+  });
+
+  ws.on('error', (err) => {
+    console.error('[WebSSH] WebSocket error:', err);
+    if (installTimeout) clearTimeout(installTimeout);
+    if (sshStream) sshStream.end();
+    if (sshConn) sshConn.end();
+    activeWSConnections--;
+  });
+});
+
+// =============================================================================
 // START SERVER
 // =============================================================================
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('🚀 PDev Live Mirror Server v2');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -1519,6 +1872,7 @@ app.listen(PORT, () => {
   console.log('CORS Origins:', ALLOWED_ORIGINS.length, 'configured');
   console.log('Database: pdev_live @', process.env.PDEV_DB_HOST || 'localhost');
   console.log('Valid servers:', VALID_SERVERS.join(', '));
+  console.log('WebSSH: /webssh (installer endpoint)');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 });
 

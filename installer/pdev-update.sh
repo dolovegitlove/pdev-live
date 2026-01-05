@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # PDev Live Auto-Update Script
-# Checks walletsnack.com for new versions and auto-updates if available
+# Checks vyxenai.com for new versions and auto-updates if available
 #
 # Usage:
 #   ./pdev-update.sh              # Check and update if needed
