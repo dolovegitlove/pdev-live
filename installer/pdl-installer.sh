@@ -117,6 +117,8 @@ cleanup() {
             fi
         fi
     fi
+
+    return 0
 }
 
 trap cleanup EXIT
@@ -248,6 +250,8 @@ SECURITY:
   - Credentials NEVER logged to files
 
 EOF
+
+    return 0
 }
 
 # =============================================================================
@@ -429,6 +433,8 @@ parse_arguments() {
         fail "Invalid mode: $MODE (must be 'source' or 'project')"
         exit 1
     fi
+
+    return 0
 }
 
 # =============================================================================
@@ -566,6 +572,8 @@ check_system_requirements() {
     fi
 
     success "System requirements validated"
+
+    return 0
 }
 
 # =============================================================================
@@ -644,6 +652,8 @@ setup_database() {
     else
         warn "Migration verification unclear (count: $migration_count)"
     fi
+
+    return 0
 }
 
 # =============================================================================
@@ -1013,6 +1023,8 @@ EOF
     success "Permissions set (750 dirs, 600 .env - owner-only)"
 
     success "Application installed"
+
+    return 0
 }
 
 # =============================================================================
@@ -1268,6 +1280,8 @@ verify_deployment() {
     fi
 
     success "Post-deployment validation complete"
+
+    return 0
 }
 
 # =============================================================================
@@ -1524,6 +1538,8 @@ main() {
         echo ""
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     fi
+
+    return 0
 }
 
 # Run main installation
