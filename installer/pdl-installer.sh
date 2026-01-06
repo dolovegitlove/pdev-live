@@ -118,7 +118,8 @@ cleanup() {
         fi
     fi
 
-    return 0
+    # Exit with original exit code (trap on EXIT must exit, not return)
+    exit "$exit_code"
 }
 
 trap cleanup EXIT
