@@ -1545,3 +1545,6 @@ main() {
 
 # Run main installation
 main "$@"
+
+# Explicitly exit with success (main completed without errors)
+exit 0
