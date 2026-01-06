@@ -47,6 +47,14 @@ cp "$SCRIPT_DIR/.env.partner.template" "$TEMP_BUNDLE/installer/"
 # Copy migrations directory
 cp -r "$SCRIPT_DIR/migrations" "$TEMP_BUNDLE/installer/"
 
+# Copy client directory (required by Phase 7: Client Installation)
+if [[ -d "$SCRIPT_DIR/../client" ]]; then
+    cp -r "$SCRIPT_DIR/../client" "$TEMP_BUNDLE/"
+    chmod +x "$TEMP_BUNDLE/client/client.sh"
+else
+    echo "⚠️  WARNING: Client directory not found at $SCRIPT_DIR/../client"
+fi
+
 # Copy partner documentation if it exists
 [[ -f "$SCRIPT_DIR/README-PARTNER.md" ]] && cp "$SCRIPT_DIR/README-PARTNER.md" "$TEMP_BUNDLE/installer/" || true
 
