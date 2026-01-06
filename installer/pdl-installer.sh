@@ -3,7 +3,7 @@
 # ============================================================================
 # PDev-Live Remote Installer - Downloads from vyxenai.com
 # ============================================================================
-# Version: 1.0.0
+# Version: 1.0.13
 # Description: Installs PDev-Live server from remote source (vyxenai.com)
 #
 # Usage: sudo ./pdl-installer.sh [OPTIONS]
@@ -43,7 +43,7 @@ IFS=$'\n\t'
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
-VERSION="1.0.0"
+VERSION="1.0.13"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="/tmp/pdl-installer-$(date +%s).log"
 
@@ -1480,7 +1480,7 @@ main() {
 
         if [[ "$INTERACTIVE" == "true" ]]; then
             read -p "Press ENTER after saving credentials to continue..." confirm
-            clear
+            clear 2>/dev/null || true
         fi
 
         echo ""
@@ -1546,5 +1546,4 @@ main() {
 # Run main installation
 main "$@"
 
-# Explicitly exit with success (main completed without errors)
-exit 0
+# Trap cleanup EXIT will handle exit code (no explicit exit needed)
