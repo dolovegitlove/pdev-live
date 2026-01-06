@@ -29,15 +29,28 @@ trap "rm -rf $TEMP_BUNDLE" EXIT
 
 echo "📦 Preparing bundle structure..."
 
-# Copy bundled installer orchestrator script
-cp "$SCRIPT_DIR/pdev-bundled-installer.sh" "$TEMP_BUNDLE/"
-chmod +x "$TEMP_BUNDLE/pdev-bundled-installer.sh"
+# Create installer subdirectory (required by web installer wrapper)
+mkdir -p "$TEMP_BUNDLE/installer"
 
-# Copy server installer
-cp "$SCRIPT_DIR/install.sh" "$TEMP_BUNDLE/"
-chmod +x "$TEMP_BUNDLE/install.sh"
+# Copy main dual-mode installer (SOURCE + PROJECT modes)
+cp "$SCRIPT_DIR/pdl-installer.sh" "$TEMP_BUNDLE/installer/"
+chmod +x "$TEMP_BUNDLE/installer/pdl-installer.sh"
 
-# Copy documentation
+# Copy legacy installer for backward compatibility
+cp "$SCRIPT_DIR/install.sh" "$TEMP_BUNDLE/installer/"
+chmod +x "$TEMP_BUNDLE/installer/install.sh"
+
+# Copy required template files
+cp "$SCRIPT_DIR/nginx-partner-template.conf" "$TEMP_BUNDLE/installer/"
+cp "$SCRIPT_DIR/.env.partner.template" "$TEMP_BUNDLE/installer/"
+
+# Copy migrations directory
+cp -r "$SCRIPT_DIR/migrations" "$TEMP_BUNDLE/installer/"
+
+# Copy partner documentation if it exists
+[[ -f "$SCRIPT_DIR/README-PARTNER.md" ]] && cp "$SCRIPT_DIR/README-PARTNER.md" "$TEMP_BUNDLE/installer/" || true
+
+# Copy documentation (root level for user convenience)
 mkdir -p "$TEMP_BUNDLE/docs"
 cp "$BUNDLE_DIR/README-INSTALL.md" "$TEMP_BUNDLE/"
 cp "$BUNDLE_DIR/docs/TROUBLESHOOTING.md" "$TEMP_BUNDLE/docs/"

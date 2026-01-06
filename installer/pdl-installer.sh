@@ -616,11 +616,24 @@ setup_database() {
     fi
 
     log "Applying migration: 001_create_tables.sql"
-    sudo -u postgres psql -d pdev_live -f "$migration_dir/001_create_tables.sql"
+    # Use cat pipe to avoid permission denied (postgres user can't read pdev-source owned files)
+    cat "$migration_dir/001_create_tables.sql" | sudo -u postgres psql -d pdev_live \
+        -v ON_ERROR_STOP=1 \
+        --single-transaction \
+        -q || {
+        fail "Migration 001_create_tables.sql failed"
+        exit 1
+    }
 
     if [[ -f "$migration_dir/002_add_missing_objects.sql" ]]; then
         log "Applying migration: 002_add_missing_objects.sql"
-        sudo -u postgres psql -d pdev_live -f "$migration_dir/002_add_missing_objects.sql"
+        cat "$migration_dir/002_add_missing_objects.sql" | sudo -u postgres psql -d pdev_live \
+            -v ON_ERROR_STOP=1 \
+            --single-transaction \
+            -q || {
+            fail "Migration 002_add_missing_objects.sql failed"
+            exit 1
+        }
     fi
 
     # Verify migrations
@@ -1036,12 +1049,23 @@ configure_nginx() {
 
     # Test nginx configuration
     log "Testing nginx configuration..."
-    if ! nginx -t 2>&1 | grep -q "syntax is ok"; then
+    local nginx_test_output
+    nginx_test_output=$(timeout 10 nginx -t 2>&1) || true
+
+    if echo "$nginx_test_output" | grep -q "test is successful"; then
+        # Config is valid - check for warnings
+        if echo "$nginx_test_output" | grep -q "\[warn\]"; then
+            warn "Nginx configuration valid with warnings:"
+            echo "$nginx_test_output" | grep "\[warn\]" >&2
+        else
+            success "Nginx configuration valid"
+        fi
+    else
+        # Config has errors - fail installation
         fail "Nginx configuration test failed"
-        nginx -t
+        echo "$nginx_test_output" >&2
         exit 1
     fi
-    success "Nginx configuration valid"
 
     # Enable site
     log "Enabling nginx site..."
@@ -1093,8 +1117,71 @@ start_pm2_process() {
 
     # Setup PM2 startup script
     log "Configuring PM2 startup on boot..."
-    pm2 startup systemd -u root --hp /root | tail -1 | bash
-    success "PM2 startup configured"
+
+    # Validate systemd availability
+    if ! command -v systemctl >/dev/null 2>&1; then
+        fail "systemctl not found - systemd required for PM2 startup"
+        return 1
+    fi
+
+    # Idempotency check - service already enabled
+    if systemctl is-enabled pm2-root >/dev/null 2>&1; then
+        success "PM2 startup already configured (pm2-root.service enabled)"
+        return 0
+    fi
+
+    # Edge case: Service exists but not enabled (re-installation scenario)
+    if systemctl list-unit-files pm2-root.service 2>/dev/null | grep -q pm2-root; then
+        log "PM2 service exists but not enabled - re-enabling..."
+        if systemctl enable pm2-root.service >/dev/null 2>&1; then
+            success "PM2 startup re-enabled successfully"
+            return 0
+        else
+            warn "Failed to re-enable existing PM2 service - will recreate"
+            systemctl disable pm2-root.service >/dev/null 2>&1 || true
+            rm -f /etc/systemd/system/pm2-root.service
+            systemctl daemon-reload
+        fi
+    fi
+
+    # Run PM2 startup command (creates and enables systemd service)
+    log "Running PM2 startup command..."
+    if ! pm2 startup systemd -u root --hp /root >/dev/null 2>&1; then
+        fail "PM2 startup command failed"
+        return 1
+    fi
+
+    # Wait for systemd to process changes
+    sleep 1
+    systemctl daemon-reload
+
+    # Verify service file created
+    if [ ! -f /etc/systemd/system/pm2-root.service ]; then
+        fail "PM2 startup command succeeded but service file not created"
+        return 1
+    fi
+
+    # Verify service enabled
+    if ! systemctl is-enabled pm2-root >/dev/null 2>&1; then
+        warn "PM2 service created but not enabled - attempting manual enable..."
+
+        # Attempt manual enable as recovery
+        if systemctl enable pm2-root.service >/dev/null 2>&1; then
+            success "PM2 startup configured successfully (manual enable)"
+            return 0
+        else
+            # Rollback: Remove partially configured service
+            warn "Manual enable failed - rolling back PM2 service configuration"
+            systemctl disable pm2-root.service >/dev/null 2>&1 || true
+            rm -f /etc/systemd/system/pm2-root.service
+            systemctl daemon-reload
+            fail "PM2 startup configuration failed and rolled back"
+            return 1
+        fi
+    fi
+
+    success "PM2 startup configured successfully"
+    return 0
 }
 
 # =============================================================================
@@ -1137,12 +1224,16 @@ verify_deployment() {
     # Test 3: HTTP health endpoint (local)
     log "Checking HTTP health endpoint..."
     sleep 1
-    if ! curl -sf http://localhost:3016/health >/dev/null 2>&1; then
-        fail "HTTP health check failed"
+    # Health endpoint is protected by HTTP Basic Auth (401 expected, means server is running)
+    local health_status
+    health_status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3016/health 2>/dev/null || echo "000")
+    if [[ "$health_status" == "401" ]] || [[ "$health_status" == "200" ]]; then
+        success "HTTP health OK (status: $health_status)"
+    else
+        fail "HTTP health check failed (status: $health_status)"
         pm2 logs pdev-live --lines 50 --nostream
         exit 1
     fi
-    success "HTTP health OK"
 
     # Test 4: Database connectivity
     log "Checking database connectivity..."
