@@ -272,7 +272,7 @@
 
             try {
                 // Request token from server
-                const tokenRes = await fetch('/installer/token', { method: 'POST' });
+                const tokenRes = await fetch('/pdev/installer/token', { method: 'POST' });
                 if (!tokenRes.ok) {
                     throw new Error('Failed to obtain installation token');
                 }
@@ -281,7 +281,7 @@
                 showStatus('info', 'Connecting to server...');
 
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                const wsUrl = `${protocol}//${window.location.host}/webssh?token=${token}`;
+                const wsUrl = `${protocol}//${window.location.host}/pdev/webssh?token=${token}`;
 
                 ws = new WebSocket(wsUrl);
 
@@ -309,8 +309,10 @@
             };
 
             ws.onerror = (error) => {
-                showStatus('error', 'WebSocket connection failed');
-                console.error('WebSocket error:', error);
+                showStatus('error', 'WebSocket connection failed. Please check your network and try again.');
+                if (terminal) {
+                    terminal.write('\r\n\x1b[31mWebSocket connection error\x1b[0m\r\n');
+                }
             };
 
             ws.onclose = () => {

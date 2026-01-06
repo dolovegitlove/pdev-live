@@ -23,6 +23,7 @@ const { Client } = require('ssh2');
 const validator = require('validator');
 
 const app = express();
+app.set('trust proxy', 1); // Trust nginx reverse proxy for X-Forwarded-For
 const server = http.createServer(app);
 const PORT = parseInt(process.env.PORT || '3077', 10);
 
@@ -1516,6 +1517,7 @@ app.get('/servers', (req, res) => {
 
 const wss = new WebSocket.Server({ noServer: true });
 const INSTALL_SCRIPT_URL = 'https://vyxenai.com/pdev/install.sh';
+const INSTALL_SCRIPT_SHA256 = process.env.PDEV_INSTALL_SCRIPT_SHA256 || '';
 
 // Session storage for WebSocket authentication
 const installerTokens = new Map(); // Map<token, { ip, createdAt, used }>
@@ -1619,6 +1621,15 @@ function validateAuthMessage(data) {
 
   if (data.authMethod === 'key' && !data.privateKey) {
     errors.push('Private key required');
+  } else if (data.authMethod === 'key') {
+    // Validate private key format
+    const keyPattern = /^-----BEGIN (RSA|OPENSSH|EC|DSA) PRIVATE KEY-----[\s\S]+-----END (RSA|OPENSSH|EC|DSA) PRIVATE KEY-----$/;
+    if (!keyPattern.test(data.privateKey.trim())) {
+      errors.push('Invalid private key format');
+    }
+    if (data.privateKey.length > 16384) {
+      errors.push('Private key exceeds maximum size (16KB)');
+    }
   }
 
   return errors;
@@ -1626,7 +1637,7 @@ function validateAuthMessage(data) {
 
 // Create WebSocket session endpoint (REST API)
 app.post('/installer/token', (req, res) => {
-  const clientIP = req.socket.remoteAddress;
+  const clientIP = req.ip; // Get real client IP from X-Forwarded-For (trust proxy enabled)
 
   // Rate limit check
   if (!checkWSRateLimit(clientIP)) {
@@ -1774,17 +1785,17 @@ wss.on('connection', (ws, request, token) => {
 
           sshStream = stream;
 
-          // Set installation timeout (5 minutes)
+          // Set installation timeout (2 minutes)
           installTimeout = setTimeout(() => {
             if (sshConn) {
               sshConn.end();
               ws.send(JSON.stringify({
                 type: 'error',
-                message: 'Installation timeout (5 minutes). Please check server logs.'
+                message: 'Installation timeout (2 minutes). Please check server logs.'
               }));
               ws.close(1011, 'Timeout');
             }
-          }, 5 * 60 * 1000);
+          }, 2 * 60 * 1000);
 
           stream.on('data', (data) => {
             ws.send(JSON.stringify({ type: 'output', data: data.toString() }));
@@ -1827,7 +1838,7 @@ wss.on('connection', (ws, request, token) => {
         host,
         port: port || 22,
         username,
-        readyTimeout: 30000
+        readyTimeout: 10000
       };
 
       if (authMethod === 'password') {

@@ -758,6 +758,77 @@ extract_source() {
         fi
     done < <(find "$temp_extract" -type f)
 
+    # Handle nested directory structure (e.g., server/ subdirectory in tarball)
+    log "Checking for nested directory structure..."
+
+    local subdirs
+    subdirs=$(find "$temp_extract" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
+    local subdir_count
+    subdir_count=$(echo "$subdirs" | grep -c '^' 2>/dev/null || echo 0)
+
+    # Only flatten if EXACTLY one subdirectory exists
+    if [[ $subdir_count -eq 1 ]]; then
+        local subdir
+        subdir=$(echo "$subdirs" | head -1)
+        local subdir_name
+        subdir_name=$(basename "$subdir")
+
+        log "Found single subdirectory: $subdir_name/"
+
+        # Security: Verify subdirectory is within temp_extract (no path traversal)
+        local real_subdir
+        real_subdir=$(cd "$subdir" && pwd -P)
+        local real_extract
+        real_extract=$(cd "$temp_extract" && pwd -P)
+
+        if [[ ! "$real_subdir" =~ ^"$real_extract"/ ]]; then
+            error "Security violation: subdirectory outside extraction path"
+            return 1
+        fi
+
+        # Check if subdirectory contains expected server files
+        if [[ -f "$subdir/server.js" && -f "$subdir/package.json" ]]; then
+            log "Detected server files in $subdir_name/ - flattening structure..."
+
+            # Security: Check for symlinks before moving (prevent symlink attacks)
+            if find "$subdir" -type l | grep -q .; then
+                warn "Symlinks detected in $subdir_name/ - skipping flatten for security"
+            else
+                # Count files to verify move completeness
+                local file_count
+                file_count=$(find "$subdir" -mindepth 1 | wc -l | tr -d ' ')
+                log "Moving $file_count items from $subdir_name/ to root..."
+
+                # Move files explicitly (avoid glob expansion security issues)
+                if ! find "$subdir" -mindepth 1 -maxdepth 1 -exec mv {} "$temp_extract"/ \;; then
+                    error "Failed to flatten directory structure during file move"
+                    return 1
+                fi
+
+                # Verify move succeeded (directory should be empty now)
+                local remaining
+                remaining=$(find "$subdir" -mindepth 1 | wc -l | tr -d ' ')
+                if [[ $remaining -gt 0 ]]; then
+                    error "Incomplete move: $remaining items remain in $subdir_name/"
+                    return 1
+                fi
+
+                # Remove empty subdirectory
+                if ! rmdir "$subdir"; then
+                    warn "Could not remove $subdir_name/ (may contain hidden files)"
+                else
+                    success "Flattened package structure ($file_count items moved)"
+                fi
+            fi
+        else
+            log "Subdirectory $subdir_name/ does not contain server files - keeping structure as-is"
+        fi
+    elif [[ $subdir_count -gt 1 ]]; then
+        log "Multiple subdirectories found - assuming flat structure"
+    else
+        log "No subdirectories found - structure is already flat"
+    fi
+
     # Verify expected structure
     if [[ ! -f "$temp_extract/server.js" ]] || [[ ! -f "$temp_extract/package.json" ]]; then
         error "Invalid package structure - missing required files"
