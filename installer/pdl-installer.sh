@@ -1289,6 +1289,8 @@ run_security_audit() {
         warn "Security audit script not found: $audit_script"
         warn "Manual security review recommended"
     fi
+
+    return 0
 }
 
 # =============================================================================
@@ -1362,6 +1364,8 @@ EOF
 
     chmod 600 "$HOME/.pdev-live-config"
     success "Client config: $HOME/.pdev-live-config (600 permissions)"
+
+    return 0
 }
 
 # =============================================================================
