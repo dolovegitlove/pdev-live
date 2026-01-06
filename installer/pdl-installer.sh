@@ -790,9 +790,12 @@ extract_source() {
         if [[ -f "$subdir/server.js" && -f "$subdir/package.json" ]]; then
             log "Detected server files in $subdir_name/ - flattening structure..."
 
-            # Security: Check for symlinks before moving (prevent symlink attacks)
-            if find "$subdir" -type l | grep -q .; then
-                warn "Symlinks detected in $subdir_name/ - skipping flatten for security"
+            # Security: Check for symlinks before moving (allow npm .bin/ symlinks)
+            local malicious_symlinks
+            malicious_symlinks=$(find "$subdir" -type l ! -path "*/node_modules/.bin/*" 2>/dev/null || echo "")
+            if [[ -n "$malicious_symlinks" ]]; then
+                warn "Non-npm symlinks detected in $subdir_name/ - skipping flatten for security"
+                echo "$malicious_symlinks" | head -5
             else
                 # Count files to verify move completeness
                 local file_count
