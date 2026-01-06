@@ -61,6 +61,11 @@
                 <div class="form-group">
                     <label for="ssh-username">Username</label>
                     <input type="text" id="ssh-username" placeholder="e.g., root or ubuntu" required>
+                    <div class="status-message status-info sudo-warning">
+                        <strong>⚠️ Sudo Privileges Required</strong><br>
+                        The SSH user must have passwordless sudo privileges. Installation requires system-level package installation (PostgreSQL, nginx, Node.js, PM2).<br>
+                        <small>Example: ubuntu, root, or custom user with NOPASSWD in /etc/sudoers</small>
+                    </div>
                 </div>
 
                 <div class="form-group">
@@ -247,24 +252,99 @@
         }
 
         function initTerminal() {
-            document.getElementById('terminal-container').classList.add('active');
+            // DEFENSIVE CHECK: Verify container exists
+            const container = document.getElementById('terminal-container');
+            if (!container) {
+                console.error('[FATAL] Terminal container element not found');
+                showStatus('error', 'Terminal initialization failed: container not found');
+                return false;
+            }
 
-            terminal = new Terminal({
-                cursorBlink: true,
-                fontSize: 14,
-                fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-                theme: {
-                    background: '#1e1e1e',
-                    foreground: '#d4d4d4'
+            // DEFENSIVE CHECK: Verify xterm.js loaded
+            if (typeof Terminal === 'undefined' || typeof FitAddon === 'undefined') {
+                console.error('[FATAL] xterm.js libraries failed to load');
+                showStatus('error', 'Terminal initialization failed: libraries not loaded. Check your internet connection.');
+                return false;
+            }
+
+            // PREVENT DOUBLE INITIALIZATION
+            if (terminal) {
+                console.warn('[WARN] Terminal already initialized, cleaning up old instance');
+                cleanupTerminal();
+            }
+
+            try {
+                container.classList.add('active');
+
+                terminal = new Terminal({
+                    cursorBlink: true,
+                    fontSize: 14,
+                    fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+                    theme: {
+                        background: '#1e1e1e',
+                        foreground: '#d4d4d4'
+                    }
+                });
+
+                const fitAddon = new FitAddon.FitAddon();
+                terminal.loadAddon(fitAddon);
+                terminal.open(container);
+
+                // Force reflow before fit()
+                container.offsetHeight;  // Trigger synchronous layout calculation
+
+                // Use requestAnimationFrame for guaranteed paint
+                requestAnimationFrame(() => {
+                    try {
+                        fitAddon.fit();
+                    } catch (err) {
+                        console.error('[ERROR] Terminal fit failed:', err);
+                    }
+                });
+
+                // MEMORY LEAK PREVENTION: Store resize handler for cleanup
+                const resizeHandler = () => {
+                    requestAnimationFrame(() => {
+                        try {
+                            fitAddon.fit();
+                        } catch (err) {
+                            console.error('[ERROR] Terminal resize fit failed:', err);
+                        }
+                    });
+                };
+
+                window.addEventListener('resize', resizeHandler);
+
+                // Store handler for cleanup (attach to terminal object)
+                terminal._resizeHandler = resizeHandler;
+
+                return true;
+
+            } catch (err) {
+                console.error('[FATAL] Terminal initialization failed:', err);
+                showStatus('error', 'Terminal initialization failed: ' + err.message);
+                terminal = null;  // Ensure terminal is null on failure
+                return false;
+            }
+        }
+
+        // CLEANUP FUNCTION
+        function cleanupTerminal() {
+            if (!terminal) return;
+
+            try {
+                // Remove resize listener
+                if (terminal._resizeHandler) {
+                    window.removeEventListener('resize', terminal._resizeHandler);
                 }
-            });
 
-            const fitAddon = new FitAddon.FitAddon();
-            terminal.loadAddon(fitAddon);
-            terminal.open(document.getElementById('terminal-container'));
-            fitAddon.fit();
+                // Dispose terminal instance
+                terminal.dispose();
+                terminal = null;
 
-            window.addEventListener('resize', () => fitAddon.fit());
+            } catch (err) {
+                console.error('[ERROR] Terminal cleanup failed:', err);
+            }
         }
 
         async function connectWebSocket(config) {
@@ -298,13 +378,21 @@
                 const data = JSON.parse(event.data);
 
                 if (data.type === 'output') {
-                    terminal.write(data.data);
+                    if (terminal) {
+                        terminal.write(data.data);
+                    } else {
+                        console.error('[ERROR] Terminal not initialized, cannot write output');
+                    }
                 } else if (data.type === 'error') {
                     showStatus('error', data.message);
-                    terminal.write(`\r\n\x1b[31mError: ${data.message}\x1b[0m\r\n`);
+                    if (terminal) {
+                        terminal.write(`\r\n\x1b[31mError: ${data.message}\x1b[0m\r\n`);
+                    }
                 } else if (data.type === 'success') {
                     showStatus('success', 'Installation completed successfully!');
-                    terminal.write(`\r\n\x1b[32m✅ Installation complete!\x1b[0m\r\n`);
+                    if (terminal) {
+                        terminal.write(`\r\n\x1b[32m✅ Installation complete!\x1b[0m\r\n`);
+                    }
                 }
             };
 
@@ -316,7 +404,10 @@
             };
 
             ws.onclose = () => {
-                terminal.write('\r\n\x1b[33mConnection closed\x1b[0m\r\n');
+                if (terminal) {
+                    terminal.write('\r\n\x1b[33mConnection closed\x1b[0m\r\n');
+                }
+                cleanupTerminal();
             };
         }
     </script>

@@ -190,6 +190,9 @@ body {
     border-radius: 8px;
     padding: 20px;
     min-height: 400px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
     display: none;
 }
 
@@ -251,6 +254,10 @@ body {
     color: #718096;
     margin-bottom: 20px;
     margin-top: 0;
+}
+
+.sudo-warning {
+    margin-top: 10px;
 }
 
 .step h2 {
