@@ -734,8 +734,9 @@ extract_source() {
         return 1
     }
 
-    # Ensure cleanup on function return
-    trap 'rm -rf "$temp_extract"' RETURN
+    # Ensure cleanup on function return (capture value now to avoid unbound variable with set -u)
+    # shellcheck disable=SC2064
+    trap "rm -rf '$temp_extract'" RETURN
 
     # Extract with safety options
     if ! tar -xzf "$tarball" -C "$temp_extract" --no-same-owner 2>/dev/null; then

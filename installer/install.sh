@@ -21,7 +21,7 @@ IFS=$'\n\t'
 # =============================================================================
 VERSION="1.0.0"
 INSTALLER_URL="https://vyxenai.com/pdev/install/pdev-partner-installer.tar.gz"
-INSTALLER_SHA256="1e9df2d44138048da4872abda48b7787e2a41cead82a71fad000c031614173e4"
+INSTALLER_SHA256="3c7a28425532096bc97a52afcb59d40946bfbf86ee1e0e6578cc739f93fcb3f1"
 TEMP_DIR=""
 LOG_FILE=$(mktemp /tmp/pdev-install-wrapper.XXXXXX.log)
 
