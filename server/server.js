@@ -1921,7 +1921,19 @@ wss.on('connection', (ws, request, token) => {
         connConfig.privateKey = privateKey;
       }
 
-      sshConn.connect(connConfig);
+      // CRITICAL: Wrap connect() in try-catch to handle synchronous errors
+      // ssh2 throws synchronous errors for invalid key formats BEFORE 'error' event fires
+      // Without this, malformed keys cause unhandled exceptions that crash the WebSocket
+      // handler without sending any error message to the client
+      try {
+        sshConn.connect(connConfig);
+      } catch (err) {
+        console.error('[WebSSH] SSH connect error:', err.message);
+        ws.send(JSON.stringify({ type: 'error', message: `SSH connection failed: ${err.message}` }));
+        sshConn.end();  // Cleanup SSH client object
+        ws.close(1011, 'SSH connect error');
+        return;
+      }
     }
   });
 
