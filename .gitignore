@@ -6,3 +6,6 @@ logs/
 *.backup
 desktop/dist/
 installer/dist/
+
+# Deployment logs
+.deploy-log
