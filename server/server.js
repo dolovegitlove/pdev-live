@@ -1699,7 +1699,7 @@ function validateAuthMessage(data) {
 }
 
 // Create WebSocket session endpoint (REST API)
-app.post('/installer/token', (req, res) => {
+app.post('/pdev/installer/token', (req, res) => {
   const clientIP = req.ip; // Get real client IP from X-Forwarded-For (trust proxy enabled)
 
   // Rate limit check
@@ -1727,7 +1727,7 @@ app.post('/installer/token', (req, res) => {
 server.on('upgrade', (request, socket, head) => {
   const url = new URL(request.url, `http://${request.headers.host}`);
 
-  if (url.pathname === '/webssh') {
+  if (url.pathname === '/pdev/webssh') {
     // Enforce WSS in production
     if (process.env.NODE_ENV === 'production' && !request.headers['x-forwarded-proto']?.includes('https')) {
       socket.write('HTTP/1.1 426 Upgrade Required\r\n\r\n');
@@ -2013,7 +2013,7 @@ async function validateDatabaseSchema() {
     console.log('CORS Origins:', ALLOWED_ORIGINS.length, 'configured');
     console.log('Database: pdev_live @', process.env.PDEV_DB_HOST || 'localhost');
     console.log('Valid servers:', VALID_SERVERS.join(', '));
-    console.log('WebSSH: /webssh (installer endpoint)');
+    console.log('WebSSH: /pdev/webssh (installer endpoint)');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   });
 })();
