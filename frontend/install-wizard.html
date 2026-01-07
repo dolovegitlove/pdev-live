@@ -93,8 +93,16 @@
 
                 <div class="form-group hidden" id="key-field">
                     <label for="ssh-key">Private Key</label>
-                    <textarea id="ssh-key" rows="6"></textarea>
-                    <small>Paste your private key (e.g., contents of ~/.ssh/id_rsa)</small>
+                    <textarea id="ssh-key" rows="10" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAA...
+...your key content here...
+-----END OPENSSH PRIVATE KEY-----
+
+Or RSA PEM format:
+-----BEGIN RSA PRIVATE KEY-----
+MIIEpAIBAAKCAQEA...
+-----END RSA PRIVATE KEY-----"></textarea>
+                    <small>Paste your private key (OpenSSH or RSA PEM format). Find it at <code>~/.ssh/id_rsa</code> or <code>~/.ssh/id_ed25519</code></small>
                 </div>
 
                 <div class="form-group hidden" id="domain-field">
