@@ -107,7 +107,8 @@ cleanup() {
 
         if [[ "$DRY_RUN" == "false" ]]; then
             if [[ "$INTERACTIVE" == "true" ]]; then
-                read -p "Rollback installation? (y/n): " ROLLBACK
+                local ROLLBACK
+                read -r -p "Rollback installation? (y/n): " ROLLBACK
                 if [[ "$ROLLBACK" == "y" ]]; then
                     rollback_installation
                 fi
@@ -153,7 +154,8 @@ rollback_installation() {
     # Drop database (prompt first)
     if [[ "$DB_CREATED" == "true" ]]; then
         if [[ "$INTERACTIVE" == "true" ]]; then
-            read -p "Drop database pdev_live? (y/n): " DROP_DB
+            local DROP_DB
+            read -r -p "Drop database pdev_live? (y/n): " DROP_DB
             if [[ "$DROP_DB" == "y" ]]; then
                 log "Dropping database..."
                 sudo -u postgres psql -c "DROP DATABASE IF EXISTS pdev_live;" 2>/dev/null || true
@@ -273,7 +275,8 @@ validate_domain() {
         warn "Domain is localhost or private IP: $domain"
         warn "SSL certificate generation may fail"
         if [[ "$INTERACTIVE" == "true" ]]; then
-            read -p "Continue anyway? (y/n): " CONTINUE
+            local CONTINUE
+            read -r -p "Continue anyway? (y/n): " CONTINUE
             [[ "$CONTINUE" != "y" ]] && return 1
         fi
     fi
@@ -296,7 +299,8 @@ validate_source_url() {
         warn "Source URL uses HTTP (not HTTPS): $url"
         warn "This is insecure for production use"
         if [[ "$INTERACTIVE" == "true" ]]; then
-            read -p "Continue anyway? (y/n): " CONTINUE
+            local CONTINUE
+            read -r -p "Continue anyway? (y/n): " CONTINUE
             [[ "$CONTINUE" != "y" ]] && return 1
         fi
     fi
@@ -541,7 +545,8 @@ check_system_requirements() {
         if pm2 list 2>/dev/null | grep -q "pdev-live"; then
             warn "Existing PDev-Live installation detected"
             if [[ "$INTERACTIVE" == "true" ]]; then
-                read -p "Overwrite existing installation? (y/n): " OVERWRITE
+                local OVERWRITE
+                read -r -p "Overwrite existing installation? (y/n): " OVERWRITE
                 [[ "$OVERWRITE" != "y" ]] && exit 1
             else
                 fail "Existing installation found (use --force to overwrite)"
@@ -562,7 +567,8 @@ check_system_requirements() {
         warn "You must run certbot first:"
         warn "  sudo certbot certonly --nginx -d $DOMAIN"
         if [[ "$INTERACTIVE" == "true" ]]; then
-            read -p "Continue anyway? (nginx config will be created but HTTPS won't work) (y/n): " CONTINUE
+            local CONTINUE
+            read -r -p "Continue anyway? (nginx config will be created but HTTPS won't work) (y/n): " CONTINUE
             [[ "$CONTINUE" != "y" ]] && exit 1
         else
             fail "SSL certificate required (run certbot first)"
@@ -1051,6 +1057,25 @@ configure_nginx() {
     fi
 
     local nginx_config="/etc/nginx/sites-available/pdev-live"
+
+    # IDEMPOTENCY: Check for existing nginx config
+    if [[ -f "$nginx_config" ]] && [[ "$FORCE_INSTALL" == "false" ]]; then
+        warn "Nginx config already exists: $nginx_config"
+        if [[ "$INTERACTIVE" == "true" ]]; then
+            local OVERWRITE_NGINX
+            read -r -p "Overwrite existing nginx config? (y/n): " OVERWRITE_NGINX
+            if [[ "$OVERWRITE_NGINX" != "y" ]]; then
+                warn "Skipping nginx configuration"
+                NGINX_CONFIGURED=false
+                return 0
+            fi
+        else
+            warn "Skipping nginx configuration (use --force to overwrite)"
+            NGINX_CONFIGURED=false
+            return 0
+        fi
+    fi
+
     sed "s/PARTNER_DOMAIN/$DOMAIN/g" "$template" > "$nginx_config"
     success "Nginx config generated"
 
@@ -1479,7 +1504,8 @@ main() {
         echo ""
 
         if [[ "$INTERACTIVE" == "true" ]]; then
-            read -p "Press ENTER after saving credentials to continue..." confirm
+            local confirm
+            read -r -p "Press ENTER after saving credentials to continue..." confirm
             clear 2>/dev/null || true
         fi
 

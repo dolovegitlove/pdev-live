@@ -21,6 +21,12 @@ const { Pool } = require('pg');
 const WebSocket = require('ws');
 const { Client } = require('ssh2');
 const validator = require('validator');
+const createDOMPurify = require('dompurify');
+const { JSDOM } = require('jsdom');
+
+// DOMPurify setup for server-side sanitization
+const window = new JSDOM('').window;
+const DOMPurify = createDOMPurify(window);
 
 const app = express();
 app.set('trust proxy', 1); // Trust nginx reverse proxy for X-Forwarded-For
@@ -67,7 +73,9 @@ const pool = new Pool({
   password: process.env.PDEV_DB_PASSWORD || (() => { console.error('FATAL: PDEV_DB_PASSWORD required'); process.exit(1); })(),
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 10000,  // Increased from 2000ms to 10000ms (10 seconds)
+  statement_timeout: 30000,         // Kill queries after 30 seconds
+  query_timeout: 30000              // Client-side query timeout
 });
 
 // Connection pool error handlers
@@ -83,6 +91,28 @@ pool.on('connect', (client) => {
 pool.on('remove', (client) => {
   console.log('Database connection removed from pool');
 });
+
+// Connection leak detection (every 30 seconds)
+setInterval(() => {
+  const totalConns = pool.totalCount;
+  const idleConns = pool.idleCount;
+  const waitingConns = pool.waitingCount;
+
+  // Warn if > 90% pool utilization
+  if (totalConns >= 18) {
+    console.warn('[POOL] High connection usage:', {
+      total: totalConns,
+      idle: idleConns,
+      waiting: waitingConns,
+      active: totalConns - idleConns
+    });
+  }
+
+  // Critical if waiting requests
+  if (waitingConns > 0) {
+    console.error('[POOL] Connection pool exhausted! Waiting requests:', waitingConns);
+  }
+}, 30000);
 
 // Configure marked for syntax highlighting
 marked.setOptions({
@@ -476,7 +506,11 @@ async function createSession({ server, hostname, project, projectPath, cwd, comm
 }
 
 async function addStep({ sessionId, stepNumber, stepType, phaseName, phaseNumber, subPhase, contentMarkdown, commandText, exitCode, documentName }) {
-  const contentHtml = contentMarkdown ? marked.parse(contentMarkdown) : null;
+  // SECURITY: Sanitize markdown to prevent XSS attacks
+  const contentHtml = contentMarkdown ? DOMPurify.sanitize(marked.parse(contentMarkdown), {
+    ALLOWED_TAGS: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'li', 'code', 'pre', 'a', 'strong', 'em', 'blockquote', 'table', 'tr', 'td', 'th', 'thead', 'tbody', 'br', 'hr', 'span', 'div'],
+    ALLOWED_ATTR: ['href', 'class', 'id']
+  }) : null;
   const contentPlain = contentMarkdown ? contentMarkdown.replace(/[#*_`]/g, '').substring(0, 500) : null;
 
   const result = await pool.query(`
@@ -496,7 +530,11 @@ async function addStep({ sessionId, stepNumber, stepType, phaseName, phaseNumber
 }
 
 async function completeSession(sessionId, status = 'completed', summaryMarkdown = null) {
-  const summaryHtml = summaryMarkdown ? marked.parse(summaryMarkdown) : null;
+  // SECURITY: Sanitize markdown to prevent XSS attacks
+  const summaryHtml = summaryMarkdown ? DOMPurify.sanitize(marked.parse(summaryMarkdown), {
+    ALLOWED_TAGS: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'li', 'code', 'pre', 'a', 'strong', 'em', 'blockquote', 'table', 'tr', 'td', 'th', 'thead', 'tbody', 'br', 'hr', 'span', 'div'],
+    ALLOWED_ATTR: ['href', 'class', 'id']
+  }) : null;
 
   await pool.query(`
     UPDATE pdev_sessions
@@ -550,6 +588,25 @@ async function getNextStepNumber(sessionId) {
     SELECT COALESCE(MAX(step_number), 0) + 1 as next FROM pdev_steps WHERE session_id = $1
   `, [sessionId]);
   return result.rows[0].next;
+}
+
+/**
+ * Execute database operations in a transaction
+ * Prevents partial updates on failure
+ */
+async function withTransaction(callback) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await callback(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // =============================================================================
@@ -640,7 +697,10 @@ app.post('/sessions/:sessionId/steps', async (req, res) => {
       phase_number: phaseNumber,
       document_name: documentName,
       content_markdown: content,
-      content_html: content ? marked.parse(content) : null,
+      content_html: content ? DOMPurify.sanitize(marked.parse(content), {
+        ALLOWED_TAGS: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'li', 'code', 'pre', 'a', 'strong', 'em', 'blockquote', 'table', 'tr', 'td', 'th', 'thead', 'tbody', 'br', 'hr', 'span', 'div'],
+        ALLOWED_ATTR: ['href', 'class', 'id']
+      }) : null,
       command_text: command,
       created_at: step.created_at
     };
@@ -1138,7 +1198,10 @@ app.post('/update', async (req, res) => {
         step_number: stepNumber,
         step_type: type || 'output',
         content_markdown: content,
-        content_html: content ? marked.parse(content) : null,
+        content_html: content ? DOMPurify.sanitize(marked.parse(content), {
+          ALLOWED_TAGS: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'li', 'code', 'pre', 'a', 'strong', 'em', 'blockquote', 'table', 'tr', 'td', 'th', 'thead', 'tbody', 'br', 'hr', 'span', 'div'],
+          ALLOWED_ATTR: ['href', 'class', 'id']
+        }) : null,
         command_text: command
       }
     });
@@ -1870,22 +1933,90 @@ wss.on('connection', (ws, request, token) => {
 });
 
 // =============================================================================
+// SCHEMA VALIDATION
+// =============================================================================
+
+/**
+ * Validate database schema before starting server
+ * Prevents runtime failures from missing tables
+ */
+async function validateDatabaseSchema() {
+  const requiredTables = [
+    'pdev_sessions',
+    'pdev_session_steps',
+    'pdev_migrations',
+    'project_manifests'
+  ];
+
+  const requiredViews = [
+    'pdev_steps',           // View alias
+    'v_active_sessions',
+    'v_session_history'
+  ];
+
+  try {
+    // Check tables exist
+    for (const table of requiredTables) {
+      const result = await pool.query(
+        `SELECT to_regclass('public.${table}') as exists`
+      );
+      if (!result.rows[0].exists) {
+        throw new Error(`Missing required table: ${table}`);
+      }
+    }
+
+    // Check views exist
+    for (const view of requiredViews) {
+      const result = await pool.query(
+        `SELECT to_regclass('public.${view}') as exists`
+      );
+      if (!result.rows[0].exists) {
+        console.warn(`[Schema] Missing view: ${view} (may need migration)`);
+      }
+    }
+
+    // Check migrations applied
+    const migResult = await pool.query(
+      `SELECT migration_name FROM pdev_migrations ORDER BY applied_at`
+    );
+    const appliedMigrations = migResult.rows.map(r => r.migration_name);
+    console.log('[Schema] Applied migrations:', appliedMigrations.join(', '));
+
+    console.log('[Schema] ✅ Database schema validated');
+    return true;
+  } catch (err) {
+    console.error('[Schema] ❌ Database schema validation failed:', err.message);
+    console.error('[Schema] Run migrations: psql -U pdev_app -d pdev_live -f installer/migrations/*.sql');
+    return false;
+  }
+}
+
+// =============================================================================
 // START SERVER
 // =============================================================================
 
-server.listen(PORT, () => {
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log('🚀 PDev Live Mirror Server v2');
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log('Environment:', process.env.NODE_ENV || 'development');
-  console.log('Port:', PORT);
-  console.log('Base URL:', PDEV_BASE_URL);
-  console.log('CORS Origins:', ALLOWED_ORIGINS.length, 'configured');
-  console.log('Database: pdev_live @', process.env.PDEV_DB_HOST || 'localhost');
-  console.log('Valid servers:', VALID_SERVERS.join(', '));
-  console.log('WebSSH: /webssh (installer endpoint)');
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-});
+// Validate schema before starting server
+(async () => {
+  const schemaValid = await validateDatabaseSchema();
+  if (!schemaValid) {
+    console.error('FATAL: Database schema validation failed. Server not started.');
+    process.exit(1);
+  }
+
+  server.listen(PORT, () => {
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🚀 PDev Live Mirror Server v2');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('Environment:', process.env.NODE_ENV || 'development');
+    console.log('Port:', PORT);
+    console.log('Base URL:', PDEV_BASE_URL);
+    console.log('CORS Origins:', ALLOWED_ORIGINS.length, 'configured');
+    console.log('Database: pdev_live @', process.env.PDEV_DB_HOST || 'localhost');
+    console.log('Valid servers:', VALID_SERVERS.join(', '));
+    console.log('WebSSH: /webssh (installer endpoint)');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  });
+})();
 
 // =============================================================================
 // PROJECT-CENTRIC ENDPOINTS
