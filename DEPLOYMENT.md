@@ -412,8 +412,8 @@ ssh acme 'sudo chown -R acme:acme /var/www/vyxenai.com/pdev-backups/'
 | Deployment Log | dolovdev:~/pdev-live-deployment.log | - |
 
 **Production URLs:**
-- https://vyxenai.com/pdev/ (frontend)
-- https://vyxenai.com/pdev/api/ (backend API)
+- https://walletsnack.com/pdev/live/ (frontend)
+- https://walletsnack.com/pdev/api/ (backend API)
 
 **Authentication:**
 - Username: `pdev`

@@ -341,8 +341,8 @@ Defined in `server/doc-contract.json`:
 |-----------|----------|------|
 | PDev API | acme:/home/acme/pdev-api | 3016 |
 | PDev Live | acme:/opt/services/pdev-live | internal |
-| Frontend | vyxenai.com/pdev/ | 443 |
-| API URL | vyxenai.com/pdev/api/ | 443 |
+| Frontend | walletsnack.com/pdev/live/ | 443 |
+| API URL | walletsnack.com/pdev/api/ | 443 |
 
 ## PM2 Commands
 
