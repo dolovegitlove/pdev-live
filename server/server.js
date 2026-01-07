@@ -295,6 +295,9 @@ if (process.env.PDEV_SERVE_STATIC === 'true') {
   // Serve static files at root (for nginx proxy with prefix stripping)
   app.use(express.static(FRONTEND_DIR, staticOptions));
 
+  // Serve static files at /live/ (when nginx strips /pdev/ prefix)
+  app.use('/live', express.static(FRONTEND_DIR, staticOptions));
+
   // Serve static files at /pdev/live/ (for guest links via regex location)
   app.use('/pdev/live', express.static(FRONTEND_DIR, staticOptions));
 }
