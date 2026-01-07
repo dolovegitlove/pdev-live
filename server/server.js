@@ -1735,7 +1735,16 @@ server.on('upgrade', (request, socket, head) => {
       return;
     }
 
-    const clientIP = request.socket.remoteAddress;
+    // Extract client IP from X-Forwarded-For (nginx sets this) or fallback to socket address
+    // nginx uses $proxy_add_x_forwarded_for which puts real client IP first
+    const xForwardedFor = request.headers['x-forwarded-for'];
+    let clientIP = xForwardedFor
+      ? xForwardedFor.split(',')[0].trim()
+      : request.socket.remoteAddress;
+    // Normalize IPv4-mapped IPv6 to match Express req.ip (::ffff:1.2.3.4 → 1.2.3.4)
+    if (clientIP && clientIP.startsWith('::ffff:')) {
+      clientIP = clientIP.substring(7);
+    }
     const token = url.searchParams.get('token');
 
     // Validate token
@@ -1822,8 +1831,10 @@ wss.on('connection', (ws, request, token) => {
         return;
       }
 
-      // Build install command with proper shell escaping
-      let installCmd = `curl -fsSL ${INSTALL_SCRIPT_URL} | sudo bash -s --`;
+      // Build install command with --non-interactive and --force flags
+      // --non-interactive: No prompts (web wizard provides all input)
+      // --force: Overwrite existing installation if detected
+      let installCmd = `curl -fsSL ${INSTALL_SCRIPT_URL} | sudo bash -s -- --non-interactive --force`;
       if (mode === 'source') {
         installCmd += ` --domain ${escapeShellArg(domain)}`;
       } else {
