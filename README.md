@@ -162,8 +162,8 @@ chmod +x ~/.claude/tools/pdev-live/client.sh
 # Configure PDev Live server URL
 cat > ~/.pdev-live-config <<EOF
 # PDev Live Client Configuration
-PDEV_LIVE_URL=https://vyxenai.com/pdev/api
-PDEV_BASE_URL=https://vyxenai.com/pdev
+PDEV_LIVE_URL=https://walletsnack.com/pdev/api
+PDEV_BASE_URL=https://walletsnack.com/pdev
 EOF
 chmod 600 ~/.pdev-live-config
 ```

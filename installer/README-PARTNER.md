@@ -217,11 +217,11 @@ OPTIONAL (all modes):
   --help                   Show help message
 
 EXAMPLES:
-  # Source server (full stack on acme/vyxenai.com)
-  sudo ./pdl-installer.sh --domain vyxenai.com
+  # Source server (full stack on acme/walletsnack.com)
+  sudo ./pdl-installer.sh --domain walletsnack.com
 
-  # Project server (client only on ittz, posts to vyxenai.com)
-  sudo ./pdl-installer.sh --source-url https://vyxenai.com/pdev/api
+  # Project server (client only on ittz, posts to walletsnack.com)
+  sudo ./pdl-installer.sh --source-url https://walletsnack.com/pdev/api
 ```
 
 ---
