@@ -1918,7 +1918,21 @@ wss.on('connection', (ws, request, token) => {
       if (authMethod === 'password') {
         connConfig.password = password;
       } else {
-        connConfig.privateKey = privateKey;
+        // Normalize key: remove leading/trailing whitespace from each line
+        // Users often paste keys with extra indentation from code blocks or emails
+        let normalizedKey = privateKey;
+        if (privateKey) {
+          normalizedKey = privateKey
+            .split('\n')
+            .map(line => line.trim())
+            .join('\n')
+            .trim();
+        }
+        // Debug: Log key format info (first 50 chars only, no sensitive data)
+        const keyPreview = normalizedKey ? normalizedKey.substring(0, 50) : 'EMPTY';
+        const keyLength = normalizedKey ? normalizedKey.length : 0;
+        console.log('[WebSSH] Key debug:', { keyLength, keyPreview: keyPreview + '...', hasNewlines: normalizedKey?.includes('\n') });
+        connConfig.privateKey = normalizedKey;
       }
 
       // CRITICAL: Wrap connect() in try-catch to handle synchronous errors
