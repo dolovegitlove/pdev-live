@@ -43,7 +43,7 @@ IFS=$'\n\t'
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
-VERSION="1.0.13"
+VERSION="1.0.14"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="/tmp/pdl-installer-$(date +%s).log"
 
@@ -286,6 +286,9 @@ validate_domain() {
 
 validate_source_url() {
     local url="$1"
+    local http_status
+    local health_url
+    local curl_args=()
 
     # Check URL format
     if [[ ! "$url" =~ ^https?:// ]]; then
@@ -305,23 +308,68 @@ validate_source_url() {
         fi
     fi
 
-    # Test reachability
-    log "Testing source server reachability: $url"
-    local health_url="${url%/api}/health"  # Try /health endpoint
-    if ! curl -sf --max-time 10 "$health_url" >/dev/null 2>&1; then
-        # Try /api/health as fallback
-        health_url="$url/health"
-        if ! curl -sf --max-time 10 "$health_url" >/dev/null 2>&1; then
-            fail "Source server unreachable: $url"
-            error "Troubleshooting:"
-            error "  1. Check internet connectivity: ping $(echo $url | sed 's|https\?://||' | cut -d'/' -f1)"
-            error "  2. Verify URL is correct"
-            error "  3. Check firewall rules"
+    # Derive health URL from source URL
+    health_url="${url%/api}/health"
+    log "Testing source server reachability: $health_url"
+
+    # First attempt: try without authentication
+    http_status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$health_url" 2>/dev/null) || true
+
+    # Handle 401 Unauthorized - server requires authentication
+    if [[ "$http_status" == "401" ]]; then
+        log "Server requires HTTP Basic Authentication (401)"
+
+        # Check if credentials provided via flags
+        if [[ -z "${HTTP_USER:-}" ]] || [[ -z "${HTTP_PASSWORD:-}" ]]; then
+            if [[ "$INTERACTIVE" == "true" ]]; then
+                warn "The source server requires authentication credentials"
+                warn "These protect access to the PDev Live dashboard"
+                echo ""
+                read -r -p "HTTP Username: " HTTP_USER
+                read -rs -p "HTTP Password: " HTTP_PASSWORD
+                echo ""
+
+                if [[ -z "$HTTP_USER" ]] || [[ -z "$HTTP_PASSWORD" ]]; then
+                    fail "Username and password are required"
+                    return 1
+                fi
+            else
+                fail "Server requires authentication but running in non-interactive mode"
+                error "Use --http-user and --http-password flags"
+                error "Example: --http-user pdev --http-password 'yourpassword'"
+                return 1
+            fi
+        fi
+
+        # Retry with credentials
+        log "Retrying with authentication..."
+        http_status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+            -u "${HTTP_USER}:${HTTP_PASSWORD}" "$health_url" 2>/dev/null) || true
+
+        if [[ "$http_status" == "401" ]]; then
+            fail "Authentication failed (invalid credentials)"
+            error "Verify username and password are correct"
             return 1
         fi
     fi
 
+    # Check for success (200 or 000 means curl succeeded)
+    if [[ "$http_status" != "200" ]]; then
+        fail "Source server unreachable: $health_url (HTTP $http_status)"
+        error "Troubleshooting:"
+        error "  1. Check internet connectivity: ping $(echo "$url" | sed 's|https\?://||' | cut -d'/' -f1)"
+        error "  2. Verify URL is correct"
+        error "  3. Check firewall rules"
+        if [[ "$http_status" == "000" ]]; then
+            error "  4. Connection timed out or DNS resolution failed"
+        fi
+        return 1
+    fi
+
     success "Source server reachable: $health_url"
+    if [[ -n "${HTTP_USER:-}" ]]; then
+        success "Authentication successful (user: $HTTP_USER)"
+    fi
     return 0
 }
 
@@ -1400,6 +1448,18 @@ PDEV_LIVE_URL=$SOURCE_URL
 # Dashboard base URL (auto-derived if not set)
 PDEV_BASE_URL=$base_url
 EOF
+
+        # Add HTTP auth credentials if provided (for authenticated source servers)
+        if [[ -n "${HTTP_USER:-}" ]] && [[ -n "${HTTP_PASSWORD:-}" ]]; then
+            cat >> "$HOME/.pdev-live-config" <<EOF
+
+# HTTP Basic Auth (for authenticated source servers)
+# These credentials are used by client.sh to authenticate API requests
+PDEV_HTTP_USER=$HTTP_USER
+PDEV_HTTP_PASSWORD=$HTTP_PASSWORD
+EOF
+            log "HTTP credentials stored in config"
+        fi
     fi
 
     chmod 600 "$HOME/.pdev-live-config"
