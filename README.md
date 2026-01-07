@@ -337,22 +337,40 @@ Defined in `server/doc-contract.json`:
 
 ## Environment
 
-| Component | Location | Port |
-|-----------|----------|------|
-| PDev API | acme:/home/acme/pdev-api | 3016 |
-| PDev Live | acme:/opt/services/pdev-live | internal |
-| Frontend | walletsnack.com/pdev/live/ | 443 |
-| API URL | walletsnack.com/pdev/api/ | 443 |
+### Production Architecture (Two Separate Backends)
+
+**1. vyxenai.com - Installer Wizard Backend**
+- **Purpose:** Handles remote installation wizard WebSocket sessions
+- **Location:** acme:/opt/services/vyxenai-installer/server
+- **Port:** 3078 (internal), 443 (nginx proxy)
+- **URL:** https://vyxenai.com/pdev/
+- **Database:** vyxenai_installer (PostgreSQL)
+- **PM2 Service:** vyxenai-installer
+
+**2. walletsnack.com - Production Pipeline Backend**
+- **Purpose:** Receives pipeline docs from project servers (ittz, cfree, etc.)
+- **Location:** acme:/opt/services/pdev-live/ (to be installed)
+- **Port:** 3077 (internal), 443 (nginx proxy)
+- **URL:** https://walletsnack.com/pdev/api/
+- **Database:** pdev_live (PostgreSQL)
+- **PM2 Service:** pdev-live
+
+| Component | Location | Port | Purpose |
+|-----------|----------|------|---------|
+| Installer Backend | acme:/opt/services/vyxenai-installer | 3078 | WebSocket installer sessions |
+| Production Backend | acme:/opt/services/pdev-live | 3077 | Pipeline doc storage |
+| Installer Frontend | vyxenai.com/pdev/ | 443 | Installation wizard UI |
+| Production Frontend | walletsnack.com/pdev/live/ | 443 | Dashboard/docs viewer |
 
 ## PM2 Commands
 
 ```bash
-# View logs
-pm2 logs pdev-api
-pm2 logs pdev-live
+# Installer wizard backend
+pm2 logs vyxenai-installer
+pm2 restart vyxenai-installer
 
-# Restart
-pm2 restart pdev-api
+# Production backend
+pm2 logs pdev-live
 pm2 restart pdev-live
 
 # Status
