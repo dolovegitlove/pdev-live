@@ -280,9 +280,10 @@ if (process.env.PDEV_SERVE_STATIC === 'true') {
     index: 'index.html',
     redirect: false,
     setHeaders: (res, filePath) => {
-      // Prevent caching of HTML (always get latest)
+      // Prevent caching of HTML (always get latest) but allow credential caching
+      // Note: no-store breaks HTTP Basic Auth credential caching in browsers
       if (filePath.endsWith('.html')) {
-        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Cache-Control', 'no-cache, must-revalidate');
         res.setHeader('X-Content-Type-Options', 'nosniff');
         res.setHeader('X-Frame-Options', 'DENY');
       } else {
