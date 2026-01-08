@@ -145,6 +145,12 @@
   color: var(--accent);
 }
 
+.info-callout ul {
+  margin: 0.5rem 0 0 1.5rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 /* Pipeline Visual */
 .pipeline-visual {
   display: flex;
@@ -393,6 +399,10 @@
   font-family: 'Monaco', 'Courier New', monospace;
   font-size: 0.85rem;
   color: var(--accent);
+}
+
+.faq-item ul {
+  margin: 0.5rem 0 0 1.5rem;
 }
 
 /* Tips Grid */

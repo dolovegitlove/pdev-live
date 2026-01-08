@@ -25,9 +25,47 @@
 
     <div class="container docs-container">
         <header class="docs-header">
-            <h1 class="docs-title">PDev Pipeline Documentation</h1>
-            <p class="docs-subtitle">Complete reference for the PDev document generation pipeline</p>
+            <h1 class="docs-title">PDev Documentation</h1>
+            <p class="docs-subtitle">Everything you need to know about PDev Suite and PDev Live</p>
         </header>
+
+        <!-- Understanding PDev -->
+        <section class="docs-section">
+            <h2 id="understanding">Understanding PDev</h2>
+            <p class="section-intro">PDev has three parts. Here's what each one does:</p>
+
+            <table class="scope-table">
+                <thead>
+                    <tr>
+                        <th>Term</th>
+                        <th>What It Is</th>
+                        <th>When You Use It</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>PDev Suite</strong></td>
+                        <td>A methodology for product development - 9 documents that take you from idea to implementation</td>
+                        <td>Always. It's the framework everything else is built on.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Pipeline Commands</strong><br><code>/pdev</code>, <code>/idea</code>, <code>/spec</code>, etc.</td>
+                        <td>Claude Code slash commands that generate pipeline documents</td>
+                        <td>In Claude sessions. Type these to create docs.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>PDev Live</strong></td>
+                        <td>This web dashboard - view, share, and manage your pipeline documents</td>
+                        <td>In your browser. Docs stream here automatically.</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="info-callout">
+                <h4>In short</h4>
+                <p>Type <code>/pdev start myproject</code> in Claude. Documents appear here automatically. That's it.</p>
+            </div>
+        </section>
 
         <!-- Quick Start -->
         <section class="docs-section">
@@ -36,57 +74,51 @@
                 <div class="quick-card">
                     <div class="quick-number">1</div>
                     <div class="quick-content">
-                        <h3>Start a Session</h3>
+                        <h3>Start a Project</h3>
                         <code>/pdev start my-project</code>
-                        <p>Opens the guided wizard and streams to PDev Live</p>
+                        <p>Opens the guided wizard in Claude. Streaming to PDev Live starts automatically.</p>
                     </div>
                 </div>
                 <div class="quick-card">
                     <div class="quick-number">2</div>
                     <div class="quick-content">
-                        <h3>Run Pipeline Commands</h3>
-                        <code>/idea my-project</code>
-                        <p>Generate documents step by step through the pipeline</p>
+                        <h3>Generate Documents</h3>
+                        <code>/idea</code> <code>/bmrk</code> <code>/spec</code>
+                        <p>Run pipeline commands to generate each document in sequence.</p>
                     </div>
                 </div>
                 <div class="quick-card">
                     <div class="quick-number">3</div>
                     <div class="quick-content">
                         <h3>View in PDev Live</h3>
-                        <p>Documents stream to the dashboard in real-time as they're created</p>
+                        <p>Documents appear here in real-time as Claude generates them. No manual sync needed.</p>
                     </div>
                 </div>
-            </div>
-
-            <div class="info-callout">
-                <h4>Slash Commands vs CLI Tool</h4>
-                <p><strong><code>/pdev</code>, <code>/idea</code>, etc.</strong> are Claude Code slash commands - use these in your Claude sessions. They call the <code>pdev-live</code> CLI tool under the hood to stream docs to this dashboard.</p>
-                <p><strong><code>pdev-live</code></strong> is the CLI tool you can also run directly from terminal (e.g., <code>pdev-live seed</code> to manually sync existing docs).</p>
             </div>
         </section>
 
         <!-- Pipeline Commands -->
         <section class="docs-section">
             <h2 id="pipeline">Pipeline Commands</h2>
-            <p class="section-intro">The PDev pipeline consists of 9 sequential phases. Each command generates a structured markdown document.</p>
+            <p class="section-intro">The PDev pipeline has 9 phases. Run them in order - each builds on the previous.</p>
 
             <div class="pipeline-visual">
                 <span class="pipe-cmd">/idea</span>
-                <span class="pipe-arrow">→</span>
+                <span class="pipe-arrow">-></span>
                 <span class="pipe-cmd">/bmrk</span>
-                <span class="pipe-arrow">→</span>
+                <span class="pipe-arrow">-></span>
                 <span class="pipe-cmd">/gapa</span>
-                <span class="pipe-arrow">→</span>
+                <span class="pipe-arrow">-></span>
                 <span class="pipe-cmd">/innov</span>
-                <span class="pipe-arrow">→</span>
+                <span class="pipe-arrow">-></span>
                 <span class="pipe-cmd">/caps</span>
-                <span class="pipe-arrow">→</span>
+                <span class="pipe-arrow">-></span>
                 <span class="pipe-cmd">/spec</span>
-                <span class="pipe-arrow">→</span>
+                <span class="pipe-arrow">-></span>
                 <span class="pipe-cmd">/bmrk design</span>
-                <span class="pipe-arrow">→</span>
+                <span class="pipe-arrow">-></span>
                 <span class="pipe-cmd">/sop</span>
-                <span class="pipe-arrow">→</span>
+                <span class="pipe-arrow">-></span>
                 <span class="pipe-cmd">/pv</span>
             </div>
 
@@ -201,75 +233,154 @@
             </div>
         </section>
 
-        <!-- Alternative Entry Points -->
+        <!-- Orchestration Commands -->
         <section class="docs-section">
-            <h2 id="entry-points">Alternative Entry Points</h2>
+            <h2 id="orchestration">Orchestration Commands</h2>
+            <p class="section-intro">These commands help you manage the pipeline without running each phase manually.</p>
+
             <div class="alt-commands">
                 <div class="alt-card">
-                    <code>/eval</code>
-                    <p>Evaluate an existing product or business instead of starting from scratch. Generates EVALUATION.md with strengths, weaknesses, and improvement opportunities.</p>
-                </div>
-                <div class="alt-card">
                     <code>/pdev start [project]</code>
-                    <p>Interactive wizard that guides you through project setup and runs the appropriate first command.</p>
+                    <p><strong>Recommended starting point.</strong> Interactive wizard that guides you through project setup, asks the right questions, and runs pipeline commands in order. Streaming to PDev Live starts automatically.</p>
                 </div>
                 <div class="alt-card">
                     <code>/pdev next [project]</code>
-                    <p>Automatically runs the next command in the pipeline sequence based on which documents already exist.</p>
+                    <p>Automatically runs the next command in the pipeline sequence based on which documents already exist. Useful for resuming work.</p>
                 </div>
                 <div class="alt-card">
                     <code>/pdev status [project]</code>
-                    <p>Shows pipeline progress - which documents exist, which are missing, and health scores.</p>
+                    <p>Shows pipeline progress - which documents exist, which are missing, and overall health scores.</p>
                 </div>
+                <div class="alt-card">
+                    <code>/eval [project]</code>
+                    <p>Alternative to <code>/idea</code> for existing products. Evaluates what you already have instead of starting from scratch.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Manual Streaming Control -->
+        <section class="docs-section">
+            <h2 id="streaming">Manual Streaming Control</h2>
+            <p class="section-intro">Most users never need this - <code>/pdev start</code> handles streaming automatically. These commands give you fine-grained control when needed.</p>
+
+            <table class="scope-table">
+                <thead>
+                    <tr>
+                        <th>Command</th>
+                        <th>Purpose</th>
+                        <th>Example</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>/pdev-live start</code></td>
+                        <td>Start a streaming session manually</td>
+                        <td><code>/pdev-live start ideate MyProject</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>/pdev-live phase</code></td>
+                        <td>Mark a phase transition in the stream</td>
+                        <td><code>/pdev-live phase 1 Discovery</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>/pdev-live step</code></td>
+                        <td>Add custom content to the stream</td>
+                        <td><code>/pdev-live step "## Key Findings"</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>/pdev-live end</code></td>
+                        <td>End the streaming session</td>
+                        <td><code>/pdev-live end completed</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>/pdev-live status</code></td>
+                        <td>Check if a session is active</td>
+                        <td><code>/pdev-live status</code></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="info-callout">
+                <h4>When Would I Use This?</h4>
+                <p>Manual streaming is useful when you want to:</p>
+                <ul>
+                    <li>Add commentary or notes between pipeline phases</li>
+                    <li>Stream a custom workflow that doesn't follow the standard pipeline</li>
+                    <li>Debug streaming issues</li>
+                </ul>
             </div>
         </section>
 
         <!-- Scope Levels -->
         <section class="docs-section">
             <h2 id="scope">Scope Levels</h2>
-            <p class="section-intro">PDev commands can operate at different scope levels depending on your needs.</p>
+            <p class="section-intro">PDev commands can zoom in or out depending on what you're working on.</p>
 
             <table class="scope-table">
                 <thead>
                     <tr>
                         <th>Scope</th>
                         <th>Command Example</th>
-                        <th>Description</th>
+                        <th>Use Case</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
                         <td><strong>Industry</strong></td>
                         <td><code>/pdev industry "wellness tech"</code></td>
-                        <td>Macro market analysis across an entire industry</td>
+                        <td>Macro market analysis before picking a specific product idea</td>
                     </tr>
                     <tr>
                         <td><strong>Product</strong></td>
                         <td><code>/pdev product myapp</code></td>
-                        <td>Full pipeline for a complete product</td>
+                        <td>Full pipeline for a complete product (most common)</td>
                     </tr>
                     <tr>
                         <td><strong>Feature</strong></td>
                         <td><code>/pdev feature "booking"</code></td>
-                        <td>Pipeline for a single feature</td>
+                        <td>Deep-dive on a single feature before building it</td>
                     </tr>
                     <tr>
                         <td><strong>Component</strong></td>
                         <td><code>/pdev component "calendar"</code></td>
-                        <td>UI component or module level</td>
+                        <td>Quick benchmark before building a UI component</td>
                     </tr>
                     <tr>
                         <td><strong>Sprint</strong></td>
                         <td><code>/pdev sprint myapp phase-2</code></td>
-                        <td>Time-boxed set of tasks</td>
+                        <td>Focus on a specific set of SOP tasks</td>
                     </tr>
                     <tr>
                         <td><strong>Task</strong></td>
                         <td><code>/pdev task 3.2</code></td>
-                        <td>Specific task from the SOP</td>
+                        <td>Run mini-pipeline for a specific SOP task number</td>
                     </tr>
                 </tbody>
             </table>
+        </section>
+
+        <!-- CLI Tool Reference -->
+        <section class="docs-section">
+            <h2 id="cli">CLI Tool (Advanced)</h2>
+            <p class="section-intro">For terminal use outside Claude sessions. Most users will never need this.</p>
+
+            <div class="alt-commands">
+                <div class="alt-card">
+                    <code>~/.claude/tools/pdev-live/client.sh start &lt;project&gt; &lt;command&gt;</code>
+                    <p>Start a streaming session from your terminal. Useful for scripting or automation.</p>
+                </div>
+                <div class="alt-card">
+                    <code>pdev-live seed [docs_path]</code>
+                    <p>Manually sync existing pipeline documents to PDev Live. Use this if you edited docs outside a Claude session and want them to appear in the dashboard.</p>
+                </div>
+            </div>
+
+            <div class="info-callout">
+                <h4>Slash Commands vs CLI Tool</h4>
+                <p><strong>Slash commands</strong> (<code>/pdev</code>, <code>/pdev-live</code>) work inside Claude sessions.</p>
+                <p><strong>CLI tool</strong> (<code>pdev-live</code>, <code>client.sh</code>) works in your terminal outside Claude.</p>
+                <p>They do the same thing - use whichever matches where you're working.</p>
+            </div>
         </section>
 
         <!-- FAQ -->
@@ -283,6 +394,11 @@
                 </details>
 
                 <details class="faq-item">
+                    <summary>How do I resume a project?</summary>
+                    <p>Just use the same project name. Running <code>/pdev start myproject</code> will create the project if it doesn't exist, or resume it if it does. PDev Live matches by project name automatically. Tip: use consistent naming (always "myapp", not sometimes "my-app").</p>
+                </details>
+
+                <details class="faq-item">
                     <summary>Can I regenerate a document?</summary>
                     <p>Yes. Running the same command again will create a new version. PDev Live tracks versions so you can see the history of changes.</p>
                 </details>
@@ -290,36 +406,6 @@
                 <details class="faq-item">
                     <summary>Where are the documents stored?</summary>
                     <p>Documents are stored in your project's <code>dev/</code> directory (e.g., <code>myproject/dev/IDEATION.md</code>). They're also synced to PDev Live for viewing and sharing.</p>
-                </details>
-
-                <details class="faq-item">
-                    <summary>Can I share documents with clients?</summary>
-                    <p>Yes. From any project page, click "Share with Client" to generate a time-limited guest link. Guests can view documents but cannot modify or create new ones.</p>
-                </details>
-
-                <details class="faq-item">
-                    <summary>What if I'm evaluating an existing product?</summary>
-                    <p>Use <code>/eval</code> instead of <code>/idea</code> as your first command. This analyzes what already exists rather than starting from a blank slate.</p>
-                </details>
-
-                <details class="faq-item">
-                    <summary>How do I enable Git auto-commit?</summary>
-                    <p>Go to Settings → Git Sync and enable automatic commits. Add your repository paths to the whitelist. PDev documents will be committed and pushed automatically.</p>
-                </details>
-
-                <details class="faq-item">
-                    <summary>What's the difference between /bmrk and /bmrk design?</summary>
-                    <p><code>/bmrk</code> (phase 2) analyzes competitor products and market positioning. <code>/bmrk design</code> (phase 7) specifically analyzes visual design, UX patterns, and creates a design system.</p>
-                </details>
-
-                <details class="faq-item">
-                    <summary>Can I run PDev on a remote server?</summary>
-                    <p>Yes. PDev Live supports multiple server origins. Configure servers in Settings → Servers. Documents from any connected server will appear in your project library.</p>
-                </details>
-
-                <details class="faq-item">
-                    <summary>How do I resume a project?</summary>
-                    <p>Just use the same project name. Running <code>/pdev start myproject</code> will create the project if it doesn't exist, or resume it if it does. There's no separate "resume" command - PDev Live matches by project name automatically. To avoid duplicates, use consistent naming (e.g., always "myapp", not sometimes "my-app").</p>
                 </details>
 
                 <details class="faq-item">
@@ -332,24 +418,38 @@
                 </details>
 
                 <details class="faq-item">
-                    <summary>What's the difference between /pdev and pdev-live?</summary>
-                    <p><code>/pdev</code>, <code>/idea</code>, <code>/spec</code>, etc. are Claude Code slash commands you use in Claude sessions. They generate docs and automatically stream them to PDev Live.</p>
-                    <p><code>pdev-live</code> is the underlying CLI tool. You can run it directly from terminal for manual operations like <code>pdev-live seed</code> to sync existing docs, but normally you just use the slash commands.</p>
+                    <summary>What's the difference between /bmrk and /bmrk design?</summary>
+                    <p><code>/bmrk</code> (phase 2) analyzes competitor products and market positioning. <code>/bmrk design</code> (phase 7) specifically analyzes visual design, UX patterns, and creates a design system.</p>
+                </details>
+
+                <details class="faq-item">
+                    <summary>Can I share documents with clients?</summary>
+                    <p>Yes. From any project page, click "Share with Client" to generate a time-limited guest link. Guests can view documents but cannot modify or create new ones.</p>
+                </details>
+
+                <details class="faq-item">
+                    <summary>Can I run PDev on a remote server?</summary>
+                    <p>Yes. PDev Live supports multiple server origins. Configure servers in Settings then Servers. Documents from any connected server will appear in your project library.</p>
+                </details>
+
+                <details class="faq-item">
+                    <summary>How do I enable Git auto-commit?</summary>
+                    <p>Go to Settings then Git Sync and enable automatic commits. Add your repository paths to the whitelist. PDev documents will be committed and pushed automatically.</p>
                 </details>
             </div>
         </section>
 
-        <!-- Keyboard Shortcuts -->
+        <!-- Tips -->
         <section class="docs-section">
-            <h2 id="shortcuts">Tips &amp; Shortcuts</h2>
+            <h2 id="shortcuts">Tips</h2>
             <div class="tips-grid">
                 <div class="tip-card">
                     <h4>Copy Document</h4>
-                    <p>Click the 📋 button in the document viewer to copy raw markdown to clipboard.</p>
+                    <p>Click the copy button in the document viewer to copy raw markdown to clipboard.</p>
                 </div>
                 <div class="tip-card">
                     <h4>Download Document</h4>
-                    <p>Click the ⬇️ button to download the document as a .md file.</p>
+                    <p>Click the download button to save the document as a .md file.</p>
                 </div>
                 <div class="tip-card">
                     <h4>Filter Projects</h4>
