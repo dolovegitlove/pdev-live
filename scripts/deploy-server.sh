@@ -12,9 +12,9 @@ set -euo pipefail
 PROJECT_DIR="$HOME/projects/pdev-live"
 SERVER_FILE="server/server.js"
 REMOTE_HOST="acme"
-REMOTE_PATH="/opt/services/vyxenai-installer/server/server.js"
-REMOTE_TEMP="/opt/services/vyxenai-installer/server/server.js.deploying"
-PM2_SERVICE="vyxenai-installer"
+REMOTE_PATH="/home/acme/pdev-live/server/server.js"
+REMOTE_TEMP="/home/acme/pdev-live/server/server.js.deploying"
+PM2_SERVICE="pdev-live"
 EXPECTED_BRANCH="main"
 LOG_FILE="$PROJECT_DIR/.deploy-log"
 
