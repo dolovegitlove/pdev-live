@@ -19,9 +19,9 @@ IFS=$'\n\t'
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
-VERSION="1.0.14"
+VERSION="1.0.15"
 INSTALLER_URL="https://vyxenai.com/pdev/install/pdev-partner-installer.tar.gz"
-INSTALLER_SHA256="468023c65c97305cbba1a509b351275c255301127777ed38a3e08d684e8cbfd9"
+INSTALLER_SHA256="104f81b009aeb99ac035ace756e364f73c63554d2e46cb59651e667d377ea38f"
 TEMP_DIR=""
 LOG_FILE=$(mktemp /tmp/pdev-install-wrapper.XXXXXX.log)
 
@@ -274,8 +274,11 @@ run_installer() {
         args+=("--source-url" "$SOURCE_URL")
     fi
 
-    # Add --non-interactive for web-based installations (no stdin available)
-    args+=("--non-interactive")
+    # Add --non-interactive for SOURCE mode only (fresh server install)
+    # Project mode needs interactive prompt for HTTP auth credentials
+    if [[ -n "$DOMAIN" ]]; then
+        args+=("--non-interactive")
+    fi
 
     # Add any extra arguments passed to wrapper (allows user override)
     args+=("${EXTRA_ARGS[@]}")

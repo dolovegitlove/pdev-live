@@ -1,0 +1,12 @@
+# PDev-Live Bundle Manifest
+# Defines required components for installer tarball
+# Used by bundle-validator.sh to prevent incomplete bundles
+
+# Required directories (must exist before bundling)
+REQUIRED_DIRS=installer client
+
+# Required files (must exist before bundling)
+REQUIRED_FILES=installer/pdl-installer.sh installer/install.sh installer/nginx-partner-template.conf installer/.env.partner.template client/client.sh
+
+# Note: create-bundle.sh also copies migrations/, templates/, and docs/
+# This manifest defines the MINIMUM required for a functional installer

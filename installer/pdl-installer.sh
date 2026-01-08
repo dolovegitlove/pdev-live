@@ -43,7 +43,7 @@ IFS=$'\n\t'
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
-VERSION="1.0.14"
+VERSION="1.0.15"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="/tmp/pdl-installer-$(date +%s).log"
 
@@ -952,7 +952,9 @@ install_application() {
     FILES_COPIED=true
 
     # Install source files (REMOTE-ONLY, NO FALLBACK)
-    local VERSION="1.0.0"
+    # CRITICAL: v1.0.2+ includes frontend files, v1.0.0 does NOT
+    # v1.0.3 includes DB_HOST=127.0.0.1 fix for password auth
+    local VERSION="1.0.3"
     local REMOTE_SOURCE="https://vyxenai.com/pdev/install/pdev-source-v${VERSION}.tar.gz"
     local CHECKSUM_URL="${REMOTE_SOURCE}.sha256"
 
@@ -1051,7 +1053,10 @@ PDEV_PASSWORD=$HTTP_PASSWORD
 # ===================================
 # DATABASE CONFIGURATION
 # ===================================
-PDEV_DB_HOST=localhost
+# CRITICAL: Use 127.0.0.1 (not localhost) to force TCP connection
+# localhost may use Unix socket which requires peer auth (OS username match)
+# 127.0.0.1 forces TCP/IP which uses password authentication via pg_hba.conf
+PDEV_DB_HOST=127.0.0.1
 PDEV_DB_PORT=5432
 PDEV_DB_NAME=pdev_live
 PDEV_DB_USER=pdev_app
