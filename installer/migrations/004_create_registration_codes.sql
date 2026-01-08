@@ -20,6 +20,10 @@ CREATE INDEX IF NOT EXISTS idx_registration_codes_code ON registration_codes(cod
 -- Index for cleanup (find expired codes)
 CREATE INDEX IF NOT EXISTS idx_registration_codes_expires ON registration_codes(expires_at) WHERE consumed_at IS NULL;
 
+-- Grant permissions to pdev_app user
+GRANT ALL PRIVILEGES ON TABLE registration_codes TO pdev_app;
+GRANT USAGE, SELECT ON SEQUENCE registration_codes_id_seq TO pdev_app;
+
 -- Record migration
 INSERT INTO pdev_migrations (migration_name) VALUES ('004_create_registration_codes')
 ON CONFLICT (migration_name) DO NOTHING;
