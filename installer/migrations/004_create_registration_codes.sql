@@ -14,8 +14,8 @@ CREATE TABLE IF NOT EXISTS registration_codes (
   consumed_ip VARCHAR(45)
 );
 
--- Index for fast code lookups (only active codes)
-CREATE INDEX IF NOT EXISTS idx_registration_codes_code ON registration_codes(code) WHERE consumed_at IS NULL AND expires_at > NOW();
+-- Index for fast code lookups (only unconsumed codes - expiration checked at query time)
+CREATE INDEX IF NOT EXISTS idx_registration_codes_code ON registration_codes(code) WHERE consumed_at IS NULL;
 
 -- Index for cleanup (find expired codes)
 CREATE INDEX IF NOT EXISTS idx_registration_codes_expires ON registration_codes(expires_at) WHERE consumed_at IS NULL;
