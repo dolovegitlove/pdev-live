@@ -3,7 +3,7 @@ module.exports = {
   apps: [{
     name: 'pdev-live',
     script: 'server.js',
-    cwd: '/opt/services/pdev-live',
+    cwd: '/home/acme/pdev-live/server',
     exec_mode: 'fork',
     instances: 1,
 
@@ -25,8 +25,8 @@ module.exports = {
     },
 
     // Logging
-    error_file: '/opt/services/pdev-live/logs/error.log',
-    out_file: '/opt/services/pdev-live/logs/out.log',
+    error_file: '/home/acme/pdev-live/server/logs/error.log',
+    out_file: '/home/acme/pdev-live/server/logs/out.log',
     merge_logs: true,
     log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
 

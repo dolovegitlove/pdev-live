@@ -188,6 +188,32 @@ const MAX_GUEST_TOKENS = 1000;
 const shareTokens = new Map(); // token -> { expiresAt, used }
 const MAX_SHARE_TOKENS = 100;
 
+// Server tokens cache (loaded from DB, refreshed periodically)
+// Maps token -> { server, createdAt }
+let serverTokensCache = new Map();
+async function loadServerTokens() {
+  try {
+    const result = await pool.query(
+      'SELECT token, server_name, created_at FROM server_tokens WHERE revoked_at IS NULL'
+    );
+    serverTokensCache = new Map();
+    result.rows.forEach(row => {
+      serverTokensCache.set(row.token, {
+        server: row.server_name,
+        createdAt: row.created_at
+      });
+    });
+    console.log(`[Auth] Loaded ${serverTokensCache.size} server tokens`);
+  } catch (err) {
+    // Table may not exist yet - that's OK
+    if (err.code !== '42P01') { // relation does not exist
+      console.error('[Auth] Failed to load server tokens:', err.message);
+    }
+  }
+}
+// Refresh tokens every 5 minutes
+setInterval(loadServerTokens, 5 * 60 * 1000);
+
 // Cleanup expired tokens every minute
 const cleanupInterval = setInterval(() => {
   const now = Date.now();
@@ -243,7 +269,7 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'X-Admin-Key', 'X-Share-Token', 'X-User']
+  allowedHeaders: ['Content-Type', 'X-Admin-Key', 'X-Share-Token', 'X-User', 'X-Pdev-Token']
 }));
 
 // Rate limiting
@@ -380,6 +406,36 @@ function requireAdmin(req, res, next) {
     }
   } catch (err) {
     return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+}
+
+// Server token authentication middleware (for CLI clients)
+// Validates X-Pdev-Token header against database
+function requireServerToken(req, res, next) {
+  var token = req.headers['x-pdev-token'];
+  if (!token) {
+    return res.status(401).json({ error: 'Missing X-Pdev-Token header' });
+  }
+
+  var serverInfo = serverTokensCache.get(token);
+  if (!serverInfo) {
+    return res.status(401).json({ error: 'Invalid server token' });
+  }
+
+  // Attach server info to request for logging/validation
+  req.serverOrigin = serverInfo.server;
+  next();
+}
+
+// Optional server token - allows request but attaches server info if valid
+function optionalServerToken(req, res, next) {
+  var token = req.headers['x-pdev-token'];
+  if (token) {
+    var serverInfo = serverTokensCache.get(token);
+    if (serverInfo) {
+      req.serverOrigin = serverInfo.server;
+    }
   }
   next();
 }
@@ -2043,6 +2099,9 @@ async function validateDatabaseSchema() {
     console.error('FATAL: Database schema validation failed. Server not started.');
     process.exit(1);
   }
+
+  // Load server tokens from database
+  await loadServerTokens();
 
   server.listen(PORT, () => {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
