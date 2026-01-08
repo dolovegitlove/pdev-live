@@ -806,6 +806,145 @@ setup_server_token() {
 }
 
 # =============================================================================
+# PHASE 2.5b: PROJECT MODE TOKEN REGISTRATION
+# =============================================================================
+# Called during project mode installation to register with source server
+# and obtain a token for API authentication.
+
+register_project_token() {
+    header "Phase 2.5: Server Token Registration"
+
+    # Determine server name (hostname or custom)
+    local server_name
+    server_name=$(hostname -s 2>/dev/null || hostname)
+    server_name=$(echo "$server_name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_-]//g' | cut -c1-50)
+
+    if [[ -z "$server_name" ]] || [[ ${#server_name} -lt 2 ]]; then
+        server_name="project-$(date +%s)"
+    fi
+
+    log "Registering server: $server_name"
+
+    # Get registration secret from environment or prompt
+    local registration_secret="${PDEV_REGISTRATION_SECRET:-}"
+    if [[ -z "$registration_secret" ]]; then
+        if [[ "$INTERACTIVE" == "true" ]]; then
+            echo ""
+            echo "Token registration requires a registration secret."
+            echo "Get this from the source server administrator."
+            echo "(Set PDEV_REGISTRATION_SECRET env var to skip this prompt)"
+            echo ""
+            read -r -s -p "Enter registration secret: " registration_secret
+            echo ""
+        else
+            warn "PDEV_REGISTRATION_SECRET not set - skipping token registration"
+            warn "You must manually provision a token on the source server"
+            return 0
+        fi
+    fi
+
+    if [[ -z "$registration_secret" ]]; then
+        warn "No registration secret provided - skipping token registration"
+        return 0
+    fi
+
+    # Call registration API
+    local api_url="${SOURCE_URL%/}/tokens/register"
+    log "Calling registration API: $api_url"
+
+    local response
+    local http_code
+    local tmp_response="/tmp/pdev-register-$$.json"
+
+    # Make registration request with timeout and error handling
+    http_code=$(curl -s -w "%{http_code}" \
+        --connect-timeout 10 \
+        --max-time 30 \
+        -X POST \
+        -H "Content-Type: application/json" \
+        -H "X-Registration-Secret: $registration_secret" \
+        -d "{\"serverName\": \"$server_name\", \"hostname\": \"$(hostname -f 2>/dev/null || hostname)\"}" \
+        "$api_url" \
+        -o "$tmp_response" 2>/dev/null) || {
+        error "Failed to connect to registration API"
+        rm -f "$tmp_response"
+        return 1
+    }
+
+    # Parse response
+    if [[ "$http_code" == "201" ]]; then
+        # Success - extract token
+        local token
+        token=$(jq -r '.token // empty' "$tmp_response" 2>/dev/null)
+        local returned_name
+        returned_name=$(jq -r '.serverName // empty' "$tmp_response" 2>/dev/null)
+
+        if [[ -z "$token" ]]; then
+            error "Registration succeeded but no token in response"
+            rm -f "$tmp_response"
+            return 1
+        fi
+
+        # Create token file with secure permissions
+        local token_dir="$HOME/.claude/tools/pdev-live"
+        local token_file="$token_dir/token"
+
+        mkdir -p "$token_dir"
+        chmod 700 "$token_dir"
+
+        # Atomic write with secure permissions
+        (umask 077 && echo "$token" > "$token_file")
+        chmod 600 "$token_file"
+
+        success "Token registered successfully"
+        log "Server name: $returned_name"
+        log "Token stored: $token_file"
+        log "Token prefix: ${token:0:8}..."
+
+        rm -f "$tmp_response"
+        return 0
+
+    elif [[ "$http_code" == "409" ]]; then
+        # Already registered
+        local error_msg
+        error_msg=$(jq -r '.error // "Already registered"' "$tmp_response" 2>/dev/null)
+        warn "Server already registered: $error_msg"
+        warn "If you need a new token, revoke the existing one on the source server"
+        rm -f "$tmp_response"
+        return 0
+
+    elif [[ "$http_code" == "401" ]]; then
+        # Invalid secret
+        error "Invalid registration secret"
+        rm -f "$tmp_response"
+        return 1
+
+    elif [[ "$http_code" == "429" ]]; then
+        # Rate limited
+        local retry_after
+        retry_after=$(jq -r '.retryAfter // 900' "$tmp_response" 2>/dev/null)
+        error "Rate limited - try again in $retry_after seconds"
+        rm -f "$tmp_response"
+        return 1
+
+    elif [[ "$http_code" == "503" ]]; then
+        # Registration disabled
+        warn "Token registration not enabled on source server"
+        warn "Ask the administrator to set PDEV_REGISTRATION_SECRET"
+        rm -f "$tmp_response"
+        return 0
+
+    else
+        # Other error
+        local error_msg
+        error_msg=$(jq -r '.error // "Unknown error"' "$tmp_response" 2>/dev/null)
+        error "Registration failed (HTTP $http_code): $error_msg"
+        rm -f "$tmp_response"
+        return 1
+    fi
+}
+
+# =============================================================================
 # HELPER FUNCTIONS: REMOTE SOURCE DOWNLOAD
 # =============================================================================
 download_and_verify_source() {
@@ -1636,6 +1775,14 @@ main() {
 
     # Install client (both modes)
     install_client
+
+    # Project mode: Register with source server to get token
+    if [[ "$MODE" == "project" ]]; then
+        register_project_token || {
+            warn "Token registration failed - you may need to manually provision a token"
+            warn "Contact the source server administrator for assistance"
+        }
+    fi
 
     # Installation complete
     header "Installation Complete ✅"

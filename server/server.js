@@ -1414,6 +1414,189 @@ app.get('/health', async (req, res) => {
 });
 
 // =============================================================================
+// SERVER TOKEN REGISTRATION API (for project mode installers)
+// =============================================================================
+
+// Registration secret for auto-provisioning (from env or generate warning)
+const REGISTRATION_SECRET = process.env.PDEV_REGISTRATION_SECRET;
+if (!REGISTRATION_SECRET) {
+  console.warn('[Auth] PDEV_REGISTRATION_SECRET not set - token registration disabled');
+}
+
+// Rate limiting for registration attempts
+const registrationAttempts = new Map(); // IP -> { count, resetAt }
+const MAX_RATE_LIMIT_ENTRIES = 10000;
+
+function checkRegistrationRateLimit(ip) {
+  // Emergency protection against memory exhaustion
+  if (registrationAttempts.size >= MAX_RATE_LIMIT_ENTRIES) {
+    console.error('[Auth] Rate limit map at capacity - rejecting new IPs');
+    return false;
+  }
+
+  const now = Date.now();
+  const window = 15 * 60 * 1000; // 15 minutes
+  const maxAttempts = 5;
+
+  let record = registrationAttempts.get(ip);
+  if (!record || now > record.resetAt) {
+    record = { count: 0, resetAt: now + window };
+    registrationAttempts.set(ip, record);
+  }
+
+  if (record.count >= maxAttempts) {
+    return false;
+  }
+
+  record.count++;
+  return true;
+}
+
+// Clean up old rate limit entries every hour
+setInterval(() => {
+  try {
+    const now = Date.now();
+    let cleaned = 0;
+    for (const [ip, record] of registrationAttempts.entries()) {
+      if (now > record.resetAt) {
+        registrationAttempts.delete(ip);
+        cleaned++;
+      }
+    }
+    if (cleaned > 0) {
+      console.log(`[Auth] Cleaned ${cleaned} expired rate limit entries`);
+    }
+  } catch (err) {
+    console.error('[Auth] Rate limit cleanup error:', err);
+  }
+}, 60 * 60 * 1000);
+
+// Register a new server token (for project mode installers)
+app.post('/tokens/register', async (req, res) => {
+  // Check if registration is enabled
+  if (!REGISTRATION_SECRET) {
+    return res.status(503).json({
+      error: 'Token registration not configured on this server',
+      code: 'REGISTRATION_DISABLED'
+    });
+  }
+
+  const clientIP = req.ip || req.socket.remoteAddress;
+
+  // Rate limit check
+  if (!checkRegistrationRateLimit(clientIP)) {
+    console.warn(`[Auth] Registration rate limit exceeded for ${clientIP}`);
+    return res.status(429).json({
+      error: 'Too many registration attempts. Try again in 15 minutes.',
+      code: 'RATE_LIMITED',
+      retryAfter: 900
+    });
+  }
+
+  // Validate registration secret
+  const providedSecret = req.headers['x-registration-secret'];
+  if (!providedSecret) {
+    return res.status(401).json({
+      error: 'Registration secret required',
+      code: 'MISSING_SECRET'
+    });
+  }
+
+  // Timing-safe comparison using hash (prevents length oracle attack)
+  const crypto = require('crypto');
+  const secretHash = crypto.createHash('sha256').update(REGISTRATION_SECRET).digest();
+  const providedHash = crypto.createHash('sha256').update(providedSecret).digest();
+  if (!crypto.timingSafeEqual(secretHash, providedHash)) {
+    console.warn(`[Auth] Invalid registration secret from ${clientIP}`);
+    return res.status(401).json({
+      error: 'Invalid registration secret',
+      code: 'INVALID_SECRET'
+    });
+  }
+
+  // Validate request body
+  const { serverName, hostname } = req.body;
+  if (!serverName || typeof serverName !== 'string') {
+    return res.status(400).json({
+      error: 'serverName is required',
+      code: 'MISSING_SERVER_NAME'
+    });
+  }
+
+  // Sanitize serverName: only alphanumeric, dash, underscore
+  const sanitizedName = serverName.replace(/[^a-zA-Z0-9_-]/g, '').substring(0, 50);
+  if (sanitizedName.length < 2) {
+    return res.status(400).json({
+      error: 'serverName must be at least 2 alphanumeric characters',
+      code: 'INVALID_SERVER_NAME'
+    });
+  }
+
+  try {
+    // Check if server already registered
+    const existing = await pool.query(
+      'SELECT id, revoked_at FROM server_tokens WHERE server_name = $1',
+      [sanitizedName]
+    );
+
+    if (existing.rows.length > 0 && !existing.rows[0].revoked_at) {
+      return res.status(409).json({
+        error: 'Server name already registered',
+        code: 'ALREADY_REGISTERED',
+        serverName: sanitizedName
+      });
+    }
+
+    // Generate secure token (256 bits)
+    const token = crypto.randomBytes(32).toString('hex');
+
+    // Insert or update (if previously revoked)
+    if (existing.rows.length > 0) {
+      // Re-register revoked server
+      await pool.query(`
+        UPDATE server_tokens
+        SET token = $1, created_at = NOW(), revoked_at = NULL, last_used_at = NULL
+        WHERE server_name = $2
+      `, [token, sanitizedName]);
+    } else {
+      // New registration
+      await pool.query(`
+        INSERT INTO server_tokens (server_name, token)
+        VALUES ($1, $2)
+      `, [sanitizedName, token]);
+    }
+
+    // Refresh token cache
+    await loadServerTokens();
+
+    console.log(`[Auth] Server registered: ${sanitizedName} from ${clientIP}`);
+
+    // Return token (only time it's sent in plaintext)
+    res.status(201).json({
+      success: true,
+      token,
+      serverName: sanitizedName,
+      message: 'Store this token securely - it cannot be retrieved again'
+    });
+
+  } catch (err) {
+    console.error('[Auth] Registration error:', err);
+    if (err.code === '23505') {
+      // UNIQUE constraint violation - race condition
+      return res.status(409).json({
+        error: 'Server name already registered (concurrent request)',
+        code: 'ALREADY_REGISTERED',
+        serverName: sanitizedName
+      });
+    }
+    res.status(500).json({
+      error: 'Registration failed',
+      code: 'SERVER_ERROR'
+    });
+  }
+});
+
+// =============================================================================
 // SETTINGS API
 // =============================================================================
 
