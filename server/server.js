@@ -1471,6 +1471,246 @@ setInterval(() => {
   }
 }, 60 * 60 * 1000);
 
+
+// ============================================================================
+// REGISTRATION CODE ENDPOINTS (Secure Time-Limited Provisioning)
+// ============================================================================
+
+// Utility: Extract client IP with proxy support
+function getClientIP(req) {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) {
+    return forwarded.split(',')[0].trim();
+  }
+  if (req.headers['x-real-ip']) {
+    return req.headers['x-real-ip'];
+  }
+  return req.ip || req.socket.remoteAddress;
+}
+
+// Utility: Validate server name format
+function validateServerName(name) {
+  if (!name || typeof name !== 'string') {
+    throw new Error('Server name is required');
+  }
+  if (name.length < 2 || name.length > 50) {
+    throw new Error('Server name must be 2-50 characters');
+  }
+  if (!/^[a-zA-Z0-9._-]+$/.test(name)) {
+    throw new Error('Server name contains invalid characters (alphanumeric, dot, underscore, dash only)');
+  }
+  return name;
+}
+
+// POST /admin/registration-code - Generate time-limited registration code
+app.post('/admin/registration-code', async (req, res) => {
+  const authHeader = req.headers.authorization;
+
+  // HTTP Basic Auth required (nginx enforces, but double-check)
+  if (!authHeader || !authHeader.startsWith('Basic ')) {
+    return res.status(401).json({
+      error: 'Admin authentication required',
+      code: 'UNAUTHORIZED',
+      message: 'This endpoint requires HTTP Basic Auth'
+    });
+  }
+
+  const clientIP = getClientIP(req);
+  const createdBy = req.headers['x-authenticated-user'] || 'admin';
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // Generate cryptographically secure random code
+    const code = crypto.randomBytes(16).toString('hex'); // 32 chars
+    const expiresAt = new Date(Date.now() + 3600000); // 1 hour from now
+
+    await client.query(`
+      INSERT INTO registration_codes (code, expires_at, created_by, created_ip)
+      VALUES ($1, $2, $3, $4)
+    `, [code, expiresAt, createdBy, clientIP]);
+
+    await client.query('COMMIT');
+
+    console.log(`[REGCODE] Created: ${code.substring(0, 4)}... by ${createdBy} from ${clientIP}`);
+
+    res.status(201).json({
+      success: true,
+      code,
+      expiresAt: expiresAt.toISOString(),
+      expiresIn: 3600,
+      message: 'Use this code once within 1 hour for automated installation'
+    });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[REGCODE] Generation failed:', err.message);
+
+    if (err.code === '23505') { // Unique violation (extremely rare with crypto.randomBytes)
+      return res.status(500).json({
+        error: 'Code generation collision (retry)',
+        code: 'COLLISION'
+      });
+    }
+
+    res.status(500).json({
+      error: 'Failed to generate registration code',
+      code: 'INTERNAL_ERROR'
+    });
+
+  } finally {
+    client.release();
+  }
+});
+
+// POST /tokens/register-with-code - Register server using time-limited code
+app.post('/tokens/register-with-code', async (req, res) => {
+  const { code, serverName, hostname } = req.body;
+  const clientIP = getClientIP(req);
+
+  // Validate registration code format (32 hex chars)
+  if (!code || typeof code !== 'string') {
+    return res.status(400).json({
+      error: 'Registration code is required',
+      code: 'MISSING_CODE'
+    });
+  }
+
+  if (!/^[a-f0-9]{32}$/i.test(code)) {
+    return res.status(400).json({
+      error: 'Invalid registration code format (expected 32 hex characters)',
+      code: 'INVALID_CODE_FORMAT'
+    });
+  }
+
+  // Validate and sanitize server name
+  let validatedName;
+  try {
+    validatedName = validateServerName(serverName);
+  } catch (err) {
+    return res.status(400).json({
+      error: err.message,
+      code: 'INVALID_SERVER_NAME'
+    });
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // Atomically consume the registration code (prevents race conditions)
+    const codeResult = await client.query(`
+      UPDATE registration_codes
+      SET consumed_at = NOW(),
+          consumed_by = $1,
+          consumed_ip = $2
+      WHERE code = $3
+        AND consumed_at IS NULL
+        AND expires_at > NOW()
+      RETURNING id, created_by, created_at, expires_at
+    `, [validatedName, clientIP, code]);
+
+    if (codeResult.rows.length === 0) {
+      // Code not found, already used, or expired - determine which
+      const codeCheck = await client.query(`
+        SELECT consumed_at, expires_at
+        FROM registration_codes
+        WHERE code = $1
+      `, [code]);
+
+      await client.query('ROLLBACK');
+
+      if (codeCheck.rows.length === 0) {
+        return res.status(404).json({
+          error: 'Registration code not found',
+          code: 'CODE_NOT_FOUND',
+          message: 'Invalid or non-existent registration code'
+        });
+      }
+
+      const codeData = codeCheck.rows[0];
+      if (codeData.consumed_at) {
+        return res.status(409).json({
+          error: 'Registration code already used',
+          code: 'CODE_ALREADY_USED',
+          message: 'This code has already been consumed'
+        });
+      }
+
+      if (new Date(codeData.expires_at) <= new Date()) {
+        return res.status(410).json({
+          error: 'Registration code expired',
+          code: 'CODE_EXPIRED',
+          message: 'This code has expired - generate a new one'
+        });
+      }
+
+      // Should not reach here, but handle gracefully
+      return res.status(500).json({
+        error: 'Code validation failed',
+        code: 'VALIDATION_ERROR'
+      });
+    }
+
+    // Check if server already registered
+    const existingToken = await client.query(`
+      SELECT token FROM server_tokens WHERE server_name = $1
+    `, [validatedName]);
+
+    if (existingToken.rows.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        error: 'Server already registered',
+        code: 'SERVER_EXISTS',
+        message: `Server '${validatedName}' already has a token registered`
+      });
+    }
+
+    // Generate new secure token
+    const token = crypto.randomBytes(32).toString('hex'); // 64 chars
+
+    await client.query(`
+      INSERT INTO server_tokens (server_name, token)
+      VALUES ($1, $2)
+    `, [validatedName, token]);
+
+    await client.query('COMMIT');
+
+    // Reload tokens into memory
+    await loadServerTokens();
+
+    console.log(`[REGCODE] Consumed: ${code.substring(0, 4)}... by ${validatedName} from ${clientIP}`);
+    console.log(`[TOKEN] Registered: ${validatedName} with token ${token.substring(0, 8)}...`);
+
+    res.status(201).json({
+      success: true,
+      token,
+      serverName: validatedName,
+      message: 'Server registered successfully - store this token securely (it cannot be retrieved again)'
+    });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[REGCODE] Registration failed:', err.message);
+
+    if (err.code === '23505') { // Unique violation on server_name or token
+      return res.status(409).json({
+        error: 'Server already registered',
+        code: 'SERVER_EXISTS'
+      });
+    }
+
+    res.status(500).json({
+      error: 'Failed to register server',
+      code: 'INTERNAL_ERROR'
+    });
+
+  } finally {
+    client.release();
+  }
+});
 // Register a new server token (for project mode installers)
 app.post('/tokens/register', async (req, res) => {
   // Check if registration is enabled

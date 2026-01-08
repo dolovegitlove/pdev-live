@@ -825,34 +825,46 @@ register_project_token() {
 
     log "Registering server: $server_name"
 
-    # Get registration secret from environment or prompt
+    # METHOD 1: Try registration code first (secure, time-limited, preferred)
+    local registration_code="${PDEV_REGISTRATION_CODE:-}"
+    if [[ -n "$registration_code" ]]; then
+        log "Using registration code for secure automated provisioning"
+        if register_with_code "$server_name" "$registration_code"; then
+            return 0
+        else
+            warn "Registration code method failed - trying legacy method"
+        fi
+    fi
+
+    # METHOD 2: Fall back to registration secret (backward compatible)
     local registration_secret="${PDEV_REGISTRATION_SECRET:-}"
     if [[ -z "$registration_secret" ]]; then
         if [[ "$INTERACTIVE" == "true" ]]; then
             echo ""
-            echo "Token registration requires a registration secret."
-            echo "Get this from the source server administrator."
-            echo "(Set PDEV_REGISTRATION_SECRET env var to skip this prompt)"
+            echo "Token registration requires authentication."
+            echo "Options:"
+            echo "  1. Set PDEV_REGISTRATION_CODE env var (recommended, time-limited)"
+            echo "  2. Set PDEV_REGISTRATION_SECRET env var (legacy, requires admin secret)"
+            echo "  3. Enter registration secret interactively (legacy)"
             echo ""
-            read -r -s -p "Enter registration secret: " registration_secret
+            read -r -s -p "Enter registration secret (or press Enter to skip): " registration_secret
             echo ""
         else
-            warn "PDEV_REGISTRATION_SECRET not set - skipping token registration"
+            warn "No PDEV_REGISTRATION_CODE or PDEV_REGISTRATION_SECRET - skipping token registration"
             warn "You must manually provision a token on the source server"
             return 0
         fi
     fi
 
     if [[ -z "$registration_secret" ]]; then
-        warn "No registration secret provided - skipping token registration"
+        warn "No authentication provided - skipping token registration"
         return 0
     fi
 
-    # Call registration API
+    # Call legacy registration API
     local api_url="${SOURCE_URL%/}/tokens/register"
-    log "Calling registration API: $api_url"
+    log "Calling legacy registration API: $api_url"
 
-    local response
     local http_code
     local tmp_response="/tmp/pdev-register-$$.json"
 
@@ -873,36 +885,14 @@ register_project_token() {
 
     # Parse response
     if [[ "$http_code" == "201" ]]; then
-        # Success - extract token
-        local token
-        token=$(jq -r '.token // empty' "$tmp_response" 2>/dev/null)
-        local returned_name
-        returned_name=$(jq -r '.serverName // empty' "$tmp_response" 2>/dev/null)
-
-        if [[ -z "$token" ]]; then
-            error "Registration succeeded but no token in response"
+        # Success - extract and store token
+        if store_token_from_response "$tmp_response"; then
+            rm -f "$tmp_response"
+            return 0
+        else
             rm -f "$tmp_response"
             return 1
         fi
-
-        # Create token file with secure permissions
-        local token_dir="$HOME/.claude/tools/pdev-live"
-        local token_file="$token_dir/token"
-
-        mkdir -p "$token_dir"
-        chmod 700 "$token_dir"
-
-        # Atomic write with secure permissions
-        (umask 077 && echo "$token" > "$token_file")
-        chmod 600 "$token_file"
-
-        success "Token registered successfully"
-        log "Server name: $returned_name"
-        log "Token stored: $token_file"
-        log "Token prefix: ${token:0:8}..."
-
-        rm -f "$tmp_response"
-        return 0
 
     elif [[ "$http_code" == "409" ]]; then
         # Already registered
@@ -942,6 +932,114 @@ register_project_token() {
         rm -f "$tmp_response"
         return 1
     fi
+}
+
+# Helper: Register using time-limited registration code (METHOD 1)
+register_with_code() {
+    local server_name="$1"
+    local code="$2"
+
+    local api_url="${SOURCE_URL%/}/tokens/register-with-code"
+    local tmp_response="/tmp/pdev-register-code-$$.json"
+
+    log "Calling registration code API: $api_url"
+
+    local http_code
+    http_code=$(curl -s -w "%{http_code}" \
+        --connect-timeout 10 \
+        --max-time 30 \
+        -X POST \
+        -H "Content-Type: application/json" \
+        -d "{\"code\": \"$code\", \"serverName\": \"$server_name\", \"hostname\": \"$(hostname -f 2>/dev/null || hostname)\"}" \
+        "$api_url" \
+        -o "$tmp_response" 2>/dev/null) || {
+        error "Failed to connect to registration code API"
+        rm -f "$tmp_response"
+        return 1
+    }
+
+    # Parse response
+    if [[ "$http_code" == "201" ]]; then
+        # Success - extract and store token
+        if store_token_from_response "$tmp_response"; then
+            rm -f "$tmp_response"
+            return 0
+        else
+            rm -f "$tmp_response"
+            return 1
+        fi
+
+    elif [[ "$http_code" == "404" ]]; then
+        error "Registration code not found (invalid or non-existent)"
+        rm -f "$tmp_response"
+        return 1
+
+    elif [[ "$http_code" == "409" ]]; then
+        # Code already used OR server already registered
+        local error_code
+        error_code=$(jq -r '.code // empty' "$tmp_response" 2>/dev/null)
+        local error_msg
+        error_msg=$(jq -r '.error // "Conflict"' "$tmp_response" 2>/dev/null)
+
+        if [[ "$error_code" == "CODE_ALREADY_USED" ]]; then
+            error "Registration code already consumed"
+            rm -f "$tmp_response"
+            return 1
+        elif [[ "$error_code" == "SERVER_EXISTS" ]]; then
+            warn "Server already registered: $error_msg"
+            rm -f "$tmp_response"
+            return 0  # Not a failure, just already done
+        else
+            error "Conflict: $error_msg"
+            rm -f "$tmp_response"
+            return 1
+        fi
+
+    elif [[ "$http_code" == "410" ]]; then
+        error "Registration code expired - request a new code from administrator"
+        rm -f "$tmp_response"
+        return 1
+
+    else
+        local error_msg
+        error_msg=$(jq -r '.error // "Unknown error"' "$tmp_response" 2>/dev/null)
+        error "Registration code failed (HTTP $http_code): $error_msg"
+        rm -f "$tmp_response"
+        return 1
+    fi
+}
+
+# Helper: Extract token from API response and store securely
+store_token_from_response() {
+    local response_file="$1"
+
+    local token
+    token=$(jq -r '.token // empty' "$response_file" 2>/dev/null)
+    local returned_name
+    returned_name=$(jq -r '.serverName // empty' "$response_file" 2>/dev/null)
+
+    if [[ -z "$token" ]]; then
+        error "Registration succeeded but no token in response"
+        return 1
+    fi
+
+    # Create token file with secure permissions
+    local token_dir="$HOME/.claude/tools/pdev-live"
+    local token_file="$token_dir/token"
+
+    mkdir -p "$token_dir"
+    chmod 700 "$token_dir"
+
+    # Atomic write with secure permissions
+    (umask 077 && echo "$token" > "$token_file")
+    chmod 600 "$token_file"
+
+    success "Token registered successfully"
+    log "Server name: $returned_name"
+    log "Token stored: $token_file"
+    log "Token prefix: ${token:0:8}..."
+
+    return 0
 }
 
 # =============================================================================
