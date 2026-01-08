@@ -29,6 +29,28 @@
             <p class="docs-subtitle">Everything you need to know about PDev Suite and PDev Live</p>
         </header>
 
+        <!-- Table of Contents -->
+        <nav class="docs-toc" aria-label="Table of Contents">
+            <div class="toc-header">
+                <span class="toc-title">On This Page</span>
+                <button class="toc-toggle" aria-expanded="true" aria-controls="toc-list">
+                    <span class="toc-toggle-icon"></span>
+                </button>
+            </div>
+            <ol class="toc-list" id="toc-list">
+                <li><a href="#understanding">Understanding PDev</a></li>
+                <li><a href="#quick-start">Quick Start</a></li>
+                <li><a href="#pipeline">Pipeline Commands</a></li>
+                <li><a href="#orchestration">Orchestration Commands</a></li>
+                <li><a href="#streaming">Manual Streaming</a></li>
+                <li><a href="#scope">Scope Levels</a></li>
+                <li><a href="#cli">CLI Tool</a></li>
+                <li><a href="#faq">FAQ</a></li>
+                <li><a href="#architecture">How It Works</a></li>
+                <li><a href="#shortcuts">Tips</a></li>
+            </ol>
+        </nav>
+
         <!-- Understanding PDev -->
         <section class="docs-section">
             <h2 id="understanding">Understanding PDev</h2>
@@ -592,5 +614,19 @@ Body: { type: "output", content: "## Problem Statement..." }</pre>
             </div>
         </section>
     </div>
+
+    <script>
+    (function() {
+        var toggle = document.querySelector('.toc-toggle');
+        var list = document.getElementById('toc-list');
+        if (toggle && list) {
+            toggle.addEventListener('click', function() {
+                var expanded = toggle.getAttribute('aria-expanded') === 'true';
+                toggle.setAttribute('aria-expanded', !expanded);
+                list.hidden = expanded;
+            });
+        }
+    })();
+    </script>
 </body>
 </html>

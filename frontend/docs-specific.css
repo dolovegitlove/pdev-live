@@ -34,6 +34,142 @@
   margin: 0;
 }
 
+/* Table of Contents */
+.docs-toc {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.5rem;
+  margin-bottom: 2rem;
+  position: sticky;
+  top: 80px;
+  z-index: 10;
+}
+
+.toc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.toc-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.toc-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toc-toggle-icon {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(45deg);
+  transition: transform 0.2s ease;
+}
+
+.toc-toggle[aria-expanded="false"] .toc-toggle-icon {
+  transform: rotate(-135deg);
+}
+
+.toc-toggle:hover .toc-toggle-icon,
+.toc-toggle:focus-visible .toc-toggle-icon {
+  border-color: var(--accent);
+}
+
+.toc-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.toc-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  counter-reset: toc-counter;
+}
+
+.toc-list[hidden] {
+  display: none;
+}
+
+.toc-list li {
+  counter-increment: toc-counter;
+}
+
+.toc-list li::before {
+  content: counter(toc-counter) ".";
+  color: var(--muted);
+  font-size: 0.75rem;
+  margin-right: 0.25rem;
+}
+
+.toc-list a {
+  color: var(--text);
+  text-decoration: none;
+  font-size: 0.875rem;
+  transition: color 0.15s ease;
+}
+
+.toc-list a:hover,
+.toc-list a:focus-visible {
+  color: var(--accent);
+}
+
+.toc-list a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Scroll margin for anchor targets */
+.docs-section h2[id] {
+  scroll-margin-top: 160px;
+}
+
+@media (max-width: 768px) {
+  .docs-toc {
+    position: static;
+    padding: 1rem;
+  }
+
+  .toc-list {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .docs-section h2[id] {
+    scroll-margin-top: 80px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toc-toggle-icon {
+    transition: none;
+  }
+
+  .toc-list a {
+    transition: none;
+  }
+}
+
 /* Docs Section */
 .docs-section {
   margin-bottom: 3rem;
