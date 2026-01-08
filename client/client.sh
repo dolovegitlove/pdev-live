@@ -72,6 +72,9 @@ load_pdev_config() {
         PDEV_BASE_URL)
           export PDEV_BASE_URL="$value"
           ;;
+        PDEV_TOKEN)
+          export PDEV_TOKEN="$value"
+          ;;
       esac
     done < "$config_file"
 
@@ -93,6 +96,7 @@ load_pdev_config() {
   echo "# PDev Live Client Configuration" >&2
   echo "PDEV_LIVE_URL=https://walletsnack.com/pdev/api" >&2
   echo "PDEV_BASE_URL=https://walletsnack.com/pdev" >&2
+  echo "PDEV_TOKEN=your-server-token-here" >&2
   echo "EOF" >&2
   echo "     chmod 600 ~/.pdev-live-config" >&2
   echo "" >&2
@@ -108,7 +112,7 @@ detect_server() {
   fi
   HOSTNAME=$(hostname -s 2>/dev/null || hostname)
   case "$HOSTNAME" in
-    *dolovdev*|Dolovs*|dolov-mac*|Dolov*) echo "dolovdev" ;;
+    *dolovdev*|Dolovs*|dolov-mac*|Dolov*|Mac) echo "dolovdev" ;;
     srv*|acme*) echo "acme" ;;
     itt|*ittz*) echo "ittz" ;;
     *dolov*) echo "dolov" ;;
@@ -134,6 +138,30 @@ fi
 if [ -z "$PDEV_BASE_URL" ]; then
   PDEV_BASE_URL="${PDEV_LIVE_URL%/api}"
 fi
+
+# Load token from file if not set via config/env
+if [ -z "$PDEV_TOKEN" ]; then
+  _token_file="$HOME/.claude/tools/pdev-live/token"
+  if [ -f "$_token_file" ]; then
+    PDEV_TOKEN=$(cat "$_token_file" 2>/dev/null | tr -d '\n')
+  fi
+  unset _token_file
+fi
+
+# Check for server token (required for API authentication)
+if [ -z "$PDEV_TOKEN" ]; then
+  echo "ERROR: PDEV_TOKEN not configured" >&2
+  echo "" >&2
+  echo "Token can be set via:" >&2
+  echo "  1. Token file: ~/.claude/tools/pdev-live/token" >&2
+  echo "  2. Config file: Add PDEV_TOKEN=... to ~/.pdev-live-config" >&2
+  echo "" >&2
+  echo "Get a token from your PDev Live admin." >&2
+  exit 1
+fi
+
+# Build curl auth header
+CURL_AUTH=(-H "X-Pdev-Token: $PDEV_TOKEN")
 
 # Detect current server hostname for session tracking
 PDEV_SERVER=$(detect_server)
@@ -334,7 +362,7 @@ fetch_remote_docs() {
       local VERSION=$(echo "$content" | grep -m1 'pdev_version:' | sed 's/.*pdev_version:[[:space:]]*//' | tr -d '\r')
 
       # Push to pdev-live API
-      curl -s -X POST "$PDEV_LIVE_URL/sessions/$session_id/steps" \
+      curl -s "${CURL_AUTH[@]}" -X POST "$PDEV_LIVE_URL/sessions/$session_id/steps" \
         -H "Content-Type: application/json" \
         -d "{
           \"type\": \"document\",
@@ -365,7 +393,7 @@ fetch_remote_docs() {
 # Find existing active session on server
 find_active_session() {
   local project="$1"
-  curl -s "$PDEV_LIVE_URL/sessions/find-active?server=$PDEV_SERVER&project=$project" 2>/dev/null
+  curl -s "${CURL_AUTH[@]}" "$PDEV_LIVE_URL/sessions/find-active?server=$PDEV_SERVER&project=$project" 2>/dev/null
 }
 
 cmd_start() {
@@ -403,7 +431,7 @@ cmd_start() {
       if [ "$EXISTING_CMD" != "$COMMAND_TYPE" ] && [ "$COMMAND_TYPE" != "continue" ] && [ "$COMMAND_TYPE" != "resume" ]; then
         log "Different command type ($COMMAND_TYPE vs $EXISTING_CMD) - creating new session"
         # End the existing session first
-        curl -s -X POST "$PDEV_LIVE_URL/sessions/$EXISTING_ID/complete" \
+        curl -s "${CURL_AUTH[@]}" -X POST "$PDEV_LIVE_URL/sessions/$EXISTING_ID/complete" \
           -H "Content-Type: application/json" \
           -d '{"status": "completed"}' >/dev/null 2>&1
         # Fall through to create new session (don't return)
@@ -445,7 +473,7 @@ cmd_start() {
   # Create new session
   log "Creating new session: /$COMMAND_TYPE for $PROJECT_NAME on $PDEV_SERVER"
 
-  RESPONSE=$(curl -s -X POST "$PDEV_LIVE_URL/sessions" \
+  RESPONSE=$(curl -s "${CURL_AUTH[@]}" -X POST "$PDEV_LIVE_URL/sessions" \
     -H "Content-Type: application/json" \
     -d "{
       \"server\": \"$PDEV_SERVER\",
@@ -502,7 +530,7 @@ cmd_step() {
     PHASE_NAME=$(jq -r '.phaseName // empty' "$pf" 2>/dev/null)
   fi
 
-  RESPONSE=$(curl -s -X POST "$PDEV_LIVE_URL/sessions/$SESSION_ID/steps" \
+  RESPONSE=$(curl -s "${CURL_AUTH[@]}" -X POST "$PDEV_LIVE_URL/sessions/$SESSION_ID/steps" \
     -H "Content-Type: application/json" \
     -d "{
       \"type\": \"output\",
@@ -618,7 +646,7 @@ cmd_doc() {
     fi
   fi
 
-  RESPONSE=$(curl -s -X POST "$PDEV_LIVE_URL/sessions/$SESSION_ID/steps" \
+  RESPONSE=$(curl -s "${CURL_AUTH[@]}" -X POST "$PDEV_LIVE_URL/sessions/$SESSION_ID/steps" \
     -H "Content-Type: application/json" \
     -d "{
       \"type\": \"document\",
@@ -652,7 +680,7 @@ cmd_phase() {
 
   local SESSION_ID=$(get_session_id)
   if [ -n "$SESSION_ID" ]; then
-    curl -s -X POST "$PDEV_LIVE_URL/sessions/$SESSION_ID/steps" \
+    curl -s "${CURL_AUTH[@]}" -X POST "$PDEV_LIVE_URL/sessions/$SESSION_ID/steps" \
       -H "Content-Type: application/json" \
       -d "{
         \"type\": \"system\",
@@ -672,7 +700,7 @@ cmd_end() {
     return 1
   fi
 
-  curl -s -X POST "$PDEV_LIVE_URL/sessions/$SESSION_ID/complete" \
+  curl -s "${CURL_AUTH[@]}" -X POST "$PDEV_LIVE_URL/sessions/$SESSION_ID/complete" \
     -H "Content-Type: application/json" \
     -d "{\"status\": \"$STATUS\"}" >/dev/null 2>&1
 
@@ -766,7 +794,7 @@ cmd_manifest() {
 
   log "Setting manifest for $PDEV_SERVER/$PROJECT -> $DOCS_PATH"
 
-  RESPONSE=$(curl -s -X PUT "$PDEV_LIVE_URL/manifests/$PDEV_SERVER/$PROJECT" \
+  RESPONSE=$(curl -s "${CURL_AUTH[@]}" -X PUT "$PDEV_LIVE_URL/manifests/$PDEV_SERVER/$PROJECT" \
     -H "Content-Type: application/json" \
     -d "{\"docsPath\": \"$DOCS_PATH\"}" 2>/dev/null)
 
@@ -795,7 +823,7 @@ cmd_manifest_doc() {
     return 1
   fi
 
-  RESPONSE=$(curl -s -X PATCH "$PDEV_LIVE_URL/manifests/$PDEV_SERVER/$PROJECT/doc" \
+  RESPONSE=$(curl -s "${CURL_AUTH[@]}" -X PATCH "$PDEV_LIVE_URL/manifests/$PDEV_SERVER/$PROJECT/doc" \
     -H "Content-Type: application/json" \
     -d "{\"docType\": \"$DOC_TYPE\", \"fileName\": \"$FILE_NAME\"}" 2>/dev/null)
 
@@ -813,7 +841,7 @@ cmd_manifest_get() {
     PROJECT=$(basename "$PWD")
   fi
 
-  RESPONSE=$(curl -s "$PDEV_LIVE_URL/manifests/$PDEV_SERVER/$PROJECT" 2>/dev/null)
+  RESPONSE=$(curl -s "${CURL_AUTH[@]}" "$PDEV_LIVE_URL/manifests/$PDEV_SERVER/$PROJECT" 2>/dev/null)
 
   if echo "$RESPONSE" | jq -e '.error' >/dev/null 2>&1; then
     warn "No manifest found for $PDEV_SERVER/$PROJECT"
@@ -885,7 +913,7 @@ cmd_share() {
   printf "X-Admin-Key: %s" "$ADMIN_KEY" > "$HEADER_FILE"
   trap "rm -f \"$HEADER_FILE\"" RETURN
 
-  local RESPONSE=$(curl -s --max-time 30 -X POST "$PDEV_LIVE_URL/guest-links" \
+  local RESPONSE=$(curl -s "${CURL_AUTH[@]}" --max-time 30 -X POST "$PDEV_LIVE_URL/guest-links" \
     -H "Content-Type: application/json" \
     -H @"$HEADER_FILE" \
     -d "$JSON_PAYLOAD" 2>/dev/null)

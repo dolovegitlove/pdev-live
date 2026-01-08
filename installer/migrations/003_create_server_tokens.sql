@@ -4,7 +4,7 @@
 -- Create server_tokens table for CLI client authentication
 CREATE TABLE IF NOT EXISTS server_tokens (
   id SERIAL PRIMARY KEY,
-  server_name VARCHAR(50) NOT NULL,
+  server_name VARCHAR(50) NOT NULL UNIQUE,
   token VARCHAR(64) NOT NULL UNIQUE,
   created_at TIMESTAMP DEFAULT NOW(),
   last_used_at TIMESTAMP,

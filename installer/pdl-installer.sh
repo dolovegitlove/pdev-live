@@ -699,6 +699,17 @@ setup_database() {
         }
     fi
 
+    if [[ -f "$migration_dir/003_create_server_tokens.sql" ]]; then
+        log "Applying migration: 003_create_server_tokens.sql"
+        cat "$migration_dir/003_create_server_tokens.sql" | sudo -u postgres psql -d pdev_live \
+            -v ON_ERROR_STOP=1 \
+            --single-transaction \
+            -q || {
+            fail "Migration 003_create_server_tokens.sql failed"
+            exit 1
+        }
+    fi
+
     # Verify migrations
     local migration_count
     migration_count=$(sudo -u postgres psql -d pdev_live -t -c "SELECT COUNT(*) FROM pdev_migrations;" 2>/dev/null | tr -d ' ' || echo "0")
@@ -707,6 +718,89 @@ setup_database() {
     else
         warn "Migration verification unclear (count: $migration_count)"
     fi
+
+    return 0
+}
+
+# =============================================================================
+# PHASE 2.5: SERVER TOKEN SETUP (CLI Authentication)
+# =============================================================================
+setup_server_token() {
+    header "Phase 2.5: Server Token Setup"
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        dry_run_msg "Would generate server token (256 bits entropy)"
+        dry_run_msg "Would store token in database for server: $(hostname -s)"
+        dry_run_msg "Would create token file: ~/.claude/tools/pdev-live/token"
+        return 0
+    fi
+
+    # Determine server name (sanitized)
+    local SERVER_NAME
+    SERVER_NAME=$(hostname -s 2>/dev/null || hostname)
+    # Sanitize: only allow alphanumeric, dash, underscore
+    SERVER_NAME=$(echo "$SERVER_NAME" | tr -cd '[:alnum:]-_' | head -c 50)
+    if [[ -z "$SERVER_NAME" ]]; then
+        SERVER_NAME="unknown"
+    fi
+
+    # Token file location (for the installing user, not root)
+    local INSTALL_USER="${SUDO_USER:-$USER}"
+    local INSTALL_HOME
+    if [[ -n "$SUDO_USER" ]]; then
+        INSTALL_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+    else
+        INSTALL_HOME="$HOME"
+    fi
+    local token_dir="$INSTALL_HOME/.claude/tools/pdev-live"
+    local token_file="$token_dir/token"
+
+    # Check for existing valid token (idempotency)
+    if [[ -f "$token_file" ]] && [[ "$FORCE_INSTALL" != "true" ]]; then
+        local existing_token
+        existing_token=$(cat "$token_file" 2>/dev/null | tr -d '\n')
+        if [[ -n "$existing_token" ]] && [[ ${#existing_token} -eq 64 ]]; then
+            local token_valid
+            token_valid=$(sudo -u postgres psql -d pdev_live -t -c \
+                "SELECT COUNT(*) FROM server_tokens WHERE token = '$existing_token' AND revoked_at IS NULL;" 2>/dev/null | tr -d ' ')
+            if [[ "$token_valid" -gt 0 ]]; then
+                success "Existing valid token found - skipping generation"
+                return 0
+            fi
+        fi
+    fi
+
+    # Generate new token (256 bits entropy)
+    local TOKEN
+    TOKEN=$(openssl rand -hex 32)
+    log "Generated server token (32 bytes hex, 256 bits entropy)"
+
+    # Insert into database (SQL injection safe via character sanitization)
+    local SAFE_SERVER_NAME
+    SAFE_SERVER_NAME=$(echo "$SERVER_NAME" | sed "s/'/''/g")
+    sudo -u postgres psql -d pdev_live -v ON_ERROR_STOP=1 -c \
+        "INSERT INTO server_tokens (server_name, token) VALUES ('$SAFE_SERVER_NAME', '$TOKEN')
+         ON CONFLICT (server_name) DO UPDATE SET token = EXCLUDED.token, created_at = NOW();" || {
+        fail "Failed to insert server token into database"
+        exit 1
+    }
+    success "Token registered for server: $SERVER_NAME"
+
+    # Create token file with secure permissions (atomic)
+    mkdir -p "$token_dir"
+    chmod 700 "$token_dir"
+    (umask 077 && echo "$TOKEN" > "$token_file")
+
+    # Fix ownership if running as root
+    if [[ -n "$SUDO_USER" ]]; then
+        chown -R "$SUDO_USER:$SUDO_USER" "$INSTALL_HOME/.claude"
+    fi
+
+    success "Token stored: $token_file (600 permissions)"
+
+    # Display token info for reference
+    log "Server: $SERVER_NAME"
+    log "Token prefix: ${TOKEN:0:8}..."
 
     return 0
 }
@@ -1520,6 +1614,9 @@ main() {
     if [[ "$MODE" == "source" ]]; then
         # Phase 2: Database setup
         setup_database
+
+        # Phase 2.5: Server token setup (CLI authentication)
+        setup_server_token
 
         # Phase 3: Application installation
         install_application
