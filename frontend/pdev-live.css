@@ -164,6 +164,7 @@ header {
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .output-header {
@@ -247,6 +248,7 @@ header {
   border-radius: 8px;
   padding: 1rem;
   contain: layout style;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .sidebar-card h3 {
@@ -264,11 +266,17 @@ header {
 }
 
 .step-list li {
-  padding: 0.5rem 0;
+  padding: 0.5rem;
   border-bottom: 1px solid var(--border);
+  border-radius: 4px;
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  transition: background 0.2s;
+}
+
+.step-list li:hover {
+  background: var(--accent-subtle);
 }
 
 .step-list li:last-child { border-bottom: none; }
@@ -344,12 +352,21 @@ header {
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.85rem;
-  transition: background 0.2s;
+  transition: background 0.2s, box-shadow 0.2s, transform 0.2s;
 }
 
-.btn:hover { background: var(--accent2); }
+.btn-primary {
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+
+.btn:hover {
+  background: var(--accent2);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+  transform: translateY(-1px);
+}
 .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.btn:active { transform: scale(0.98); }
+.btn:active { transform: scale(0.98); box-shadow: none; }
 
 .btn-outline {
   background: transparent;

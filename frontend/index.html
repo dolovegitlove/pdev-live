@@ -54,8 +54,8 @@
                 <div class="output-body" id="outputBody">
                     <div class="empty-state">
                         <div class="icon">📡</div>
-                        <p>Waiting for PDev commands...</p>
-                        <p style="font-size: 0.85rem; margin-top: 0.5rem;">Run a command in Claude Code to see live output here</p>
+                        <p>Ready when you are</p>
+                        <p class="empty-state-hint">Run a /pdev command in Claude Code and watch the magic happen here</p>
                     </div>
                 </div>
             </div>
@@ -231,8 +231,8 @@
             document.getElementById('outputBody').innerHTML = `
                 <div class="empty-state">
                     <div class="icon">📡</div>
-                    <p>Waiting for PDev commands...</p>
-                    <p style="font-size: 0.85rem; margin-top: 0.5rem;">Run a command in Claude Code to see live output here</p>
+                    <p>Ready when you are</p>
+                    <p class="empty-state-hint">Run a /pdev command in Claude Code and watch the magic happen here</p>
                 </div>
             `;
             document.getElementById('outputTitle').textContent = 'Output';
@@ -247,7 +247,7 @@
 
         // Reset session via API
         async function resetSession() {
-            if (confirm('Reset current session?')) {
+            if (confirm('Start fresh? Your current output will be cleared, but your saved docs are safe.')) {
                 await fetch(`${API_BASE}/reset`, { method: 'POST' });
             }
         }

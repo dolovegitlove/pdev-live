@@ -192,7 +192,7 @@
         }
         async function init() {
             if (!sessionId) {
-                showError('No session ID provided. Add ?id=SESSION_UUID to the URL.');
+                showError('This session link seems incomplete. Please check the URL you received, or return to the Dashboard to find your session.');
                 return;
             }
 
@@ -201,7 +201,7 @@
                 if (guestToken) {
                     const guestRes = await fetch(`${API_BASE}/guest/${guestToken}`);
                     if (!guestRes.ok) {
-                        showError('Invalid or expired guest link.');
+                        showError('This link has expired or is no longer available. Ask the project owner for a new link, or log in to access your sessions.');
                         return;
                     }
                 }
@@ -209,7 +209,7 @@
                 // Fetch session data
                 const res = await fetch(`${API_BASE}/sessions/${sessionId}`);
                 if (!res.ok) {
-                    showError('Session not found.');
+                    showError('We couldn\'t find this session. It may have been deleted. Visit the Dashboard to see your active sessions.');
                     return;
                 }
 
@@ -229,7 +229,7 @@
                     connectSSE();
                 }
             } catch (err) {
-                showError('Failed to load session: ' + err.message);
+                showError('Something went wrong loading this session. Please try refreshing the page. If the problem continues, check your network connection.');
             }
         }
 

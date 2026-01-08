@@ -418,7 +418,7 @@
                             <span class="share-link-token">${escapeHtml(link.token)}</span>
                             <span class="share-link-meta">Expires in ${escapeHtml(String(link.remainingHours))}h</span>
                         </div>
-                        <button class="btn btn-outline btn-sm" onclick="revokeLink('${escapeHtml(link.token)}')" aria-label="Revoke link">Revoke</button>
+                        <button class="btn btn-outline btn-sm" onclick="revokeLink('${escapeHtml(link.token)}')" aria-label="Revoke access">Revoke Access</button>
                     </div>
                 `).join('');
             } catch (error) {

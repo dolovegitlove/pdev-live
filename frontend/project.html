@@ -258,13 +258,13 @@
                         currentDocRawContent = '';
                         document.getElementById('docActions').classList.add('hidden');
                         const doc = PIPELINE_DOCS.find(d => d.type === type);
-                        renderContent('## Document Loading Issue\n\nThe content for **' + type + '** could not be loaded.\n\n' +
-                            '**Try:** Run `' + (doc ? doc.cmd : '/pdev') + ' ' + projectName + '` to regenerate this document.');
+                        renderContent('## We couldn\'t display this document\n\nThe content for **' + type + '** isn\'t loading right now.\n\n' +
+                            '**Try:** Run `' + (doc ? doc.cmd : '/pdev') + ' ' + projectName + '` to regenerate this document, or try refreshing the page.');
                     }
                 } catch (err) {
                     currentDocRawContent = '';
                     document.getElementById('docActions').classList.add('hidden');
-                    renderContent('## Connection Error\n\nCould not connect to the API.\n\n**Try:** Refresh the page or check your network connection.');
+                    renderContent('## Connection Issue\n\nWe\'re having trouble connecting to the server.\n\n**Try:** Check your internet connection and refresh the page.');
                 }
             }
         }
@@ -441,7 +441,7 @@
                         '<span>(' + escapeHtml(String(s.step_count || 0)) + ' steps)</span></li>';
                 }).join('');
             } catch (err) {
-                document.getElementById('session-list').innerHTML = '<li>Failed to load</li>';
+                document.getElementById('session-list').innerHTML = '<li>Sessions unavailable - try refreshing</li>';
             }
         }
         
