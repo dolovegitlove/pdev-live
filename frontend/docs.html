@@ -32,7 +32,6 @@
         <!-- Quick Start -->
         <section class="docs-section">
             <h2 id="quick-start">Quick Start</h2>
-            <p class="prereq-note">Run these commands in Claude Code (VS Code or CLI). PDev Live streams results to your browser automatically.</p>
             <div class="quick-start-grid">
                 <div class="quick-card">
                     <div class="quick-number">1</div>
@@ -128,7 +127,7 @@
                         <code class="command-name">/innov</code>
                     </div>
                     <h3>Innovation</h3>
-                    <p>Discover breakthrough opportunities - what would make your product dramatically better than alternatives.</p>
+                    <p>First-principles analysis of how to build something 10x better than competitors.</p>
                     <div class="command-output">
                         <strong>Output:</strong> INNOVATION.md
                     </div>
@@ -140,7 +139,7 @@
                         <code class="command-name">/caps</code>
                     </div>
                     <h3>Capabilities</h3>
-                    <p>Reality check - can you actually build this? Assesses your team, tech stack, and timeline.</p>
+                    <p>Technical feasibility assessment - what can be built with available resources and technology.</p>
                     <div class="command-output">
                         <strong>Output:</strong> CAPABILITIES.md
                     </div>
@@ -222,7 +221,7 @@
         <!-- Scope Levels -->
         <section class="docs-section">
             <h2 id="scope">Scope Levels</h2>
-            <p class="section-intro">PDev commands can operate at different scope levels depending on your needs. <strong>Recommendation:</strong> Start with "Product" scope for new projects, then use "Feature" or "Component" for iterations.</p>
+            <p class="section-intro">PDev commands can operate at different scope levels depending on your needs.</p>
 
             <table class="scope-table">
                 <thead>
@@ -313,8 +312,8 @@
                 </details>
 
                 <details class="faq-item">
-                    <summary>What if something goes wrong?</summary>
-                    <p>No worries - PDev documents are just markdown files, so nothing is permanent. If a command produces unexpected results, just run it again. Use <code>/pdev status</code> to see your current state. If PDev Live shows "Reconnecting...", wait a moment - it will reconnect automatically.</p>
+                    <summary>How do I resume a project?</summary>
+                    <p>Just use the same project name. Running <code>/pdev-live start myproject</code> will create the project if it doesn't exist, or resume it if it does. There's no separate "resume" command - PDev Live matches by project name automatically. To avoid duplicates, use consistent naming (e.g., always "myapp", not sometimes "my-app").</p>
                 </details>
             </div>
         </section>
@@ -339,20 +338,6 @@
                     <h4>Real-time Updates</h4>
                     <p>The Live dashboard updates automatically via WebSocket. No need to refresh.</p>
                 </div>
-            </div>
-        </section>
-
-        <!-- CTA Section -->
-        <section class="docs-section cta-section">
-            <div class="cta-card">
-                <h2>Ready to Start?</h2>
-                <p>Open Claude Code and run your first pipeline command. Your documents will appear in PDev Live automatically.</p>
-                <div class="cta-commands">
-                    <code>/pdev start my-project</code>
-                    <span class="cta-or">or</span>
-                    <code>/idea my-project</code>
-                </div>
-                <a href="/pdev/live/projects.html" class="btn btn-primary cta-btn">View Your Projects</a>
             </div>
         </section>
     </div>
