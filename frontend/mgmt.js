@@ -5,7 +5,7 @@
 (function() {
   'use strict';
 
-  var API_BASE = '/pdev/api';
+  var API_BASE = '/pdev';
   var SESSIONS_PATH = '/sessions';
 
   // Secure toast notification
