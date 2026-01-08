@@ -20,24 +20,22 @@
             <a href="/pdev/live/projects.html" class="nav-link">Projects</a>
             <a href="/pdev/live/docs.html" class="nav-link active">Docs</a>
             <a href="/pdev/live/settings.html" class="nav-link">Settings</a>
+            <button class="toc-hamburger" aria-label="Open table of contents" aria-expanded="false" aria-controls="toc-panel">
+                <span class="hamburger-line"></span>
+                <span class="hamburger-line"></span>
+                <span class="hamburger-line"></span>
+            </button>
         </div>
     </nav>
 
-    <div class="container docs-container">
-        <header class="docs-header">
-            <h1 class="docs-title">PDev Documentation</h1>
-            <p class="docs-subtitle">Everything you need to know about PDev Suite and PDev Live</p>
-        </header>
-
-        <!-- Table of Contents -->
-        <nav class="docs-toc" aria-label="Table of Contents">
-            <div class="toc-header">
-                <span class="toc-title">On This Page</span>
-                <button class="toc-toggle" aria-expanded="true" aria-controls="toc-list">
-                    <span class="toc-toggle-icon"></span>
-                </button>
-            </div>
-            <ol class="toc-list" id="toc-list">
+    <!-- ToC Side Panel -->
+    <aside class="toc-panel" id="toc-panel" hidden>
+        <div class="toc-panel-header">
+            <h2>On This Page</h2>
+            <button class="toc-panel-close" aria-label="Close table of contents">×</button>
+        </div>
+        <nav class="toc-panel-nav">
+            <ol class="toc-panel-list">
                 <li><a href="#understanding">Understanding PDev</a></li>
                 <li><a href="#quick-start">Quick Start</a></li>
                 <li><a href="#pipeline">Pipeline Commands</a></li>
@@ -50,6 +48,14 @@
                 <li><a href="#shortcuts">Tips</a></li>
             </ol>
         </nav>
+    </aside>
+    <div class="toc-overlay" id="toc-overlay" hidden></div>
+
+    <div class="container docs-container">
+        <header class="docs-header">
+            <h1 class="docs-title">PDev Documentation</h1>
+            <p class="docs-subtitle">Everything you need to know about PDev Suite and PDev Live</p>
+        </header>
 
         <!-- Understanding PDev -->
         <section class="docs-section">
@@ -617,15 +623,89 @@ Body: { type: "output", content: "## Problem Statement..." }</pre>
 
     <script>
     (function() {
-        var toggle = document.querySelector('.toc-toggle');
-        var list = document.getElementById('toc-list');
-        if (toggle && list) {
-            toggle.addEventListener('click', function() {
-                var expanded = toggle.getAttribute('aria-expanded') === 'true';
-                toggle.setAttribute('aria-expanded', !expanded);
-                list.hidden = expanded;
+        var hamburger = document.querySelector('.toc-hamburger');
+        var panel = document.getElementById('toc-panel');
+        var overlay = document.getElementById('toc-overlay');
+        var closeBtn = document.querySelector('.toc-panel-close');
+        var tocLinks = document.querySelectorAll('.toc-panel-list a');
+        var sections = document.querySelectorAll('.docs-section h2[id]');
+
+        function openPanel() {
+            if (panel && overlay) {
+                panel.hidden = false;
+                overlay.hidden = false;
+                setTimeout(function() {
+                    panel.classList.add('visible');
+                    overlay.classList.add('visible');
+                }, 10);
+                hamburger.setAttribute('aria-expanded', 'true');
+                document.body.style.overflow = 'hidden';
+            }
+        }
+
+        function closePanel() {
+            if (panel && overlay) {
+                panel.classList.remove('visible');
+                overlay.classList.remove('visible');
+                setTimeout(function() {
+                    panel.hidden = true;
+                    overlay.hidden = true;
+                }, 300);
+                hamburger.setAttribute('aria-expanded', 'false');
+                document.body.style.overflow = '';
+            }
+        }
+
+        // Open on hamburger click
+        if (hamburger) {
+            hamburger.addEventListener('click', openPanel);
+        }
+
+        // Close on X button click
+        if (closeBtn) {
+            closeBtn.addEventListener('click', closePanel);
+        }
+
+        // Close on overlay click
+        if (overlay) {
+            overlay.addEventListener('click', closePanel);
+        }
+
+        // Close on link click
+        tocLinks.forEach(function(link) {
+            link.addEventListener('click', function() {
+                setTimeout(closePanel, 150);
+            });
+        });
+
+        // Close on Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && panel && !panel.hidden) {
+                closePanel();
+            }
+        });
+
+        // Active section highlighting
+        function updateActiveLink() {
+            var scrollPos = window.scrollY + 150;
+            var current = '';
+
+            sections.forEach(function(section) {
+                if (section.offsetTop <= scrollPos) {
+                    current = section.getAttribute('id');
+                }
+            });
+
+            tocLinks.forEach(function(link) {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === '#' + current) {
+                    link.classList.add('active');
+                }
             });
         }
+
+        window.addEventListener('scroll', updateActiveLink, { passive: true });
+        updateActiveLink();
     })();
     </script>
 </body>
