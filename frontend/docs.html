@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Documentation - PDev Live</title>
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="stylesheet" href="pdev-live.css">
+    <link rel="stylesheet" href="docs-specific.css">
+</head>
+<body>
+    <!-- Navigation Header -->
+    <nav class="nav-header">
+        <a href="/pdev/" class="nav-logo">
+            <div class="nav-logo-icon">P</div>
+            <span>PDev Suite</span>
+        </a>
+        <div class="nav-links">
+            <a href="/pdev/live/" class="nav-link">Live</a>
+            <a href="/pdev/live/projects.html" class="nav-link">Projects</a>
+            <a href="/pdev/live/docs.html" class="nav-link active">Docs</a>
+            <a href="/pdev/live/settings.html" class="nav-link">Settings</a>
+        </div>
+    </nav>
+
+    <div class="container docs-container">
+        <header class="docs-header">
+            <h1 class="docs-title">PDev Pipeline Documentation</h1>
+            <p class="docs-subtitle">Complete reference for the PDev document generation pipeline</p>
+        </header>
+
+        <!-- Quick Start -->
+        <section class="docs-section">
+            <h2 id="quick-start">Quick Start</h2>
+            <div class="quick-start-grid">
+                <div class="quick-card">
+                    <div class="quick-number">1</div>
+                    <div class="quick-content">
+                        <h3>Start a Project</h3>
+                        <code>/pdev start my-project</code>
+                        <p>Creates a new project and opens the guided wizard</p>
+                    </div>
+                </div>
+                <div class="quick-card">
+                    <div class="quick-number">2</div>
+                    <div class="quick-content">
+                        <h3>Run Pipeline Commands</h3>
+                        <code>/idea my-project</code>
+                        <p>Generate documents step by step through the pipeline</p>
+                    </div>
+                </div>
+                <div class="quick-card">
+                    <div class="quick-number">3</div>
+                    <div class="quick-content">
+                        <h3>View in PDev Live</h3>
+                        <p>Documents stream to the dashboard in real-time as they're created</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Pipeline Commands -->
+        <section class="docs-section">
+            <h2 id="pipeline">Pipeline Commands</h2>
+            <p class="section-intro">The PDev pipeline consists of 9 sequential phases. Each command generates a structured markdown document.</p>
+
+            <div class="pipeline-visual">
+                <span class="pipe-cmd">/idea</span>
+                <span class="pipe-arrow">→</span>
+                <span class="pipe-cmd">/bmrk</span>
+                <span class="pipe-arrow">→</span>
+                <span class="pipe-cmd">/gapa</span>
+                <span class="pipe-arrow">→</span>
+                <span class="pipe-cmd">/innov</span>
+                <span class="pipe-arrow">→</span>
+                <span class="pipe-cmd">/caps</span>
+                <span class="pipe-arrow">→</span>
+                <span class="pipe-cmd">/spec</span>
+                <span class="pipe-arrow">→</span>
+                <span class="pipe-cmd">/bmrk design</span>
+                <span class="pipe-arrow">→</span>
+                <span class="pipe-cmd">/sop</span>
+                <span class="pipe-arrow">→</span>
+                <span class="pipe-cmd">/pv</span>
+            </div>
+
+            <div class="commands-grid">
+                <div class="command-card">
+                    <div class="command-header">
+                        <span class="command-phase">1</span>
+                        <code class="command-name">/idea</code>
+                    </div>
+                    <h3>Ideation</h3>
+                    <p>Define your project vision, target audience, core features, and success metrics.</p>
+                    <div class="command-output">
+                        <strong>Output:</strong> IDEATION.md
+                    </div>
+                </div>
+
+                <div class="command-card">
+                    <div class="command-header">
+                        <span class="command-phase">2</span>
+                        <code class="command-name">/bmrk</code>
+                    </div>
+                    <h3>Benchmark</h3>
+                    <p>Competitive analysis of similar products, their strengths, weaknesses, and market positioning.</p>
+                    <div class="command-output">
+                        <strong>Output:</strong> BENCHMARK.md
+                    </div>
+                </div>
+
+                <div class="command-card">
+                    <div class="command-header">
+                        <span class="command-phase">3</span>
+                        <code class="command-name">/gapa</code>
+                    </div>
+                    <h3>Gap Analysis</h3>
+                    <p>Identify gaps in the market and opportunities your product can address.</p>
+                    <div class="command-output">
+                        <strong>Output:</strong> GAP_ANALYSIS.md
+                    </div>
+                </div>
+
+                <div class="command-card">
+                    <div class="command-header">
+                        <span class="command-phase">4</span>
+                        <code class="command-name">/innov</code>
+                    </div>
+                    <h3>Innovation</h3>
+                    <p>First-principles analysis of how to build something 10x better than competitors.</p>
+                    <div class="command-output">
+                        <strong>Output:</strong> INNOVATION.md
+                    </div>
+                </div>
+
+                <div class="command-card">
+                    <div class="command-header">
+                        <span class="command-phase">5</span>
+                        <code class="command-name">/caps</code>
+                    </div>
+                    <h3>Capabilities</h3>
+                    <p>Technical feasibility assessment - what can be built with available resources and technology.</p>
+                    <div class="command-output">
+                        <strong>Output:</strong> CAPABILITIES.md
+                    </div>
+                </div>
+
+                <div class="command-card">
+                    <div class="command-header">
+                        <span class="command-phase">6</span>
+                        <code class="command-name">/spec</code>
+                    </div>
+                    <h3>Product Spec</h3>
+                    <p>Detailed technical specification including architecture, APIs, data models, and integrations.</p>
+                    <div class="command-output">
+                        <strong>Output:</strong> PRODUCT_SPEC.md
+                    </div>
+                </div>
+
+                <div class="command-card">
+                    <div class="command-header">
+                        <span class="command-phase">7</span>
+                        <code class="command-name">/bmrk design</code>
+                    </div>
+                    <h3>Design System</h3>
+                    <p>Visual and UX benchmark - colors, typography, component patterns, and interaction design.</p>
+                    <div class="command-output">
+                        <strong>Output:</strong> DESIGN_SYSTEM.md
+                    </div>
+                </div>
+
+                <div class="command-card">
+                    <div class="command-header">
+                        <span class="command-phase">8</span>
+                        <code class="command-name">/sop</code>
+                    </div>
+                    <h3>Development SOP</h3>
+                    <p>Step-by-step implementation plan with phases, tasks, and deliverables.</p>
+                    <div class="command-output">
+                        <strong>Output:</strong> DEVELOPMENT_SOP.md
+                    </div>
+                </div>
+
+                <div class="command-card">
+                    <div class="command-header">
+                        <span class="command-phase">9</span>
+                        <code class="command-name">/pv</code>
+                    </div>
+                    <h3>Pipeline Validation</h3>
+                    <p>Validate all pipeline documents exist and are consistent with each other.</p>
+                    <div class="command-output">
+                        <strong>Output:</strong> Validation Report
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Alternative Entry Points -->
+        <section class="docs-section">
+            <h2 id="entry-points">Alternative Entry Points</h2>
+            <div class="alt-commands">
+                <div class="alt-card">
+                    <code>/eval</code>
+                    <p>Evaluate an existing product or business instead of starting from scratch. Generates EVALUATION.md with strengths, weaknesses, and improvement opportunities.</p>
+                </div>
+                <div class="alt-card">
+                    <code>/pdev start [project]</code>
+                    <p>Interactive wizard that guides you through project setup and runs the appropriate first command.</p>
+                </div>
+                <div class="alt-card">
+                    <code>/pdev next [project]</code>
+                    <p>Automatically runs the next command in the pipeline sequence based on which documents already exist.</p>
+                </div>
+                <div class="alt-card">
+                    <code>/pdev status [project]</code>
+                    <p>Shows pipeline progress - which documents exist, which are missing, and health scores.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Scope Levels -->
+        <section class="docs-section">
+            <h2 id="scope">Scope Levels</h2>
+            <p class="section-intro">PDev commands can operate at different scope levels depending on your needs.</p>
+
+            <table class="scope-table">
+                <thead>
+                    <tr>
+                        <th>Scope</th>
+                        <th>Command Example</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Industry</strong></td>
+                        <td><code>/pdev industry "wellness tech"</code></td>
+                        <td>Macro market analysis across an entire industry</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Product</strong></td>
+                        <td><code>/pdev product myapp</code></td>
+                        <td>Full pipeline for a complete product</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Feature</strong></td>
+                        <td><code>/pdev feature "booking"</code></td>
+                        <td>Pipeline for a single feature</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Component</strong></td>
+                        <td><code>/pdev component "calendar"</code></td>
+                        <td>UI component or module level</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Sprint</strong></td>
+                        <td><code>/pdev sprint myapp phase-2</code></td>
+                        <td>Time-boxed set of tasks</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Task</strong></td>
+                        <td><code>/pdev task 3.2</code></td>
+                        <td>Specific task from the SOP</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <!-- FAQ -->
+        <section class="docs-section">
+            <h2 id="faq">Frequently Asked Questions</h2>
+
+            <div class="faq-list">
+                <details class="faq-item">
+                    <summary>Do I have to run commands in order?</summary>
+                    <p>Yes, generally. Each phase builds on the previous one. However, you can skip phases if you already have that information from another source. Use <code>/pdev status</code> to see which documents exist.</p>
+                </details>
+
+                <details class="faq-item">
+                    <summary>Can I regenerate a document?</summary>
+                    <p>Yes. Running the same command again will create a new version. PDev Live tracks versions so you can see the history of changes.</p>
+                </details>
+
+                <details class="faq-item">
+                    <summary>Where are the documents stored?</summary>
+                    <p>Documents are stored in your project's <code>dev/</code> directory (e.g., <code>myproject/dev/IDEATION.md</code>). They're also synced to PDev Live for viewing and sharing.</p>
+                </details>
+
+                <details class="faq-item">
+                    <summary>Can I share documents with clients?</summary>
+                    <p>Yes. From any project page, click "Share with Client" to generate a time-limited guest link. Guests can view documents but cannot modify or create new ones.</p>
+                </details>
+
+                <details class="faq-item">
+                    <summary>What if I'm evaluating an existing product?</summary>
+                    <p>Use <code>/eval</code> instead of <code>/idea</code> as your first command. This analyzes what already exists rather than starting from a blank slate.</p>
+                </details>
+
+                <details class="faq-item">
+                    <summary>How do I enable Git auto-commit?</summary>
+                    <p>Go to Settings → Git Sync and enable automatic commits. Add your repository paths to the whitelist. PDev documents will be committed and pushed automatically.</p>
+                </details>
+
+                <details class="faq-item">
+                    <summary>What's the difference between /bmrk and /bmrk design?</summary>
+                    <p><code>/bmrk</code> (phase 2) analyzes competitor products and market positioning. <code>/bmrk design</code> (phase 7) specifically analyzes visual design, UX patterns, and creates a design system.</p>
+                </details>
+
+                <details class="faq-item">
+                    <summary>Can I run PDev on a remote server?</summary>
+                    <p>Yes. PDev Live supports multiple server origins. Configure servers in Settings → Servers. Documents from any connected server will appear in your project library.</p>
+                </details>
+            </div>
+        </section>
+
+        <!-- Keyboard Shortcuts -->
+        <section class="docs-section">
+            <h2 id="shortcuts">Tips &amp; Shortcuts</h2>
+            <div class="tips-grid">
+                <div class="tip-card">
+                    <h4>Copy Document</h4>
+                    <p>Click the 📋 button in the document viewer to copy raw markdown to clipboard.</p>
+                </div>
+                <div class="tip-card">
+                    <h4>Download Document</h4>
+                    <p>Click the ⬇️ button to download the document as a .md file.</p>
+                </div>
+                <div class="tip-card">
+                    <h4>Filter Projects</h4>
+                    <p>Use the search box on the Projects page to filter by name, or the dropdown to filter by server.</p>
+                </div>
+                <div class="tip-card">
+                    <h4>Real-time Updates</h4>
+                    <p>The Live dashboard updates automatically via WebSocket. No need to refresh.</p>
+                </div>
+            </div>
+        </section>
+    </div>
+</body>
+</html>
