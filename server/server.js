@@ -15,6 +15,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const http = require('http');
+const crypto = require('crypto');
 const { marked } = require('marked');
 const hljs = require('highlight.js');
 const { Pool } = require('pg');
