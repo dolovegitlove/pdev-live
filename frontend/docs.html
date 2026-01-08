@@ -439,6 +439,136 @@
             </div>
         </section>
 
+        <!-- Architecture - How It Works -->
+        <section class="docs-section">
+            <h2 id="architecture">How PDev Live Works</h2>
+            <p class="section-intro">A technical overview of how documents flow from your Claude session to this dashboard.</p>
+
+            <h3>The Big Picture</h3>
+            <p>PDev Live uses a centralized streaming architecture. No matter which server runs your Claude session, all documents flow to one central API:</p>
+
+            <div class="architecture-diagram">
+                <pre class="code-block">
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│  Server A    │     │  Server B    │     │  Server C    │
+│  (Claude)    │     │  (Claude)    │     │  (Claude)    │
+└──────┬───────┘     └──────┬───────┘     └──────┬───────┘
+       │                    │                    │
+       │  POST /sessions    │                    │
+       └────────────────────┼────────────────────┘
+                            │
+                    ┌───────▼───────┐
+                    │ [your-pdev-host]
+                    │  Central API  │
+                    │  PostgreSQL   │
+                    │  SSE Broadcast│
+                    └───────┬───────┘
+                            │
+                    ┌───────▼───────┐
+                    │    Browser    │
+                    │  (This Page)  │
+                    └───────────────┘
+                </pre>
+            </div>
+
+            <h3>Data Flow Step-by-Step</h3>
+            <div class="flow-steps">
+                <div class="flow-step">
+                    <div class="flow-number">1</div>
+                    <div class="flow-content">
+                        <h4>Hook Detection</h4>
+                        <p>When you run a PDev command (like <code>/idea</code>), a hook automatically detects it and triggers the streaming client.</p>
+                    </div>
+                </div>
+                <div class="flow-step">
+                    <div class="flow-number">2</div>
+                    <div class="flow-content">
+                        <h4>Server Auto-Detection</h4>
+                        <p>The client identifies which server it's running on. This becomes the <code>server_origin</code> tag so you know where documents came from.</p>
+                    </div>
+                </div>
+                <div class="flow-step">
+                    <div class="flow-number">3</div>
+                    <div class="flow-content">
+                        <h4>Session Creation</h4>
+                        <p>The client creates a session on the central API:</p>
+                        <pre class="code-inline">POST [your-pdev-host]/api/sessions
+Body: { server: "server-a", project: "myproject", commandType: "idea" }</pre>
+                        <p>The API returns a unique session ID (UUID).</p>
+                    </div>
+                </div>
+                <div class="flow-step">
+                    <div class="flow-number">4</div>
+                    <div class="flow-content">
+                        <h4>Step Streaming</h4>
+                        <p>As Claude generates output, each chunk is POSTed to the session:</p>
+                        <pre class="code-inline">POST [your-pdev-host]/api/sessions/{sessionId}/steps
+Body: { type: "output", content: "## Problem Statement..." }</pre>
+                        <p>The server stores each step in PostgreSQL, renders markdown to HTML, and broadcasts via SSE.</p>
+                    </div>
+                </div>
+                <div class="flow-step">
+                    <div class="flow-number">5</div>
+                    <div class="flow-content">
+                        <h4>Real-Time Browser Updates</h4>
+                        <p>Your browser connects to an SSE (Server-Sent Events) endpoint:</p>
+                        <pre class="code-inline">EventSource("[your-pdev-host]/api/events/{sessionId}")</pre>
+                        <p>Steps appear in real-time as Claude generates them. No polling, no refresh needed.</p>
+                    </div>
+                </div>
+            </div>
+
+            <h3>Example: Running /idea on a Remote Server</h3>
+            <div class="example-flow">
+                <ol class="numbered-flow">
+                    <li>You SSH into <code>remote-server-a</code> and start a Claude session</li>
+                    <li>You type <code>/idea</code> to start ideating</li>
+                    <li>Hook fires automatically, detects server as "remote-server-a"</li>
+                    <li>Session created at central API with <code>server_origin: "remote-server-a"</code></li>
+                    <li>Session ID cached locally at <code>/tmp/pdev-live-session.json</code></li>
+                    <li>All output streams to the same central API</li>
+                    <li>You open this dashboard - session appears tagged with its origin server</li>
+                </ol>
+            </div>
+
+            <div class="info-callout">
+                <h4>Key Insight</h4>
+                <p>There's no server-to-server sync. Every server talks directly to the central API. The <code>server_origin</code> field tracks where each session came from, but the viewing experience is identical regardless of origin.</p>
+            </div>
+
+            <h3>Why This Architecture?</h3>
+            <table class="scope-table">
+                <thead>
+                    <tr>
+                        <th>Benefit</th>
+                        <th>Explanation</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Single Source of Truth</strong></td>
+                        <td>All sessions in one database. No sync conflicts.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Simple Client</strong></td>
+                        <td>Just curl + jq. No special dependencies on remote servers.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Real-Time Anywhere</strong></td>
+                        <td>SSE works from any browser. Open this page and watch live.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Multi-Server Visibility</strong></td>
+                        <td>Dashboard shows sessions from ALL your servers in one place.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Offline Resilient</strong></td>
+                        <td>If the central API is down, Claude still works - streaming just pauses.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
         <!-- Tips -->
         <section class="docs-section">
             <h2 id="shortcuts">Tips</h2>
