@@ -36,9 +36,9 @@
                 <div class="quick-card">
                     <div class="quick-number">1</div>
                     <div class="quick-content">
-                        <h3>Start a Project</h3>
+                        <h3>Start a Session</h3>
                         <code>/pdev start my-project</code>
-                        <p>Creates a new project and opens the guided wizard</p>
+                        <p>Opens the guided wizard and streams to PDev Live</p>
                     </div>
                 </div>
                 <div class="quick-card">
@@ -56,6 +56,12 @@
                         <p>Documents stream to the dashboard in real-time as they're created</p>
                     </div>
                 </div>
+            </div>
+
+            <div class="info-callout">
+                <h4>Slash Commands vs CLI Tool</h4>
+                <p><strong><code>/pdev</code>, <code>/idea</code>, etc.</strong> are Claude Code slash commands - use these in your Claude sessions. They call the <code>pdev-live</code> CLI tool under the hood to stream docs to this dashboard.</p>
+                <p><strong><code>pdev-live</code></strong> is the CLI tool you can also run directly from terminal (e.g., <code>pdev-live seed</code> to manually sync existing docs).</p>
             </div>
         </section>
 
@@ -313,7 +319,22 @@
 
                 <details class="faq-item">
                     <summary>How do I resume a project?</summary>
-                    <p>Just use the same project name. Running <code>/pdev-live start myproject</code> will create the project if it doesn't exist, or resume it if it does. There's no separate "resume" command - PDev Live matches by project name automatically. To avoid duplicates, use consistent naming (e.g., always "myapp", not sometimes "my-app").</p>
+                    <p>Just use the same project name. Running <code>/pdev start myproject</code> will create the project if it doesn't exist, or resume it if it does. There's no separate "resume" command - PDev Live matches by project name automatically. To avoid duplicates, use consistent naming (e.g., always "myapp", not sometimes "my-app").</p>
+                </details>
+
+                <details class="faq-item">
+                    <summary>Will PDev Live see docs I edited outside a session?</summary>
+                    <p>PDev Live only auto-discovers your pipeline docs when you start or resume a session. If you modify docs outside a session, they won't appear until you either:</p>
+                    <ul>
+                        <li>Start a new session (<code>/pdev start myproject</code>) - triggers auto-seed</li>
+                        <li>Manually run <code>pdev-live seed [docs_path]</code> during an active session</li>
+                    </ul>
+                </details>
+
+                <details class="faq-item">
+                    <summary>What's the difference between /pdev and pdev-live?</summary>
+                    <p><code>/pdev</code>, <code>/idea</code>, <code>/spec</code>, etc. are Claude Code slash commands you use in Claude sessions. They generate docs and automatically stream them to PDev Live.</p>
+                    <p><code>pdev-live</code> is the underlying CLI tool. You can run it directly from terminal for manual operations like <code>pdev-live seed</code> to sync existing docs, but normally you just use the slash commands.</p>
                 </details>
             </div>
         </section>
