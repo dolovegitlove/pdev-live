@@ -16,19 +16,19 @@
             <span>PDev Suite</span>
         </a>
         <div class="nav-links">
-            <a href="/pdev/live/" class="nav-link">Dashboard</a>
-            <a href="/pdev/history/" class="nav-link">History</a>
+            <a href="/pdev/live/" class="nav-link">Live</a>
+            <a href="/pdev/live/projects.html" class="nav-link">Projects</a>
             <a href="/pdev/" class="nav-link">Docs</a>
-            <a href="/pdev/settings/" class="nav-link active">Settings</a>
+            <a href="/pdev/live/settings.html" class="nav-link active">Settings</a>
         </div>
     </nav>
 
     <div class="container">
         <header>
-            <div class="logo">PDev Live Settings</div>
+            <div class="logo">Settings</div>
             <div class="status">
-                <span class="status-dot connected"></span>
-                <span id="statusText">Connected</span>
+                <span class="status-dot" id="statusDot"></span>
+                <span id="statusText">Loading...</span>
             </div>
         </header>
 
@@ -36,166 +36,316 @@
             <!-- Success/Error Messages -->
             <div id="messageContainer" class="message-container"></div>
 
-            <!-- Git Auto-Commit Section -->
-            <section class="settings-section">
-                <div class="section-header">
-                    <h2>Git Auto-Commit</h2>
-                    <p class="section-description">Automatically commit and push PDev pipeline documents to your git repositories</p>
-                </div>
+            <!-- Tabs -->
+            <div class="settings-tabs" role="tablist" aria-label="Settings sections">
+                <button type="button" class="tab-btn active" role="tab" aria-selected="true" aria-controls="tab-git" id="btn-git" onclick="switchTab('git')">Git Sync</button>
+                <button type="button" class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-servers" id="btn-servers" onclick="switchTab('servers')">Servers</button>
+                <button type="button" class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-access" id="btn-access" onclick="switchTab('access')">Access</button>
+                <button type="button" class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-about" id="btn-about" onclick="switchTab('about')">About</button>
+            </div>
 
-                <div class="settings-grid">
-                    <!-- Enable Toggle -->
-                    <div class="setting-item">
-                        <label class="toggle-label">
-                            <div class="toggle-info">
-                                <span class="toggle-title">Enable automatic git commits</span>
-                                <span class="toggle-help">When enabled, PDev docs (IDEATION.md, PRODUCT_SPEC.md, etc.) will be automatically committed and pushed to git</span>
+            <!-- Git Sync Tab -->
+            <div id="tab-git" class="tab-content active" role="tabpanel" aria-labelledby="btn-git">
+                <section class="settings-section">
+                    <div class="section-header">
+                        <h2>Git Auto-Commit</h2>
+                        <p class="section-description">Automatically commit and push PDev pipeline documents to your git repositories</p>
+                    </div>
+
+                    <div class="settings-grid">
+                        <!-- Enable Toggle -->
+                        <div class="setting-item">
+                            <div class="toggle-label">
+                                <div class="toggle-info">
+                                    <span class="toggle-title" id="autoGitLabel">Enable automatic git commits</span>
+                                    <span class="toggle-help">When enabled, PDev docs (IDEATION.md, PRODUCT_SPEC.md, etc.) will be automatically committed and pushed to git</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="pdevAutoGit" aria-labelledby="autoGitLabel">
+                                    <span class="toggle-slider"></span>
+                                </label>
                             </div>
-                            <label class="toggle-switch">
-                                <input type="checkbox" id="pdevAutoGit" aria-label="Enable automatic git commits">
-                                <span class="toggle-slider"></span>
+                        </div>
+
+                        <!-- Repository Whitelist -->
+                        <div class="setting-item">
+                            <label for="pdevGitRepos" class="input-label">
+                                <span class="label-title">Whitelisted Repositories</span>
+                                <span class="label-help">Only PDev docs in these repositories will be auto-committed. Enter one absolute path per line.</span>
                             </label>
-                        </label>
-                    </div>
+                            <textarea
+                                id="pdevGitRepos"
+                                class="input-textarea"
+                                placeholder="/Users/username/projects/myapp&#10;/Users/username/projects/client-site"
+                                rows="4"
+                                aria-describedby="reposHelp"
+                            ></textarea>
+                            <small id="reposHelp" class="input-help">Example: /Users/dolovdev/projects/myapp</small>
+                        </div>
 
-                    <!-- Repository Whitelist -->
-                    <div class="setting-item">
-                        <label for="pdevGitRepos" class="input-label">
-                            <span class="label-title">Whitelisted Repositories</span>
-                            <span class="label-help">Only PDev docs in these repositories will be auto-committed. Enter one absolute path per line.</span>
-                        </label>
-                        <textarea
-                            id="pdevGitRepos"
-                            class="input-textarea"
-                            placeholder="/Users/username/projects/myapp&#10;/Users/username/projects/client-site"
-                            rows="4"
-                            aria-describedby="reposHelp"
-                        ></textarea>
-                        <small id="reposHelp" class="input-help">Example: /Users/dolovdev/projects/myapp</small>
-                    </div>
-
-                    <!-- Git Remote -->
-                    <div class="setting-item">
-                        <label for="pdevGitRemote" class="input-label">
-                            <span class="label-title">Git Remote</span>
-                            <span class="label-help">Remote repository to push to after auto-commit</span>
-                        </label>
-                        <select id="pdevGitRemote" class="input-select" aria-describedby="remoteHelp">
-                            <option value="origin">origin (default)</option>
-                            <option value="upstream">upstream</option>
-                        </select>
-                        <small id="remoteHelp" class="input-help">Most repositories use 'origin' as the default remote</small>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Safety Information -->
-            <section class="settings-section">
-                <div class="section-header">
-                    <h2>Safety & Security</h2>
-                </div>
-
-                <div class="info-boxes">
-                    <!-- What Gets Committed -->
-                    <div class="info-box info">
-                        <div class="info-icon">ℹ️</div>
-                        <div class="info-content">
-                            <h3>What gets auto-committed</h3>
-                            <p>Only PDev pipeline documents are auto-committed:</p>
-                            <ul>
-                                <li>IDEATION.md</li>
-                                <li>PRODUCT_SPEC.md</li>
-                                <li>DEVELOPMENT_SOP.md</li>
-                                <li>BENCHMARK.md</li>
-                                <li>DESIGN_SYSTEM.md</li>
-                                <li>Other PDev docs (CAPABILITIES, GAP_ANALYSIS, etc.)</li>
-                            </ul>
-                            <p><strong>Not committed:</strong> Source code, configuration files, or other documentation.</p>
+                        <!-- Git Remote -->
+                        <div class="setting-item">
+                            <label for="pdevGitRemote" class="input-label">
+                                <span class="label-title">Git Remote</span>
+                                <span class="label-help">Remote repository to push to after auto-commit</span>
+                            </label>
+                            <select id="pdevGitRemote" class="input-select" aria-describedby="remoteHelp">
+                                <option value="origin">origin (default)</option>
+                                <option value="upstream">upstream</option>
+                            </select>
+                            <small id="remoteHelp" class="input-help">Most repositories use 'origin' as the default remote</small>
                         </div>
                     </div>
+                </section>
 
-                    <!-- Safety Features -->
-                    <div class="info-box warning">
-                        <div class="info-icon">⚠️</div>
-                        <div class="info-content">
-                            <h3>Automatic safety checks</h3>
-                            <p>Auto-commits are automatically skipped in these situations:</p>
-                            <ul>
-                                <li>During git merges, rebases, or cherry-picks</li>
-                                <li>In detached HEAD state</li>
-                                <li>When document content hasn't changed</li>
-                                <li>In repositories not on the whitelist</li>
-                            </ul>
-                        </div>
+                <!-- Safety Information -->
+                <section class="settings-section">
+                    <div class="section-header">
+                        <h2>Safety & Security</h2>
                     </div>
 
-                    <!-- Documentation Link -->
+                    <div class="info-boxes">
+                        <div class="info-box info">
+                            <div class="info-icon">ℹ️</div>
+                            <div class="info-content">
+                                <h3>What gets auto-committed</h3>
+                                <p>Only PDev pipeline documents are auto-committed:</p>
+                                <ul>
+                                    <li>IDEATION.md, PRODUCT_SPEC.md, DEVELOPMENT_SOP.md</li>
+                                    <li>BENCHMARK.md, DESIGN_SYSTEM.md, CAPABILITIES.md</li>
+                                </ul>
+                                <p><strong>Not committed:</strong> Source code, configuration files, or other documentation.</p>
+                            </div>
+                        </div>
+
+                        <div class="info-box warning">
+                            <div class="info-icon">⚠️</div>
+                            <div class="info-content">
+                                <h3>Automatic safety checks</h3>
+                                <p>Auto-commits are skipped during git merges, rebases, in detached HEAD state, when content hasn't changed, or in repositories not on the whitelist.</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Save Button -->
+                <div class="save-section">
+                    <button id="saveGitButton" class="btn-save" type="button" onclick="saveGitSettings()">Save Git Settings</button>
+                    <p class="save-help">Changes will take effect on next PDev document generation</p>
+                </div>
+            </div>
+
+            <!-- Servers Tab -->
+            <div id="tab-servers" class="tab-content hidden" role="tabpanel" aria-labelledby="btn-servers">
+                <section class="settings-section">
+                    <div class="section-header">
+                        <h2>Connected Servers</h2>
+                        <p class="section-description">Servers configured to send pipeline data to PDev Live</p>
+                    </div>
+
+                    <div id="serversList" class="servers-list">
+                        <div class="loading-text">Loading servers...</div>
+                    </div>
+                </section>
+
+                <section class="settings-section">
                     <div class="info-box">
                         <div class="info-icon">📚</div>
                         <div class="info-content">
-                            <h3>Full documentation</h3>
-                            <p>View the complete activation guide and troubleshooting steps:</p>
-                            <code>~/.claude/docs/PDEV_GIT_SYNC_ACTIVATION.md</code>
-                            <p class="muted">Activity logs: <code>~/.claude/logs/pdev-git-sync.log</code></p>
+                            <h3>Adding New Servers</h3>
+                            <p>To add a new server, update the <code>VALID_SERVERS</code> array in the server configuration and redeploy.</p>
+                            <p class="muted">Server list is managed in: <code>server/server.js</code></p>
                         </div>
                     </div>
-                </div>
-            </section>
+                </section>
+            </div>
 
-            <!-- Save Button -->
-            <div class="save-section">
-                <button id="saveButton" class="btn-save" type="button">Save Settings</button>
-                <p class="save-help">Changes will take effect on next PDev document generation</p>
+            <!-- Access Tab -->
+            <div id="tab-access" class="tab-content hidden" role="tabpanel" aria-labelledby="btn-access">
+                <section class="settings-section">
+                    <div class="section-header">
+                        <h2>Admin Access</h2>
+                        <p class="section-description">Authentication for protected operations</p>
+                    </div>
+
+                    <div class="setting-item">
+                        <label class="input-label">
+                            <span class="label-title">Admin Key</span>
+                            <span class="label-help">Required for deleting sessions, managing share links, and other admin operations</span>
+                        </label>
+                        <code class="admin-key-display">Set via PDEV_ADMIN_KEY environment variable</code>
+                    </div>
+                </section>
+
+                <section class="settings-section">
+                    <div class="section-header">
+                        <h2>Active Share Links</h2>
+                        <p class="section-description">Guest links currently providing access to sessions</p>
+                    </div>
+
+                    <div id="shareLinksList" class="share-links-list">
+                        <div class="loading-text">Loading share links...</div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- About Tab -->
+            <div id="tab-about" class="tab-content hidden" role="tabpanel" aria-labelledby="btn-about">
+                <section class="settings-section">
+                    <div class="section-header">
+                        <h2>PDev Live</h2>
+                    </div>
+
+                    <div class="about-grid">
+                        <div class="about-item">
+                            <span class="about-label">Version</span>
+                            <span class="about-value" id="appVersion">-</span>
+                        </div>
+                        <div class="about-item">
+                            <span class="about-label">Environment</span>
+                            <span class="about-value" id="appEnv">-</span>
+                        </div>
+                        <div class="about-item">
+                            <span class="about-label">Database</span>
+                            <span class="about-value" id="dbStatus">-</span>
+                        </div>
+                        <div class="about-item">
+                            <span class="about-label">Uptime</span>
+                            <span class="about-value" id="appUptime">-</span>
+                        </div>
+                        <div class="about-item">
+                            <span class="about-label">Active Sessions</span>
+                            <span class="about-value" id="activeSessions">-</span>
+                        </div>
+                        <div class="about-item">
+                            <span class="about-label">Connected Clients</span>
+                            <span class="about-value" id="connectedClients">-</span>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="settings-section">
+                    <div class="section-header">
+                        <h2>Documentation & Logs</h2>
+                    </div>
+
+                    <div class="info-boxes">
+                        <div class="info-box">
+                            <div class="info-icon">📖</div>
+                            <div class="info-content">
+                                <h3>PDev Pipeline Reference</h3>
+                                <p>Full documentation for PDev commands and pipeline stages.</p>
+                                <code>~/.claude/PDEV_PIPELINE.md</code>
+                            </div>
+                        </div>
+
+                        <div class="info-box">
+                            <div class="info-icon">📝</div>
+                            <div class="info-content">
+                                <h3>Activity Logs</h3>
+                                <p>View PDev Live activity and git sync logs:</p>
+                                <code>~/.claude/logs/pdev-live.log</code>
+                                <p class="muted"><code>~/.claude/logs/pdev-git-sync.log</code></p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
             </div>
         </div>
     </div>
 
     <script>
-        // Settings state
-        let settings = {
+        const API_BASE = '/pdev';
+
+        // Security: HTML escape helper
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        // Tab switching
+        function switchTab(tabId) {
+            // Update tab buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+                btn.setAttribute('aria-selected', 'false');
+            });
+            document.getElementById('btn-' + tabId).classList.add('active');
+            document.getElementById('btn-' + tabId).setAttribute('aria-selected', 'true');
+
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.add('hidden');
+            });
+            document.getElementById('tab-' + tabId).classList.remove('hidden');
+
+            // Load tab-specific data
+            if (tabId === 'servers') loadServers();
+            if (tabId === 'access') loadShareLinks();
+            if (tabId === 'about') loadAbout();
+        }
+
+        // Show message
+        function showMessage(text, type = 'info') {
+            const container = document.getElementById('messageContainer');
+            container.innerHTML = `
+                <div class="message message-${escapeHtml(type)}">
+                    <span class="message-icon">${type === 'success' ? '✓' : type === 'error' ? '✗' : 'ℹ'}</span>
+                    <span class="message-text">${escapeHtml(text)}</span>
+                    <button class="message-close" onclick="this.parentElement.remove()" aria-label="Close message">×</button>
+                </div>
+            `;
+
+            if (type === 'success') {
+                setTimeout(() => {
+                    const message = container.querySelector('.message');
+                    if (message) message.remove();
+                }, 5000);
+            }
+        }
+
+        // Git Settings
+        let gitSettings = {
             pdevAutoGit: false,
             pdevGitRepos: [],
             pdevGitRemote: 'origin'
         };
 
-        // Load settings on page load
-        async function loadSettings() {
+        async function loadGitSettings() {
             try {
-                const response = await fetch('/settings');
+                const response = await fetch(`${API_BASE}/settings`);
                 if (!response.ok) throw new Error('Failed to load settings');
 
-                settings = await response.json();
-
-                // Populate UI
-                document.getElementById('pdevAutoGit').checked = settings.pdevAutoGit;
-                document.getElementById('pdevGitRepos').value = settings.pdevGitRepos.join('\n');
-                document.getElementById('pdevGitRemote').value = settings.pdevGitRemote;
-
+                gitSettings = await response.json();
+                document.getElementById('pdevAutoGit').checked = gitSettings.pdevAutoGit;
+                document.getElementById('pdevGitRepos').value = gitSettings.pdevGitRepos.join('\n');
+                document.getElementById('pdevGitRemote').value = gitSettings.pdevGitRemote;
             } catch (error) {
-                showMessage('Failed to load settings: ' + error.message, 'error');
+                console.error('Failed to load git settings:', error);
             }
         }
 
-        // Save settings
-        async function saveSettings() {
-            try {
-                const saveButton = document.getElementById('saveButton');
-                saveButton.disabled = true;
-                saveButton.textContent = 'Saving...';
+        async function saveGitSettings() {
+            const btn = document.getElementById('saveGitButton');
+            btn.disabled = true;
+            btn.textContent = 'Saving...';
 
-                // Collect form data
+            try {
                 const pdevAutoGit = document.getElementById('pdevAutoGit').checked;
                 const pdevGitReposText = document.getElementById('pdevGitRepos').value.trim();
                 const pdevGitRepos = pdevGitReposText ? pdevGitReposText.split('\n').map(line => line.trim()).filter(Boolean) : [];
                 const pdevGitRemote = document.getElementById('pdevGitRemote').value;
 
-                // Validate
                 if (pdevAutoGit && pdevGitRepos.length === 0) {
                     throw new Error('Please add at least one repository path when enabling auto-commit');
                 }
 
-                // Send to server
-                const response = await fetch('/settings', {
+                const response = await fetch(`${API_BASE}/settings`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ pdevAutoGit, pdevGitRepos, pdevGitRemote })
@@ -206,46 +356,145 @@
                     throw new Error(errorData.error || 'Failed to save settings');
                 }
 
-                const result = await response.json();
-                showMessage(result.message || 'Settings saved successfully', 'success');
-
-                // Update local state
-                settings = { pdevAutoGit, pdevGitRepos, pdevGitRemote };
-
+                showMessage('Git settings saved successfully', 'success');
             } catch (error) {
                 showMessage(error.message, 'error');
             } finally {
-                const saveButton = document.getElementById('saveButton');
-                saveButton.disabled = false;
-                saveButton.textContent = 'Save Settings';
+                btn.disabled = false;
+                btn.textContent = 'Save Git Settings';
             }
         }
 
-        // Show message
-        function showMessage(text, type = 'info') {
-            const container = document.getElementById('messageContainer');
-            container.innerHTML = `
-                <div class="message message-${type}">
-                    <span class="message-icon">${type === 'success' ? '✓' : type === 'error' ? '✗' : 'ℹ'}</span>
-                    <span class="message-text">${text}</span>
-                    <button class="message-close" onclick="this.parentElement.remove()" aria-label="Close message">×</button>
-                </div>
-            `;
+        // Servers
+        async function loadServers() {
+            const container = document.getElementById('serversList');
+            try {
+                const response = await fetch(`${API_BASE}/servers`);
+                if (!response.ok) throw new Error('Failed to load servers');
 
-            // Auto-dismiss success messages after 5 seconds
-            if (type === 'success') {
-                setTimeout(() => {
-                    const message = container.querySelector('.message');
-                    if (message) message.remove();
-                }, 5000);
+                const data = await response.json();
+                const servers = data.servers || [];
+
+                if (servers.length === 0) {
+                    container.innerHTML = '<div class="empty-text">No servers configured</div>';
+                    return;
+                }
+
+                container.innerHTML = servers.map(server => `
+                    <div class="server-item">
+                        <span class="server-name">${escapeHtml(server)}</span>
+                        <span class="server-status status-active">Configured</span>
+                    </div>
+                `).join('');
+            } catch (error) {
+                container.innerHTML = '<div class="error-text">We couldn\'t load servers right now. Try refreshing the page.</div>';
             }
         }
 
-        // Event listeners
-        document.getElementById('saveButton').addEventListener('click', saveSettings);
+        // Share Links
+        async function loadShareLinks() {
+            const container = document.getElementById('shareLinksList');
+            try {
+                const response = await fetch(`${API_BASE}/guest-links`);
 
-        // Load settings on page load
-        loadSettings();
+                if (response.status === 401) {
+                    container.innerHTML = '<div class="auth-required">Admin authentication required to view share links</div>';
+                    return;
+                }
+
+                if (!response.ok) throw new Error('Failed to load share links');
+
+                const data = await response.json();
+                const links = data.links || [];
+
+                if (links.length === 0) {
+                    container.innerHTML = '<div class="empty-text">No active share links</div>';
+                    return;
+                }
+
+                container.innerHTML = links.map(link => `
+                    <div class="share-link-item">
+                        <div class="share-link-info">
+                            <span class="share-link-token">${escapeHtml(link.token)}</span>
+                            <span class="share-link-meta">Expires in ${escapeHtml(String(link.remainingHours))}h</span>
+                        </div>
+                        <button class="btn btn-outline btn-sm" onclick="revokeLink('${escapeHtml(link.token)}')" aria-label="Revoke link">Revoke</button>
+                    </div>
+                `).join('');
+            } catch (error) {
+                container.innerHTML = '<div class="error-text">We couldn\'t load share links right now. Try refreshing the page.</div>';
+            }
+        }
+
+        async function revokeLink(token) {
+            if (!confirm('Revoke this share link? Anyone using it will lose access.')) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/guest-links/${encodeURIComponent(token)}`, {
+                    method: 'DELETE'
+                });
+
+                if (!response.ok) throw new Error('Failed to revoke link');
+
+                showMessage('Share link revoked', 'success');
+                loadShareLinks();
+            } catch (error) {
+                showMessage('Failed to revoke link: ' + error.message, 'error');
+            }
+        }
+
+        // About
+        function formatUptime(seconds) {
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const mins = Math.floor((seconds % 3600) / 60);
+
+            if (days > 0) return `${days}d ${hours}h`;
+            if (hours > 0) return `${hours}h ${mins}m`;
+            return `${mins}m`;
+        }
+
+        async function loadAbout() {
+            try {
+                const [versionRes, healthRes] = await Promise.all([
+                    fetch(`${API_BASE}/version`),
+                    fetch(`${API_BASE}/health`)
+                ]);
+
+                if (versionRes.ok) {
+                    const version = await versionRes.json();
+                    document.getElementById('appVersion').textContent = version.version || '-';
+                }
+
+                if (healthRes.ok) {
+                    const health = await healthRes.json();
+                    document.getElementById('appEnv').textContent = health.environment || '-';
+                    document.getElementById('dbStatus').textContent = health.database || '-';
+                    document.getElementById('appUptime').textContent = formatUptime(health.uptime || 0);
+                    document.getElementById('activeSessions').textContent = health.activeSessions || '0';
+                    document.getElementById('connectedClients').textContent = health.globalClients || '0';
+
+                    // Update status dot
+                    const statusDot = document.getElementById('statusDot');
+                    const statusText = document.getElementById('statusText');
+                    if (health.database === 'connected') {
+                        statusDot.className = 'status-dot connected';
+                        statusText.textContent = 'Connected';
+                    } else {
+                        statusDot.className = 'status-dot';
+                        statusText.textContent = 'Disconnected';
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load about info:', error);
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadGitSettings();
+            loadAbout(); // Load status on page load
+        });
     </script>
 </body>
 </html>

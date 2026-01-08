@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Library - PDev Live</title>
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="stylesheet" href="pdev-live.css">
+    <link rel="stylesheet" href="projects-specific.css">
+</head>
+<body>
+    <!-- Navigation Header -->
+    <nav class="nav-header">
+        <a href="/pdev/" class="nav-logo">
+            <div class="nav-logo-icon">P</div>
+            <span>PDev Suite</span>
+        </a>
+        <div class="nav-links">
+            <a href="/pdev/live/" class="nav-link">Live</a>
+            <a href="/pdev/live/projects.html" class="nav-link active">Projects</a>
+            <a href="/pdev/" class="nav-link">Docs</a>
+            <a href="/pdev/live/settings.html" class="nav-link">Settings</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <header class="page-header">
+            <div class="header-left">
+                <h1 class="page-title">Project Library</h1>
+                <p class="page-subtitle">Browse all PDev pipeline projects and their docs</p>
+            </div>
+            <div class="header-right">
+                <span class="project-count" id="projectCount">-</span>
+                <span class="project-count-label">projects</span>
+            </div>
+        </header>
+
+        <!-- Search/Filter Controls -->
+        <section class="filter-section" role="search">
+            <div class="search-box">
+                <label for="searchInput" class="visually-hidden">Search projects</label>
+                <input
+                    type="search"
+                    id="searchInput"
+                    class="search-input"
+                    placeholder="Search projects..."
+                    aria-describedby="searchHelp"
+                >
+                <span id="searchHelp" class="visually-hidden">Type to filter projects by name</span>
+            </div>
+            <div class="filter-box">
+                <label for="serverFilter" class="visually-hidden">Filter by server</label>
+                <select id="serverFilter" class="filter-select" aria-describedby="filterHelp">
+                    <option value="">All servers</option>
+                </select>
+                <span id="filterHelp" class="visually-hidden">Select a server to filter projects</span>
+            </div>
+        </section>
+
+        <!-- Projects Grid -->
+        <section class="projects-section" id="projectsSection" aria-label="Project list" aria-live="polite">
+            <!-- Loading state -->
+            <div class="loading-state" id="loadingState">
+                <div class="skeleton-card" aria-hidden="true">
+                    <div class="skeleton skeleton-badge"></div>
+                    <div class="skeleton skeleton-title"></div>
+                    <div class="skeleton skeleton-text"></div>
+                </div>
+                <div class="skeleton-card" aria-hidden="true">
+                    <div class="skeleton skeleton-badge"></div>
+                    <div class="skeleton skeleton-title"></div>
+                    <div class="skeleton skeleton-text"></div>
+                </div>
+                <div class="skeleton-card" aria-hidden="true">
+                    <div class="skeleton skeleton-badge"></div>
+                    <div class="skeleton skeleton-title"></div>
+                    <div class="skeleton skeleton-text"></div>
+                </div>
+                <span class="visually-hidden" role="status">Loading projects...</span>
+            </div>
+
+            <!-- Empty state -->
+            <div class="empty-state hidden" id="emptyState">
+                <div class="icon" aria-hidden="true">📁</div>
+                <h3>Your project library is empty</h3>
+                <p>Each time you run a PDev pipeline command, your project appears here.</p>
+                <p class="empty-state-hint">Start your first pipeline:</p>
+                <code class="hint-code">/pdev start my-project</code>
+            </div>
+
+            <!-- No results state -->
+            <div class="empty-state hidden" id="noResultsState">
+                <div class="icon" aria-hidden="true">🔍</div>
+                <h3>No matching projects</h3>
+                <p class="empty-state-hint">Try adjusting your search or filter.</p>
+                <button type="button" class="btn btn-outline" onclick="clearFilters()">Clear Filters</button>
+            </div>
+
+            <!-- Error state -->
+            <div class="error-state hidden" id="errorState">
+                <div class="icon" aria-hidden="true">⚠️</div>
+                <h3>Couldn't load projects</h3>
+                <p class="error-hint" id="errorMessage">Please check your connection and try again.</p>
+                <button type="button" class="btn btn-outline" onclick="loadProjects()">Try Again</button>
+            </div>
+
+            <!-- Projects grid container -->
+            <div class="projects-grid" id="projectsContainer" role="list"></div>
+        </section>
+    </div>
+
+    <script>
+        const API_BASE = '/pdev';
+        let allProjects = [];
+
+        // Security: HTML escape helper for dynamic data
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        // Format relative time
+        function timeAgo(dateString) {
+            if (!dateString) return 'No activity';
+            const seconds = Math.floor((Date.now() - new Date(dateString).getTime()) / 1000);
+
+            if (seconds < 60) return 'just now';
+            if (seconds < 3600) return Math.floor(seconds / 60) + 'm ago';
+            if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ago';
+            if (seconds < 604800) return Math.floor(seconds / 86400) + 'd ago';
+            return new Date(dateString).toLocaleDateString();
+        }
+
+        // Show/hide element utilities
+        function showElement(el) { el.classList.remove('hidden'); }
+        function hideElement(el) { el.classList.add('hidden'); }
+
+        // Render a single project card
+        function renderProjectCard(project) {
+            const lastActivity = timeAgo(project.last_activity);
+            const datetime = project.last_activity || '';
+            const fullDate = project.last_activity
+                ? new Date(project.last_activity).toLocaleString()
+                : 'No activity';
+            const docCount = project.total_steps || 0;
+            const sessionCount = project.session_count || 0;
+
+            return `
+                <a href="project.html?server=${encodeURIComponent(project.server_origin)}&project=${encodeURIComponent(project.project_name)}"
+                   class="project-card"
+                   role="listitem"
+                   aria-label="View ${escapeHtml(project.project_name)} project on ${escapeHtml(project.server_origin)}">
+                    <div class="project-card-header">
+                        <span class="server-badge">${escapeHtml(project.server_origin)}</span>
+                        <span class="doc-count">${escapeHtml(String(docCount))} docs</span>
+                    </div>
+                    <div class="project-card-body">
+                        <h3 class="project-name">${escapeHtml(project.project_name)}</h3>
+                    </div>
+                    <div class="project-card-footer">
+                        <span class="session-count">${escapeHtml(String(sessionCount))} sessions</span>
+                        <time datetime="${escapeHtml(datetime)}" title="${escapeHtml(fullDate)}">${escapeHtml(lastActivity)}</time>
+                    </div>
+                </a>
+            `;
+        }
+
+        // Populate server filter dropdown
+        function populateServerFilter(projects) {
+            const select = document.getElementById('serverFilter');
+            const servers = [...new Set(projects.map(p => p.server_origin))].sort();
+
+            // Only populate if not already done
+            if (select.options.length <= 1) {
+                servers.forEach(server => {
+                    const option = document.createElement('option');
+                    option.value = server;
+                    option.textContent = server;
+                    select.appendChild(option);
+                });
+            }
+        }
+
+        // Apply filters and render
+        function applyFiltersAndRender() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
+            const serverFilter = document.getElementById('serverFilter').value;
+            const container = document.getElementById('projectsContainer');
+            const emptyState = document.getElementById('emptyState');
+            const noResultsState = document.getElementById('noResultsState');
+
+            hideElement(emptyState);
+            hideElement(noResultsState);
+
+            let filtered = allProjects;
+
+            // Filter by server
+            if (serverFilter) {
+                filtered = filtered.filter(p => p.server_origin === serverFilter);
+            }
+
+            // Filter by search term
+            if (searchTerm) {
+                filtered = filtered.filter(p =>
+                    p.project_name.toLowerCase().includes(searchTerm)
+                );
+            }
+
+            if (filtered.length === 0) {
+                container.innerHTML = '';
+                if (allProjects.length === 0) {
+                    showElement(emptyState);
+                } else {
+                    showElement(noResultsState);
+                }
+                document.getElementById('projectCount').textContent = '0';
+                return;
+            }
+
+            container.innerHTML = filtered.map(renderProjectCard).join('');
+            document.getElementById('projectCount').textContent = String(filtered.length);
+        }
+
+        // Clear all filters
+        function clearFilters() {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('serverFilter').value = '';
+            applyFiltersAndRender();
+        }
+
+        // Load projects from API
+        async function loadProjects() {
+            const loadingState = document.getElementById('loadingState');
+            const emptyState = document.getElementById('emptyState');
+            const noResultsState = document.getElementById('noResultsState');
+            const errorState = document.getElementById('errorState');
+            const container = document.getElementById('projectsContainer');
+
+            showElement(loadingState);
+            hideElement(emptyState);
+            hideElement(noResultsState);
+            hideElement(errorState);
+            container.innerHTML = '';
+
+            try {
+                const response = await fetch(`${API_BASE}/projects`);
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || `HTTP ${response.status}: Failed to load projects`);
+                }
+
+                const data = await response.json();
+                hideElement(loadingState);
+
+                allProjects = data.projects || [];
+
+                if (allProjects.length === 0) {
+                    showElement(emptyState);
+                    document.getElementById('projectCount').textContent = '0';
+                    return;
+                }
+
+                populateServerFilter(allProjects);
+                applyFiltersAndRender();
+
+            } catch (error) {
+                console.error('Failed to load projects:', error);
+                hideElement(loadingState);
+                showElement(errorState);
+                document.getElementById('errorMessage').textContent =
+                    error.message || 'Please check your connection and try again.';
+            }
+        }
+
+        // Debounce utility for search input
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadProjects();
+
+            // Search input with debounce
+            const searchInput = document.getElementById('searchInput');
+            searchInput.addEventListener('input', debounce(applyFiltersAndRender, 300));
+
+            // Server filter change
+            const serverFilter = document.getElementById('serverFilter');
+            serverFilter.addEventListener('change', applyFiltersAndRender);
+        });
+    </script>
+</body>
+</html>
