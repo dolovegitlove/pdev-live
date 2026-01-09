@@ -153,11 +153,30 @@
 6. What are the IP addresses of the servers that will be used as project servers?
 7. Should I auto-detect the current SSH username, or will you provide it?
 
-After all 7 questions are answered, I'll automatically generate:
-- Complete installation configuration (2 pages)
+After all 7 questions are answered, format ALL values like this:
+
+**PAGE 1 - Server Connection**
+Server Host: example.com
+SSH Port: 22
+Username: pdevuser
+Authentication Method: Password
+Password: [generated]
+Domain Name: pdev.example.com
+
+**PAGE 2 - Configuration (includes Security Credentials at bottom)**
+Domain Name: example.com
+Company Name: MyCompany
+Server Name: prod
+Valid Servers: prod, staging
+Allowed IP Addresses: 192.168.1.100, 192.168.1.101
+Database Password: [generated 32-char]
+HTTP Basic Auth Username: pdev
+HTTP Basic Auth Password: [generated 24-char]
+Session Secret: [generated 32-char]
+
+Also generate:
 - ED25519 SSH keypair for pdev user
-- Credentials for password manager
-- Next steps</code></pre>
+- Credentials for password manager</code></pre>
             <p><strong>After Claude generates the values:</strong> Copy and paste them into the form fields below.</p>
         </div>
 
