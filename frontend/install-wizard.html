@@ -151,9 +151,14 @@
 4. What is the IP address of this server?
 5. What other servers do you plan on using as project servers?
 6. What are the IP addresses of the servers that will be used as project servers?
-7. What is the SSH username for this server?
+7. What username should I create for the PDev-Live service user?
+   (This will be a NEW dedicated Linux user with passwordless sudo privileges)
+   (Default: pdevuser - or provide a custom username like pdev-source)
 
-After all 7 questions are answered, format ALL values like this:
+After all 7 questions are answered, you must:
+1. Generate a secure random password for the new service user
+2. Create the Linux user on the target server with: home directory, bash shell, passwordless sudo, SSH password authentication
+3. Format ALL values like this:
 
 **PAGE 1 - Server Connection**
 Server Host: example.com
