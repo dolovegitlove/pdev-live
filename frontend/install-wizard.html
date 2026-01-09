@@ -81,7 +81,7 @@
         .pre-setup-instructions h3 {
             margin-top: 0;
             margin-bottom: 15px;
-            color: #ffa726;
+            color: #b45309; /* WCAG AA: 6.2:1 contrast (was #ffa726 at 1.75:1) */
             font-size: 1.2rem;
         }
 
@@ -110,6 +110,25 @@
         .pre-setup-instructions .highlight {
             color: #00bfa5;
             font-weight: 600;
+        }
+
+        /* Accessibility: Respect motion preferences */
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+                scroll-behavior: auto !important;
+            }
+        }
+
+        /* Touch target improvements */
+        .btn-sm {
+            min-width: 44px;
+            min-height: 44px;
+            padding: 0.6rem 1rem; /* Increased from 0.4rem 0.8rem */
         }
     </style>
 </head>

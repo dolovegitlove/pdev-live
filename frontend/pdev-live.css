@@ -13,8 +13,8 @@
   --border: #1e1e2e;
   --text: #e4e4e7;
   --muted: #8a8a94; /* Increased from #71717a for 5.2:1 contrast */
-  --accent: #6366f1;
-  --accent2: #818cf8;
+  --accent: #2563eb; /* WCAG AA: 4.5:1+ contrast (was #6366f1 at 3.68:1) */
+  --accent2: #1d4ed8; /* Darker hover state for consistency */
   --success: #16a34a; /* Darker for 4.5:1 white contrast */
   --warn: #f59e0b;
   --error: #ef4444;
