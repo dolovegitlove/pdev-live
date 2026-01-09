@@ -68,6 +68,49 @@
             border-color: #00bfa5;
             box-shadow: 0 0 0 2px rgba(0, 191, 165, 0.2);
         }
+
+        .pre-setup-instructions {
+            background: rgba(255, 243, 205, 0.15);
+            border: 2px solid #ffa726;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 1.5rem;
+            margin-bottom: 30px;
+        }
+
+        .pre-setup-instructions h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: #ffa726;
+            font-size: 1.2rem;
+        }
+
+        .pre-setup-instructions p {
+            color: #e0e0e0;
+            line-height: 1.6;
+        }
+
+        .pre-setup-instructions pre {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-family: 'Courier New', Monaco, monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .pre-setup-instructions pre code {
+            font-family: inherit;
+            font-size: inherit;
+        }
+
+        .pre-setup-instructions .highlight {
+            color: #00bfa5;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -75,6 +118,46 @@
         <div class="wizard-header">
             <h1>✨ PDev Live Installer</h1>
             <p>Install PDev Live in minutes with our guided wizard</p>
+        </div>
+
+        <!-- Pre-Setup Instructions -->
+        <div class="pre-setup-instructions">
+            <h3>⚠️ Before You Begin - Copy This to Claude Code</h3>
+            <p>Paste this entire block into your Claude Code CLI session to generate your installation values:</p>
+            <pre><code>I need to install PDev-Live. Generate installation values for my server and format them for the web form.
+
+My server details:
+- Domain: example.com
+- Company: MyCompany
+- Server nickname: prod
+- Other servers in my infrastructure: prod, staging
+- Server IPs: 192.168.1.100, 192.168.1.101
+
+Generate secure passwords and format ALL values like this:
+
+**PAGE 1 - Server Connection**
+```
+Server Host: example.com
+SSH Port: 22
+Username: pdevuser
+Authentication Method: Password
+Password: [generated]
+Domain Name: pdev.example.com
+```
+
+**PAGE 2 - Configuration**
+```
+Domain Name: example.com
+Company Name: MyCompany
+Server Name: prod
+Valid Servers: prod, staging
+Allowed IP Addresses: 192.168.1.100, 192.168.1.101
+Database Password: [generated 32-char]
+HTTP Basic Auth Username: pdev
+HTTP Basic Auth Password: [generated 24-char]
+Session Secret: [generated 32-char]
+```</code></pre>
+            <p class="highlight">After Claude generates the values, copy and paste them into the form fields below.</p>
         </div>
 
         <div class="wizard-body">
