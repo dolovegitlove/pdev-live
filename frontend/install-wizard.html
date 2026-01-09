@@ -477,6 +477,14 @@ MIIEpAIBAAKCAQEA...
 
             currentStep = step;
 
+            // Hide pre-setup instructions once user moves past mode selection
+            const preSetupInstructions = document.querySelector('.pre-setup-instructions');
+            if (step > 1 && preSetupInstructions) {
+                preSetupInstructions.style.display = 'none';
+            } else if (step === 1 && preSetupInstructions) {
+                preSetupInstructions.style.display = 'block';
+            }
+
             const backBtn = document.getElementById('btn-back');
             const nextBtn = document.getElementById('btn-next');
             const footer = document.querySelector('.wizard-footer');
