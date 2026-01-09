@@ -148,76 +148,16 @@
 1. What domain will PDev-Live run on?
 2. What's your company name?
 3. What do you call this server?
-4. What other servers do you have?
-5. What's this server's IP address?
-6. Do you have SSH access to this server configured in your ~/.ssh/config?
-   - If YES: I'll auto-detect your SSH user
-   - If NO: Please provide your SSH username (e.g., root, ubuntu, admin)
+4. What is the IP address of this server, or would you like me to auto-detect it?
+5. What other servers do you plan on using as project servers?
+6. What are the IP addresses of the servers that will be used as project servers?
+7. Should I auto-detect the current SSH username, or will you provide it?
 
-After I've answered all 6 questions:
-1. Generate an ED25519 SSH keypair for the pdev user
-2. SSH into the server using the credentials I provided in Q6
-3. Create the pdev user with these commands:
-   - sudo useradd -m -s /bin/bash pdev
-   - sudo usermod -aG sudo pdev
-   - echo "pdev ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/pdev
-   - sudo mkdir -p /home/pdev/.ssh
-   - sudo chmod 700 /home/pdev/.ssh
-   - Add the generated public key to /home/pdev/.ssh/authorized_keys
-   - sudo chmod 600 /home/pdev/.ssh/authorized_keys
-   - sudo chown -R pdev:pdev /home/pdev/.ssh
-4. Test SSH connection as pdev user to verify it works
-5. Format the output exactly like this:
-
-**PAGE 1 - Server Connection**
-```
-Server Host: [server nickname from Q3]
-SSH Port: 22
-Username: pdev
-Authentication Method: SSH Key
-Password: [leave blank - using SSH key]
-Domain Name: [domain from Q1]
-```
-
-**PAGE 2 - Configuration**
-```
-Domain Name: [domain from Q1]
-Company Name: [company from Q2]
-Server Name: [server nickname from Q3]
-Valid Servers: [servers from Q4]
-Allowed IP Addresses: [IP from Q5]
-Database Password: [generate 32-char alphanumeric - no special chars]
-HTTP Basic Auth Username: pdev
-HTTP Basic Auth Password: [generate 24-char alphanumeric - no special chars]
-Session Secret: [generate 32-char alphanumeric - no special chars]
-```
-
-**SSH KEYPAIR FOR PDEV USER (generated for isolated service account):**
-```
-Public Key (installer will add to /home/pdev/.ssh/authorized_keys):
-[generate ED25519 public key in OpenSSH format]
-
-Private Key (SAVE THIS - needed to connect as pdev user):
-[generate ED25519 private key in OpenSSH format]
-```
-
-**CREDENTIALS TO SAVE IN PASSWORD MANAGER:**
-```
-Server: [server nickname]
-SSH User: pdev (dedicated PDev-Live installation account)
-SSH Private Key: [show generated private key above]
-Database Password: [show generated password]
-HTTP Basic Auth: pdev / [show generated password]
-Session Secret: [show generated secret]
-
-✅ SETUP COMPLETE:
-The pdev user has been created on the server with:
-- Passwordless sudo privileges
-- SSH key authentication configured
-- Verified SSH connection working
-
-You can now enter the credentials above into the web installer form.
-```</code></pre>
+After all 7 questions are answered, I'll automatically generate:
+- Complete installation configuration (2 pages)
+- ED25519 SSH keypair for pdev user
+- Credentials for password manager
+- Next steps</code></pre>
             <p><strong>After Claude generates the values:</strong> Copy and paste them into the form fields below.</p>
         </div>
 
