@@ -1,7 +1,7 @@
 #!/bin/bash
 # PDev Live Auto-Update Script
-# Checks acme (master) for updates and applies them automatically
-# Runs via cron every 5 minutes on satellite servers (rmlve, djm)
+# Checks source server for updates and applies them automatically
+# Runs via cron every 5 minutes on satellite servers
 
 set -e
 

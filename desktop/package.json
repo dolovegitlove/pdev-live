@@ -5,7 +5,7 @@
   "main": "main.js",
   "author": "Dolov <dolov@dolov.dev>",
   "license": "MIT",
-  "homepage": "https://walletsnack.com/pdev/live/",
+  "homepage": "https://CONFIGURE_ME/pdev/live/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dolovegitlove/pdev-live.git"
@@ -81,7 +81,7 @@
     },
     "publish": {
       "provider": "generic",
-      "url": "https://walletsnack.com/pdev/releases/"
+      "url": "https://CONFIGURE_ME/pdev/releases/"
     }
   },
   "devDependencies": {

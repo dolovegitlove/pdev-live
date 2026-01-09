@@ -3,7 +3,7 @@
  * Multi-server session tracking with PostgreSQL persistence
  *
  * Architecture:
- * - Webhook API receives updates from all servers (dolovdev, acme, ittz, dolov, wdress)
+ * - Webhook API receives updates from all configured servers (see VALID_SERVERS in config)
  * - PostgreSQL stores sessions and steps with UUID-based routing
  * - SSE broadcasts to connected browsers (session-specific channels)
  * - Markdown rendered server-side for consistent display
@@ -24,6 +24,7 @@ const { Client } = require('ssh2');
 const validator = require('validator');
 const createDOMPurify = require('dompurify');
 const { JSDOM } = require('jsdom');
+const config = require('../config');
 
 // DOMPurify setup for server-side sanitization
 const window = new JSDOM('').window;
@@ -32,7 +33,7 @@ const DOMPurify = createDOMPurify(window);
 const app = express();
 app.set('trust proxy', 1); // Trust nginx reverse proxy for X-Forwarded-For
 const server = http.createServer(app);
-const PORT = parseInt(process.env.PORT || '3077', 10);
+const PORT = config.api.port;
 
 // ============================================================================
 // BASE URL CONFIGURATION
@@ -167,8 +168,8 @@ const PDEV_COMMANDS = [
   '/innov', '/caps', '/spec', '/sop', '/pv', '/pdev-regen'
 ];
 
-// Valid server origins
-const VALID_SERVERS = ['dolovdev', 'acme', 'ittz', 'dolov', 'wdress', 'cfree', 'rmlve', 'djm'];
+// Valid server origins (from config)
+const VALID_SERVERS = config.servers.valid;
 
 // Frontend directory for auto-update (environment-specific)
 const FRONTEND_DIR = process.env.PDEV_FRONTEND_DIR || path.join(__dirname, '..', 'frontend');
@@ -182,7 +183,7 @@ if (!ADMIN_KEY || ADMIN_KEY.length < 32) {
 }
 
 // Guest link tokens (in-memory with cleanup)
-const guestTokens = new Map(); // token -> { sessionId, expiresAt, createdAt, createdBy }
+// Guest tokens now persisted in database (guest_tokens table)
 const MAX_GUEST_TOKENS = 1000;
 
 // Short-lived share tokens (in-memory, 5 minute expiry)
@@ -216,25 +217,34 @@ async function loadServerTokens() {
 setInterval(loadServerTokens, 5 * 60 * 1000);
 
 // Cleanup expired tokens every minute
-const cleanupInterval = setInterval(() => {
-  const now = Date.now();
-  for (const [token, data] of guestTokens.entries()) {
-    if (now > data.expiresAt) {
-      guestTokens.delete(token);
-      console.log('[TOKEN] Expired: ' + token.substring(0, 8) + '...');
+const cleanupInterval = setInterval(async () => {
+  try {
+    // Cleanup expired guest tokens from database
+    const result = await pool.query(
+      'DELETE FROM guest_tokens WHERE expires_at <= NOW() RETURNING token'
+    );
+
+    if (result.rowCount > 0) {
+      console.log(`[TOKEN] Cleaned up ${result.rowCount} expired guest token(s)`);
     }
-  }
-  // Cleanup share tokens
-  for (const [token, data] of shareTokens.entries()) {
-    if (now > data.expiresAt || data.used) {
-      shareTokens.delete(token);
+
+    // Cleanup share tokens (still in-memory, 5-minute expiry)
+    const now = Date.now();
+    for (const [token, data] of shareTokens.entries()) {
+      if (now > data.expiresAt || data.used) {
+        shareTokens.delete(token);
+      }
     }
+  } catch (err) {
+    console.error('[TOKEN] Cleanup error:', err);
   }
 }, 60000);
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, closing database connections...');
   clearInterval(cleanupInterval);
+  await pool.end();
   process.exit(0);
 });
 
@@ -442,15 +452,44 @@ function optionalServerToken(req, res, next) {
 }
 
 // Secure token validation
-function validateGuestToken(token) {
+async function validateGuestToken(token) {
   if (!token || typeof token !== 'string' || token.length > 64) return null;
-  var guest = guestTokens.get(token);
-  if (!guest) return null;
-  if (Date.now() > guest.expiresAt) {
-    guestTokens.delete(token);
+
+  try {
+    const result = await pool.query(
+      `SELECT token, token_type, session_id, server_name, project_name,
+              expires_at, created_at, created_by
+       FROM guest_tokens
+       WHERE token = $1 AND expires_at > NOW()`,
+      [token]
+    );
+
+    if (result.rows.length === 0) return null;
+
+    const row = result.rows[0];
+
+    // Return format matching old in-memory structure
+    if (row.token_type === 'session') {
+      return {
+        sessionId: row.session_id,
+        expiresAt: new Date(row.expires_at).getTime(),
+        createdAt: new Date(row.created_at).getTime(),
+        createdBy: row.created_by
+      };
+    } else { // project type
+      return {
+        type: 'project',
+        server: row.server_name,
+        project: row.project_name,
+        expiresAt: new Date(row.expires_at).getTime(),
+        createdAt: new Date(row.created_at).getTime(),
+        createdBy: row.created_by
+      };
+    }
+  } catch (err) {
+    console.error('[Token] Validation error:', err);
     return null;
   }
-  return guest;
 }
 
 // Cryptographically secure token generation
@@ -1035,7 +1074,12 @@ app.post('/guest-links', async (req, res) => {
     }
     
     // Enforce MAX_GUEST_TOKENS
-    if (guestTokens.size >= MAX_GUEST_TOKENS) {
+    const countResult = await pool.query(
+      'SELECT COUNT(*) FROM guest_tokens WHERE expires_at > NOW()'
+    );
+    const activeTokens = parseInt(countResult.rows[0].count);
+
+    if (activeTokens >= MAX_GUEST_TOKENS) {
       return res.status(503).json({ error: 'Token limit reached, try again later' });
     }
     
@@ -1047,13 +1091,12 @@ app.post('/guest-links', async (req, res) => {
     
     var token = generateToken(32);
     var expiresAt = Date.now() + (expiresInHours * 60 * 60 * 1000);
-    
-    guestTokens.set(token, {
-      sessionId: sessionId,
-      expiresAt: expiresAt,
-      createdAt: Date.now(),
-      createdBy: req.headers['x-user'] || 'admin'
-    });
+
+    await pool.query(
+      `INSERT INTO guest_tokens (token, token_type, session_id, expires_at, created_by)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [token, 'session', sessionId, new Date(expiresAt), req.headers['x-user'] || 'admin']
+    );
     
     console.log('[Guest] Created link for session ' + sessionId + ', expires in ' + expiresInHours + 'h');
 
@@ -1109,21 +1152,23 @@ app.post('/project-share', async (req, res) => {
     }
 
     // Enforce MAX_GUEST_TOKENS
-    if (guestTokens.size >= MAX_GUEST_TOKENS) {
+    const countResult = await pool.query(
+      'SELECT COUNT(*) FROM guest_tokens WHERE expires_at > NOW()'
+    );
+    const activeTokens = parseInt(countResult.rows[0].count);
+
+    if (activeTokens >= MAX_GUEST_TOKENS) {
       return res.status(503).json({ error: 'Token limit reached, try again later' });
     }
 
     var token = generateToken(32);
     var expiresAt = Date.now() + (expiresInHours * 60 * 60 * 1000);
 
-    guestTokens.set(token, {
-      type: 'project',
-      server: server,
-      project: project,
-      expiresAt: expiresAt,
-      createdAt: Date.now(),
-      createdBy: req.headers['x-user'] || 'admin'
-    });
+    await pool.query(
+      `INSERT INTO guest_tokens (token, token_type, server_name, project_name, expires_at, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [token, 'project', server, project, new Date(expiresAt), req.headers['x-user'] || 'admin']
+    );
 
     console.log('[Guest] Created project link for ' + server + '/' + project + ', expires in ' + expiresInHours + 'h');
 
@@ -1174,9 +1219,13 @@ app.get('/guest-links', requireAdmin, async (req, res) => {
 app.delete('/guest-links/:token', requireAdmin, async (req, res) => {
   try {
     var token = req.params.token;
-    
-    if (guestTokens.has(token)) {
-      guestTokens.delete(token);
+
+    const result = await pool.query(
+      'DELETE FROM guest_tokens WHERE token = $1 RETURNING token',
+      [token]
+    );
+
+    if (result.rowCount > 0) {
       console.log('[Guest] Revoked link ' + token.substring(0, 8) + '...');
       res.json({ success: true, message: 'Link revoked' });
     } else {
@@ -1191,7 +1240,7 @@ app.delete('/guest-links/:token', requireAdmin, async (req, res) => {
 app.get('/guest/:token', async (req, res) => {
   try {
     var token = req.params.token;
-    var guest = validateGuestToken(token);
+    var guest = await validateGuestToken(token);
     
     if (!guest) {
       return res.status(401).json({ error: 'Invalid or expired guest link' });
@@ -1226,15 +1275,15 @@ app.post('/update', async (req, res) => {
       SELECT id FROM pdev_sessions
       WHERE server_origin = $1 AND session_status = 'active' AND deleted_at IS NULL
       ORDER BY started_at DESC LIMIT 1
-    `, [server || 'acme']);
+    `, [server || config.partner.serverName]);
 
     if (activeSessions.rows.length > 0) {
       sessionId = activeSessions.rows[0].id;
     } else {
       // Create new session
       const session = await createSession({
-        server: server || 'acme',
-        hostname: server || 'acme',
+        server: server || config.partner.serverName,
+        hostname: server || config.partner.serverName,
         project: project || 'Unknown',
         commandType: command ? command.replace('/', '') : 'unknown'
       });

@@ -1,0 +1,47 @@
+[
+  {
+    "viewport": "mobile-344",
+    "loadTime": 1972,
+    "consoleErrors": [],
+    "pageInfo": {
+      "title": "ITT Heal Admin Portal – Secure Login",
+      "hasEmailInput": false,
+      "hasPasswordInput": true,
+      "hasSubmitButton": true,
+      "bodyScrollWidth": 344,
+      "bodyClientWidth": 344,
+      "hasHorizontalOverflow": false
+    },
+    "screenshot": "/Users/dolovdev/projects/pdev-live/visual-validation/ittheal-checkin-20260108-131753/login-mobile-344.png"
+  },
+  {
+    "viewport": "tablet-768",
+    "loadTime": 2094,
+    "consoleErrors": [],
+    "pageInfo": {
+      "title": "ITT Heal Admin Portal – Secure Login",
+      "hasEmailInput": false,
+      "hasPasswordInput": true,
+      "hasSubmitButton": true,
+      "bodyScrollWidth": 768,
+      "bodyClientWidth": 768,
+      "hasHorizontalOverflow": false
+    },
+    "screenshot": "/Users/dolovdev/projects/pdev-live/visual-validation/ittheal-checkin-20260108-131753/login-tablet-768.png"
+  },
+  {
+    "viewport": "desktop-1920",
+    "loadTime": 1940,
+    "consoleErrors": [],
+    "pageInfo": {
+      "title": "ITT Heal Admin Portal – Secure Login",
+      "hasEmailInput": false,
+      "hasPasswordInput": true,
+      "hasSubmitButton": true,
+      "bodyScrollWidth": 1920,
+      "bodyClientWidth": 1920,
+      "hasHorizontalOverflow": false
+    },
+    "screenshot": "/Users/dolovdev/projects/pdev-live/visual-validation/ittheal-checkin-20260108-131753/login-desktop-1920.png"
+  }
+]

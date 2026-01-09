@@ -221,11 +221,11 @@ OPTIONAL:
   --help                   Show this help
 
 EXAMPLES:
-  # Source server (full stack on acme/vyxenai.com)
-  sudo ./pdl-installer.sh --domain vyxenai.com
+  # Source server (full stack with database)
+  sudo ./pdl-installer.sh --domain your-company.com
 
-  # Project server (client only on ittz, posts to vyxenai.com)
-  sudo ./pdl-installer.sh --source-url https://vyxenai.com/pdev/api
+  # Project server (client only, posts to source server)
+  sudo ./pdl-installer.sh --source-url https://your-company.com/pdev/api
 
   # Explicit mode override
   sudo ./pdl-installer.sh --mode=project --source-url https://example.com/pdev/api

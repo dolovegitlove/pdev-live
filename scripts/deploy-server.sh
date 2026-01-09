@@ -8,13 +8,17 @@
 
 set -euo pipefail
 
+# Load configuration defaults
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+[ -f "$PROJECT_DIR/.pdev-defaults.sh" ] && source "$PROJECT_DIR/.pdev-defaults.sh"
+
 # Configuration
-PROJECT_DIR="$HOME/projects/pdev-live"
 SERVER_FILE="server/server.js"
-REMOTE_HOST="acme"
-REMOTE_PATH="/home/acme/pdev-live/server/server.js"
-REMOTE_TEMP="/home/acme/pdev-live/server/server.js.deploying"
-PM2_SERVICE="pdev-live"
+REMOTE_HOST="${DEPLOY_USER}"
+REMOTE_PATH="${BACKEND_SERVICE_PATH}/server/server.js"
+REMOTE_TEMP="${BACKEND_SERVICE_PATH}/server/server.js.deploying"
+PM2_SERVICE="${PM2_APP_NAME}"
 EXPECTED_BRANCH="main"
 LOG_FILE="$PROJECT_DIR/.deploy-log"
 

@@ -1,0 +1,36 @@
+{
+  "sessionId": 1767899957707,
+  "timestamp": "2026-01-08T19:19:17.707Z",
+  "url": "https://ittheal.com/admin/check-in.html",
+  "technical": {
+    "mobile-320": {
+      "status": "ERROR",
+      "error": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[type=\"email\"]')\u001b[22m\n"
+    },
+    "mobile-344": {
+      "status": "ERROR",
+      "error": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[type=\"email\"]')\u001b[22m\n"
+    },
+    "mobile-375": {
+      "status": "ERROR",
+      "error": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[type=\"email\"]')\u001b[22m\n"
+    },
+    "tablet-768": {
+      "status": "ERROR",
+      "error": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[type=\"email\"]')\u001b[22m\n"
+    },
+    "desktop-1280": {
+      "status": "ERROR",
+      "error": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[type=\"email\"]')\u001b[22m\n"
+    },
+    "desktop-1920": {
+      "status": "ERROR",
+      "error": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[type=\"email\"]')\u001b[22m\n"
+    }
+  },
+  "design": {},
+  "responsive": {},
+  "auth": {},
+  "functional": {},
+  "screenshots": []
+}

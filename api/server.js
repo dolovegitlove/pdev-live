@@ -7,6 +7,7 @@ const express = require('express');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { Pool } = require('pg');
+const config = require('../config');
 
 const app = express();
 
@@ -29,16 +30,10 @@ const mutationLimiter = rateLimit({
   message: { error: 'Mutation rate limit exceeded' },
 });
 
-// IP allowlist
+// IP allowlist (from config)
 const ALLOWED_IPS = [
-  '127.0.0.1', '::1', '::ffff:127.0.0.1',
-  '194.32.107.30',   // acme
-  '185.125.171.10',  // ittz
-  '185.125.168.113', // dolov
-  '185.14.97.38',    // rmlve
-  '98.156.21.66',    // wdress
-  '50.28.110.188',   // djm
-  '174.246.135.142', // dolovdev
+  '::ffff:127.0.0.1', // IPv4-mapped localhost
+  ...config.servers.allowedIps,
 ];
 
 app.use((req, res, next) => {

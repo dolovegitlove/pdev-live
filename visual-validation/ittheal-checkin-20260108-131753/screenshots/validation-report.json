@@ -1,0 +1,14 @@
+[
+  {
+    "viewport": "mobile-344",
+    "error": "page.evaluate: SyntaxError: Failed to execute 'querySelectorAll' on 'Document': 'button:has-text(\"Check In\")' is not a valid selector.\n    at eval (eval at evaluate (:234:30), <anonymous>:6:39)\n    at UtilityScript.evaluate (<anonymous>:236:17)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)"
+  },
+  {
+    "viewport": "tablet-768",
+    "error": "page.evaluate: SyntaxError: Failed to execute 'querySelectorAll' on 'Document': 'button:has-text(\"Check In\")' is not a valid selector.\n    at eval (eval at evaluate (:234:30), <anonymous>:6:39)\n    at UtilityScript.evaluate (<anonymous>:236:17)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)"
+  },
+  {
+    "viewport": "desktop-1920",
+    "error": "page.evaluate: SyntaxError: Failed to execute 'querySelectorAll' on 'Document': 'button:has-text(\"Check In\")' is not a valid selector.\n    at eval (eval at evaluate (:234:30), <anonymous>:6:39)\n    at UtilityScript.evaluate (<anonymous>:236:17)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)"
+  }
+]

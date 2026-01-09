@@ -94,8 +94,8 @@ load_pdev_config() {
   echo "  2. Create config file (~/.pdev-live-config):" >&2
   echo "     cat > ~/.pdev-live-config <<EOF" >&2
   echo "# PDev Live Client Configuration" >&2
-  echo "PDEV_LIVE_URL=https://walletsnack.com/pdev/api" >&2
-  echo "PDEV_BASE_URL=https://walletsnack.com/pdev" >&2
+  echo "PDEV_LIVE_URL=https://your-domain.com/pdev/api" >&2
+  echo "PDEV_BASE_URL=https://your-domain.com/pdev" >&2
   echo "PDEV_TOKEN=your-server-token-here" >&2
   echo "EOF" >&2
   echo "     chmod 600 ~/.pdev-live-config" >&2
@@ -110,10 +110,16 @@ detect_server() {
     echo "$PDEV_SERVER"
     return
   fi
+
+  # Load partner server name from config if available
+  if [ -z "$PARTNER_SERVER_NAME" ] && [ -f "$HOME/projects/pdev-live/.env" ]; then
+    PARTNER_SERVER_NAME=$(grep "^PARTNER_SERVER_NAME=" "$HOME/projects/pdev-live/.env" 2>/dev/null | cut -d= -f2 | tr -d '"' || echo "")
+  fi
+
   HOSTNAME=$(hostname -s 2>/dev/null || hostname)
   case "$HOSTNAME" in
     *dolovdev*|Dolovs*|dolov-mac*|Dolov*|Mac) echo "dolovdev" ;;
-    srv*|acme*) echo "acme" ;;
+    srv*|${PARTNER_SERVER_NAME}*) echo "${PARTNER_SERVER_NAME:-$(hostname -s)}" ;;
     itt|*ittz*) echo "ittz" ;;
     *dolov*) echo "dolov" ;;
     WIN*|DESKTOP*|*wdress*) echo "wdress" ;;

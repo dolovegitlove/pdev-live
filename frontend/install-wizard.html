@@ -23,6 +23,52 @@
 
     <!-- xterm.js for terminal -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+
+    <style>
+        .config-section {
+            margin-bottom: 2rem;
+            padding: 1.5rem;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .config-section h3 {
+            margin-top: 0;
+            margin-bottom: 1rem;
+            color: #00bfa5;
+            font-size: 1.1rem;
+        }
+
+        .required {
+            color: #ff5252;
+            font-weight: bold;
+        }
+
+        .btn-sm {
+            padding: 0.4rem 0.8rem;
+            font-size: 0.85rem;
+            margin-top: 0.5rem;
+        }
+
+        textarea {
+            width: 100%;
+            padding: 0.75rem;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            resize: vertical;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #00bfa5;
+            box-shadow: 0 0 0 2px rgba(0, 191, 165, 0.2);
+        }
+    </style>
 </head>
 <body>
     <div class="wizard-container">
@@ -118,7 +164,86 @@ MIIEpAIBAAKCAQEA...
                 </div>
             </div>
 
-            <!-- Step 3: Installation -->
+            <!-- Step 3: Configuration -->
+            <div class="step" id="step-config">
+                <h2>Configuration</h2>
+                <p class="step-description">Configure PDev Live for your infrastructure</p>
+
+                <div class="config-section">
+                    <h3>🏢 Partner Identity</h3>
+
+                    <div class="form-group">
+                        <label for="config-partner-domain">Domain Name <span class="required">*</span></label>
+                        <input type="text" id="config-partner-domain" placeholder="e.g., acme-corp.com" required>
+                        <small>Your company's domain (used for URLs and SSL certificates)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="config-partner-name">Company Name</label>
+                        <input type="text" id="config-partner-name" placeholder="e.g., ACME Corporation">
+                        <small>Display name for your organization</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="config-server-name">Server Name <span class="required">*</span></label>
+                        <input type="text" id="config-server-name" placeholder="e.g., prod-server-01" required>
+                        <small>Identifier for this server (used for session tagging)</small>
+                    </div>
+                </div>
+
+                <div class="config-section">
+                    <h3>🖥️ Server Inventory</h3>
+
+                    <div class="form-group">
+                        <label for="config-valid-servers">Valid Servers <span class="required">*</span></label>
+                        <input type="text" id="config-valid-servers" placeholder="e.g., prod-01,prod-02,staging,dev" required>
+                        <small>Comma-separated list of server names in your infrastructure</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="config-allowed-ips">Allowed IP Addresses <span class="required">*</span></label>
+                        <textarea id="config-allowed-ips" rows="3" placeholder="127.0.0.1,::1,10.0.1.5,10.0.1.6" required></textarea>
+                        <small>Comma-separated IP addresses for API whitelist (include all servers that will POST to PDev Live)</small>
+                    </div>
+                </div>
+
+                <div class="config-section">
+                    <h3>🔒 Security Credentials</h3>
+
+                    <div class="form-group">
+                        <label for="config-db-password">Database Password <span class="required">*</span></label>
+                        <input type="password" id="config-db-password" placeholder="(will be auto-generated)" required>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="generatePassword('config-db-password', 32)">🎲 Generate Secure Password</button>
+                        <small>PostgreSQL password (minimum 32 characters recommended)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="config-auth-user">HTTP Basic Auth Username</label>
+                        <input type="text" id="config-auth-user" value="pdev">
+                        <small>Username for web interface access</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="config-auth-password">HTTP Basic Auth Password <span class="required">*</span></label>
+                        <input type="password" id="config-auth-password" placeholder="(will be auto-generated)" required>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="generatePassword('config-auth-password', 24)">🎲 Generate Secure Password</button>
+                        <small>Password for web interface access (minimum 24 characters)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="config-session-secret">Session Secret <span class="required">*</span></label>
+                        <input type="password" id="config-session-secret" placeholder="(will be auto-generated)" required>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="generatePassword('config-session-secret', 32)">🎲 Generate Secure Secret</button>
+                        <small>Express session encryption key (32 characters)</small>
+                    </div>
+                </div>
+
+                <div class="status-message status-info">
+                    <strong>💡 Security Tip:</strong> Click "Generate Secure Password" to create cryptographically random credentials. These will be saved to <code>.env</code> on your server.
+                </div>
+            </div>
+
+            <!-- Step 4: Installation -->
             <div class="step" id="step-install">
                 <div id="status-messages"></div>
                 <div id="terminal-container"></div>
@@ -187,7 +312,13 @@ MIIEpAIBAAKCAQEA...
                 }
                 goToStep(2);
             } else if (currentStep === 2) {
-                startInstallation();
+                if (validateSSHStep()) {
+                    goToStep(3);
+                }
+            } else if (currentStep === 3) {
+                if (validateConfigStep()) {
+                    startInstallation();
+                }
             }
         });
 
@@ -197,7 +328,7 @@ MIIEpAIBAAKCAQEA...
 
         function goToStep(step) {
             document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
-            const stepElements = ['mode', 'ssh', 'install'];
+            const stepElements = ['mode', 'ssh', 'config', 'install'];
             document.getElementById(`step-${stepElements[step - 1]}`).classList.add('active');
 
             currentStep = step;
@@ -206,19 +337,24 @@ MIIEpAIBAAKCAQEA...
             const nextBtn = document.getElementById('btn-next');
             const footer = document.querySelector('.wizard-footer');
 
-            if (step > 1 && step < 3) {
+            // Show back button on all steps except first and last
+            if (step > 1 && step < 4) {
                 backBtn.classList.remove('hidden');
             } else {
                 backBtn.classList.add('hidden');
             }
 
-            if (step < 3) {
+            // Show next button on all steps except last
+            if (step < 4) {
                 nextBtn.classList.remove('hidden');
+                // Change button text on config step
+                nextBtn.textContent = (step === 3) ? 'Start Installation →' : 'Next →';
             } else {
                 nextBtn.classList.add('hidden');
             }
 
-            if (step === 3) {
+            // Hide footer on installation step
+            if (step === 4) {
                 footer.classList.add('hidden');
             } else {
                 footer.classList.remove('hidden');
@@ -237,6 +373,111 @@ MIIEpAIBAAKCAQEA...
             }
         }
 
+        // Password generation
+        function generatePassword(fieldId, length) {
+            const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}|;:,.<>?';
+            const array = new Uint8Array(length);
+            crypto.getRandomValues(array);
+            const password = Array.from(array).map(x => charset[x % charset.length]).join('');
+            document.getElementById(fieldId).value = password;
+            document.getElementById(fieldId).type = 'text'; // Show generated password
+        }
+
+        // SSH step validation
+        function validateSSHStep() {
+            const host = document.getElementById('ssh-host').value;
+            const username = document.getElementById('ssh-username').value;
+            const authMethod = document.getElementById('auth-method').value;
+            const password = authMethod === 'password' ? document.getElementById('ssh-password').value : '';
+            const privateKey = authMethod === 'key' ? document.getElementById('ssh-key').value : '';
+            const domain = selectedMode === 'source' ? document.getElementById('install-domain').value : '';
+            const sourceUrl = selectedMode === 'project' ? document.getElementById('install-source-url').value : '';
+
+            if (!host || !username) {
+                showStatus('error', 'Please enter server host and username');
+                return false;
+            }
+
+            if (authMethod === 'password' && !password) {
+                showStatus('error', 'Please enter SSH password');
+                return false;
+            }
+
+            if (authMethod === 'key' && !privateKey) {
+                showStatus('error', 'Please enter SSH private key');
+                return false;
+            }
+
+            if (selectedMode === 'source' && !domain) {
+                showStatus('error', 'Please enter domain name for Source Server installation');
+                return false;
+            }
+
+            if (selectedMode === 'project' && !sourceUrl) {
+                showStatus('error', 'Please enter source server URL for Project Server installation');
+                return false;
+            }
+
+            return true;
+        }
+
+        // Configuration step validation
+        function validateConfigStep() {
+            const partnerDomain = document.getElementById('config-partner-domain').value;
+            const serverName = document.getElementById('config-server-name').value;
+            const validServers = document.getElementById('config-valid-servers').value;
+            const allowedIps = document.getElementById('config-allowed-ips').value;
+            const dbPassword = document.getElementById('config-db-password').value;
+            const authPassword = document.getElementById('config-auth-password').value;
+            const sessionSecret = document.getElementById('config-session-secret').value;
+
+            // Check required fields
+            if (!partnerDomain || !serverName || !validServers || !allowedIps || !dbPassword || !authPassword || !sessionSecret) {
+                showStatus('error', 'Please fill in all required fields (marked with *)');
+                return false;
+            }
+
+            // Validate domain format
+            if (!/^[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,}$/i.test(partnerDomain)) {
+                showStatus('error', 'Invalid domain format. Example: company.com');
+                return false;
+            }
+
+            // Validate server name (alphanumeric, hyphens, underscores)
+            if (!/^[a-z0-9_-]+$/i.test(serverName)) {
+                showStatus('error', 'Server name must contain only letters, numbers, hyphens, and underscores');
+                return false;
+            }
+
+            // Validate IP addresses
+            const ips = allowedIps.split(',').map(ip => ip.trim());
+            const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$|^::1$|^[0-9a-f:]+$/i;
+            for (const ip of ips) {
+                if (ip && !ipRegex.test(ip)) {
+                    showStatus('error', `Invalid IP address: ${ip}`);
+                    return false;
+                }
+            }
+
+            // Validate password lengths
+            if (dbPassword.length < 16) {
+                showStatus('error', 'Database password must be at least 16 characters (32 recommended)');
+                return false;
+            }
+
+            if (authPassword.length < 12) {
+                showStatus('error', 'HTTP Basic Auth password must be at least 12 characters (24 recommended)');
+                return false;
+            }
+
+            if (sessionSecret.length < 16) {
+                showStatus('error', 'Session secret must be at least 16 characters (32 recommended)');
+                return false;
+            }
+
+            return true;
+        }
+
         function startInstallation() {
             const host = document.getElementById('ssh-host').value;
             const port = document.getElementById('ssh-port').value;
@@ -245,16 +486,30 @@ MIIEpAIBAAKCAQEA...
             const password = authMethod === 'password' ? document.getElementById('ssh-password').value : '';
             const privateKey = authMethod === 'key' ? document.getElementById('ssh-key').value : '';
 
-            if (!host || !username || (authMethod === 'password' && !password) || (authMethod === 'key' && !privateKey)) {
-                showStatus('error', 'Please fill in all required fields');
-                return;
-            }
+            // Collect configuration
+            const config = {
+                partnerDomain: document.getElementById('config-partner-domain').value,
+                partnerName: document.getElementById('config-partner-name').value || document.getElementById('config-partner-domain').value,
+                serverName: document.getElementById('config-server-name').value,
+                validServers: document.getElementById('config-valid-servers').value,
+                allowedIps: document.getElementById('config-allowed-ips').value,
+                dbPassword: document.getElementById('config-db-password').value,
+                authUser: document.getElementById('config-auth-user').value,
+                authPassword: document.getElementById('config-auth-password').value,
+                sessionSecret: document.getElementById('config-session-secret').value
+            };
 
-            // SECURITY: Clear credential fields immediately after reading
+            // Generate .env file content
+            const envContent = generateEnvFile(config);
+
+            // SECURITY: Clear all sensitive fields immediately after reading
             document.getElementById('ssh-password').value = '';
             document.getElementById('ssh-key').value = '';
+            document.getElementById('config-db-password').value = '';
+            document.getElementById('config-auth-password').value = '';
+            document.getElementById('config-session-secret').value = '';
 
-            goToStep(3);
+            goToStep(4);
 
             // Initialize terminal
             initTerminal();
@@ -269,8 +524,94 @@ MIIEpAIBAAKCAQEA...
                 privateKey,
                 mode: selectedMode,
                 domain: selectedMode === 'source' ? document.getElementById('install-domain').value : '',
-                sourceUrl: selectedMode === 'project' ? document.getElementById('install-source-url').value : ''
+                sourceUrl: selectedMode === 'project' ? document.getElementById('install-source-url').value : '',
+                envContent: envContent,
+                config: config
             });
+        }
+
+        function generateEnvFile(config) {
+            return `# PDev-Live Configuration
+# Generated by PDev Live Installer on ${new Date().toISOString()}
+
+# ========================================
+# PARTNER IDENTITY
+# ========================================
+PARTNER_DOMAIN=${config.partnerDomain}
+PARTNER_NAME="${config.partnerName}"
+PARTNER_SERVER_NAME=${config.serverName}
+
+# ========================================
+# API CONFIGURATION
+# ========================================
+PDEV_LIVE_URL=https://${config.partnerDomain}/pdev/api
+PDEV_BASE_URL=https://${config.partnerDomain}/pdev
+PDEV_API_PORT=3077
+PDEV_API_HOST=0.0.0.0
+
+# ========================================
+# SERVER INVENTORY
+# ========================================
+VALID_SERVERS=${config.validServers}
+ALLOWED_IPS=${config.allowedIps}
+
+# ========================================
+# DATABASE CONFIGURATION
+# ========================================
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=pdev_live
+DB_USER=pdev_user
+DB_PASSWORD=${config.dbPassword}
+
+# ========================================
+# AUTHENTICATION
+# ========================================
+PDEV_AUTH_USER=${config.authUser}
+PDEV_AUTH_PASSWORD=${config.authPassword}
+SESSION_SECRET=${config.sessionSecret}
+
+# ========================================
+# DEPLOYMENT PATHS
+# ========================================
+DEPLOY_USER=${config.serverName}
+FRONTEND_DEPLOY_PATH=/var/www/${config.partnerDomain}/pdev
+FRONTEND_BACKUP_PATH=/var/www/${config.partnerDomain}/pdev-backups
+BACKEND_SERVICE_PATH=/opt/services/pdev-live
+LOG_PATH=/opt/services/pdev-live/logs
+
+# ========================================
+# SSL/TLS CONFIGURATION
+# ========================================
+SSL_CERT_PATH=/etc/letsencrypt/live/${config.partnerDomain}/fullchain.pem
+SSL_KEY_PATH=/etc/letsencrypt/live/${config.partnerDomain}/privkey.pem
+
+# ========================================
+# DESKTOP CLIENT
+# ========================================
+DESKTOP_HOMEPAGE=https://${config.partnerDomain}/pdev/live/
+DESKTOP_UPDATE_URL=https://${config.partnerDomain}/pdev/releases/
+
+# ========================================
+# FEATURE FLAGS
+# ========================================
+ENABLE_AUTO_UPDATES=true
+ENABLE_TELEMETRY=false
+ENABLE_DEBUG_MODE=false
+
+# ========================================
+# BACKUP RETENTION
+# ========================================
+BACKUP_KEEP_DAYS=30
+BACKUP_MAX_COUNT=10
+
+# ========================================
+# PM2 CONFIGURATION
+# ========================================
+PM2_APP_NAME=pdev-live
+PM2_INSTANCES=1
+PM2_MAX_MEMORY_RESTART=512M
+`;
         }
 
         function initTerminal() {

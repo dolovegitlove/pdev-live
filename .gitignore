@@ -9,3 +9,8 @@ installer/dist/
 
 # Deployment logs
 .deploy-log
+
+# Environment files
+.env
+.env.*
+!.env.partner.example
