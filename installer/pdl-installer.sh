@@ -1242,10 +1242,14 @@ extract_source() {
         log "No subdirectories found - structure is already flat"
     fi
 
-    # Verify expected structure
-    if [[ ! -f "$temp_extract/server.js" ]] || [[ ! -f "$temp_extract/package.json" ]]; then
+    # Verify expected structure (support both flat and multi-directory)
+    if [[ -f "$temp_extract/server.js" ]] && [[ -f "$temp_extract/package.json" ]]; then
+        log "Detected flat structure with server.js and package.json at root"
+    elif [[ -f "$temp_extract/server/server.js" ]] && [[ -f "$temp_extract/server/package.json" ]]; then
+        log "Detected multi-directory structure with server/ subdirectory"
+    else
         error "Invalid package structure - missing required files"
-        error "Expected: server.js, package.json"
+        error "Expected: server.js + package.json (flat) OR server/server.js + server/package.json (multi-dir)"
         error "Found: $(ls -A "$temp_extract")"
         return 1
     fi
