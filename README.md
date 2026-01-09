@@ -172,25 +172,30 @@ chmod 600 ~/.pdev-live-config
 
 ### Frontend & Backend Deployment (acme server)
 
-**Use the automated deployment script (recommended):**
-
+**Quick Deploy:**
 ```bash
 cd ~/projects/pdev-live
-./update.sh
+/deploy "your commit message"
 ```
 
-**Deployment Phases:**
-1. ✅ Backup current production files
-2. ✅ Pull latest code from GitHub
-3. ✅ Syntax validation (Node.js, JSON, CSS, HTML)
-4. ✅ Deploy backend via scp
-5. ✅ Deploy frontend via rsync (atomic)
-6. ✅ Restart PM2 service
-7. ✅ Deployment verification (PM2 status, file existence, HTTP)
-8. ✅ Backup rotation (keep 10, delete >30 days)
-9. ✅ Record deployment commit hash
+The `/deploy` command uses `.deploy-config.json` for hybrid deployment:
+- **Frontend changes** (`frontend/**/*`) → `/var/www/vyxenai.com/pdev/` (web-static)
+- **Server changes** (`server/**/*`) → PM2 reload `pdev-live` service
+- **Installer changes** (`installer/**/*`) → `/opt/pdev-installer/`
 
-**Rollback:** If deployment fails, update.sh automatically restores from backup.
+**Deployment automatically:**
+1. ✅ Commits and pushes to GitHub
+2. ✅ Detects changed files and triggers appropriate deployment targets
+3. ✅ Uploads frontend files to `/var/www/vyxenai.com/pdev/`
+4. ✅ Sets correct permissions (www-data:www-data, 644)
+5. ✅ Reloads PM2 service if server code changed
+
+**Deployment Paths (defined in .deploy-config.json):**
+| Type | Local Path | Remote Path | Owner |
+|------|------------|-------------|-------|
+| Frontend (web-static) | `frontend/` | `/var/www/vyxenai.com/pdev/` | www-data:www-data |
+| Server (PM2) | `server/` | PM2 service: `pdev-live` | - |
+| Installer | `installer/` | `/opt/pdev-installer/` | root:root |
 
 **Post-Deployment Checklist:**
 - [ ] Run: `/cache-bust https://vyxenai.com/pdev/`
@@ -200,10 +205,9 @@ cd ~/projects/pdev-live
 
 **Manual Deployment (not recommended):**
 ```bash
-# Only if update.sh unavailable
-rsync -avz --checksum frontend/ acme:/var/www/vyxenai.com/pdev/
-scp server/server.js acme:/opt/services/pdev-live/server.js
-ssh acme 'pm2 restart pdev-live'
+# Only if /deploy unavailable
+scp frontend/install-wizard.html acme:/tmp/
+ssh acme "sudo mv /tmp/install-wizard.html /var/www/vyxenai.com/pdev/install-wizard.html && sudo chown www-data:www-data /var/www/vyxenai.com/pdev/install-wizard.html && sudo chmod 644 /var/www/vyxenai.com/pdev/install-wizard.html"
 ```
 
 **See:** [DEPLOYMENT.md](DEPLOYMENT.md) for full deployment documentation.
