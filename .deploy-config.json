@@ -1,0 +1,26 @@
+{
+  "type": "hybrid",
+  "servers": ["acme"],
+  "deployments": [
+    {
+      "type": "web-static",
+      "trigger": "frontend/**/*",
+      "localPath": "frontend",
+      "remotePath": "/var/www/vyxenai.com/pdev",
+      "owner": "www-data:www-data",
+      "permissions": "644"
+    },
+    {
+      "type": "pm2-service",
+      "trigger": "server/**/*",
+      "service": "pdev-live",
+      "remotePath": "/opt/services/pdev-live"
+    },
+    {
+      "type": "installer-script",
+      "trigger": "installer/**/*",
+      "localPath": "installer",
+      "remotePath": "/opt/pdev-installer"
+    }
+  ]
+}
