@@ -77,6 +77,16 @@ CREATE INDEX IF NOT EXISTS idx_pdev_session_steps_type
 CREATE INDEX IF NOT EXISTS idx_pdev_sessions_metadata
     ON pdev_sessions USING GIN (metadata);
 
+-- Grant permissions to pdev_app user
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE pdev_migrations TO pdev_app;
+GRANT USAGE, SELECT ON SEQUENCE pdev_migrations_id_seq TO pdev_app;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE pdev_sessions TO pdev_app;
+-- Note: pdev_sessions uses gen_random_uuid(), no sequence grant needed
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE pdev_session_steps TO pdev_app;
+GRANT USAGE, SELECT ON SEQUENCE pdev_session_steps_id_seq TO pdev_app;
+
 -- Record migration
 INSERT INTO pdev_migrations (migration_name) VALUES ('001_create_tables')
 ON CONFLICT (migration_name) DO NOTHING;

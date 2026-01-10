@@ -59,7 +59,7 @@ CREATE INDEX idx_guest_tokens_created
   WHERE expires_at > NOW();
 
 -- Grant permissions to pdev_app user
-GRANT ALL PRIVILEGES ON TABLE guest_tokens TO pdev_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE guest_tokens TO pdev_app;
 GRANT USAGE, SELECT ON SEQUENCE guest_tokens_id_seq TO pdev_app;
 
 -- Record migration

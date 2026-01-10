@@ -17,6 +17,10 @@ CREATE INDEX IF NOT EXISTS idx_server_tokens_token ON server_tokens(token) WHERE
 -- Index for server lookup
 CREATE INDEX IF NOT EXISTS idx_server_tokens_server ON server_tokens(server_name) WHERE revoked_at IS NULL;
 
+-- Grant permissions to pdev_app user
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE server_tokens TO pdev_app;
+GRANT USAGE, SELECT ON SEQUENCE server_tokens_id_seq TO pdev_app;
+
 -- Record migration
 INSERT INTO pdev_migrations (migration_name) VALUES ('003_create_server_tokens')
 ON CONFLICT (migration_name) DO NOTHING;

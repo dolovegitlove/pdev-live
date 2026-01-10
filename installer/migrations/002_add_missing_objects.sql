@@ -110,6 +110,18 @@ WHERE s.session_status IN ('completed', 'archived')
 GROUP BY s.id
 ORDER BY s.started_at DESC;
 
+-- Grant permissions to pdev_app user
+-- Updatable view - needs full DML
+GRANT SELECT, INSERT, UPDATE, DELETE ON pdev_steps TO pdev_app;
+
+-- Read-only views - SELECT only
+GRANT SELECT ON v_active_sessions TO pdev_app;
+GRANT SELECT ON v_session_history TO pdev_app;
+
+-- Project manifests table
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE project_manifests TO pdev_app;
+GRANT USAGE, SELECT ON SEQUENCE project_manifests_id_seq TO pdev_app;
+
 -- Record migration
 INSERT INTO pdev_migrations (migration_name) VALUES ('002_add_missing_objects')
 ON CONFLICT (migration_name) DO NOTHING;
