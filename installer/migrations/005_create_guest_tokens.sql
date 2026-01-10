@@ -33,15 +33,13 @@ CREATE TABLE IF NOT EXISTS guest_tokens (
 
 -- Performance indexes
 
--- Fast token lookup (primary use case - only check unexpired tokens)
+-- Fast token lookup (primary use case - token is unique, no partial index needed)
 CREATE INDEX idx_guest_tokens_token_active
-  ON guest_tokens(token)
-  WHERE expires_at > NOW();
+  ON guest_tokens(token);
 
--- Cleanup query optimization (find expired tokens)
+-- Cleanup query optimization (find expired tokens - no WHERE clause, filter at query time)
 CREATE INDEX idx_guest_tokens_expires
-  ON guest_tokens(expires_at)
-  WHERE expires_at <= NOW();
+  ON guest_tokens(expires_at);
 
 -- Session cascade delete optimization
 CREATE INDEX idx_guest_tokens_session
@@ -53,10 +51,9 @@ CREATE INDEX idx_guest_tokens_project
   ON guest_tokens(server_name, project_name, expires_at)
   WHERE token_type = 'project';
 
--- Admin panel queries (list active guest links)
+-- Admin panel queries (list active guest links - filter at query time)
 CREATE INDEX idx_guest_tokens_created
-  ON guest_tokens(created_at DESC)
-  WHERE expires_at > NOW();
+  ON guest_tokens(created_at DESC);
 
 -- Grant permissions to pdev_app user
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE guest_tokens TO pdev_app;
