@@ -3,7 +3,7 @@
 # ============================================================================
 # PDev-Live Remote Installer - Downloads from vyxenai.com
 # ============================================================================
-# Version: 1.0.17 (10/10 Compliance Achievement)
+# Version: 1.0.18 (PM2 User Context Fix)
 # Description: Installs PDev-Live server from remote source (vyxenai.com)
 #
 # Usage: sudo ./pdl-installer.sh [OPTIONS]
@@ -68,6 +68,16 @@ HTTP_USER="${HTTP_USER:-admin}"
 HTTP_PASSWORD="${HTTP_PASSWORD:-}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/pdev-live}"
 DRY_RUN="${DRY_RUN:-false}"
+
+# Detect target user (non-root user who ran sudo)
+# This user will own PM2 processes and config
+if [[ -n "$SUDO_USER" ]] && [[ "$SUDO_USER" != "root" ]]; then
+    TARGET_USER="$SUDO_USER"
+    SERVICE_NAME="pm2-$SUDO_USER"
+else
+    TARGET_USER="$USER"
+    SERVICE_NAME="pm2-root"
+fi
 INTERACTIVE="${INTERACTIVE:-true}"
 FORCE_INSTALL="${FORCE_INSTALL:-false}"
 
@@ -147,7 +157,11 @@ rollback_installation() {
     # Stop PM2 process
     if [[ "$PM2_STARTED" == "true" ]]; then
         log "Stopping PM2 process..."
-        pm2 delete pdev-live 2>/dev/null || true
+        if [[ "$TARGET_USER" != "$USER" ]]; then
+            sudo -u "$TARGET_USER" pm2 delete pdev-live 2>/dev/null || true
+        else
+            pm2 delete pdev-live 2>/dev/null || true
+        fi
         success "PM2 process stopped"
     fi
 
@@ -1649,21 +1663,39 @@ start_pm2_process() {
 
     # Stop existing process if running
     # FIX: Use pm2 show instead of grep to avoid pipefail issues
-    if pm2 show pdev-live &>/dev/null; then
-        log "Stopping existing PM2 process..."
-        pm2 delete pdev-live 2>/dev/null || true
+    # Run as target user to check their PM2 instance
+    if [[ "$TARGET_USER" != "$USER" ]]; then
+        if sudo -u "$TARGET_USER" pm2 show pdev-live &>/dev/null; then
+            log "Stopping existing PM2 process (user: $TARGET_USER)..."
+            sudo -u "$TARGET_USER" pm2 delete pdev-live 2>/dev/null || true
+        fi
+    else
+        if pm2 show pdev-live &>/dev/null; then
+            log "Stopping existing PM2 process..."
+            pm2 delete pdev-live 2>/dev/null || true
+        fi
     fi
 
     # Start PM2 process
-    log "Starting PM2 process..."
+    log "Starting PM2 process as user: $TARGET_USER..."
     cd "$INSTALL_DIR"
-    pm2 start ecosystem.config.js
+
+    # CRITICAL: Run PM2 as the target user, NOT root
+    if [[ "$TARGET_USER" != "$USER" ]]; then
+        sudo -u "$TARGET_USER" pm2 start ecosystem.config.js
+    else
+        pm2 start ecosystem.config.js
+    fi
     PM2_STARTED=true
-    success "PM2 process started"
+    success "PM2 process started (user: $TARGET_USER)"
 
     # Save PM2 configuration
     log "Saving PM2 configuration..."
-    pm2 save
+    if [[ "$TARGET_USER" != "$USER" ]]; then
+        sudo -u "$TARGET_USER" pm2 save
+    else
+        pm2 save
+    fi
     success "PM2 configuration saved"
 
     # Setup PM2 startup script
@@ -1676,7 +1708,7 @@ start_pm2_process() {
     fi
 
     # Idempotency check - service already enabled
-    if systemctl is-enabled pm2-root >/dev/null 2>&1; then
+    if systemctl is-enabled $SERVICE_NAME >/dev/null 2>&1; then
         success "PM2 startup already configured (pm2-root.service enabled)"
         return 0
     fi
@@ -1697,7 +1729,11 @@ start_pm2_process() {
 
     # Run PM2 startup command (creates and enables systemd service)
     log "Running PM2 startup command..."
-    if ! pm2 startup systemd -u root --hp /root >/dev/null 2>&1; then
+    if ! if [[ "$TARGET_USER" != "$USER" ]]; then
+        sudo -u "$TARGET_USER" pm2 startup systemd -u "$TARGET_USER" --hp "$(getent passwd "$TARGET_USER" | cut -d: -f6)"
+    else
+        pm2 startup systemd -u "$TARGET_USER" --hp "$HOME"
+    fi /root >/dev/null 2>&1; then
         fail "PM2 startup command failed"
         return 1
     fi
