@@ -19,7 +19,7 @@ IFS=$'\n\t'
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
-VERSION="1.0.18"
+VERSION="1.0.19"
 INSTALLER_URL="https://vyxenai.com/pdev/install/pdev-complete-v1.0.1.tar.gz"
 INSTALLER_SHA256="f6b2494c33f0ab2e38268910f96cc837de8ec08094d81581a80313224c78aff9"
 TEMP_DIR=""
@@ -216,6 +216,17 @@ download_installer() {
     # Verify download exists
     if [[ ! -f "$tarball" ]]; then
         fail "Downloaded file not found: $tarball"
+    fi
+
+    # Verify GPG signature (optional, for enhanced security)
+    if command -v gpg &>/dev/null && curl -fsSL --max-time 30 "${INSTALLER_URL}.asc" -o "${tarball}.asc" 2>/dev/null; then
+        log "Verifying GPG signature..."
+        if gpg --verify "${tarball}.asc" "$tarball" 2>&1 | grep -q "Good signature"; then
+            success "GPG signature verified (authentic source)"
+        else
+            warn "GPG signature verification failed - falling back to SHA256 checksum"
+            rm -f "${tarball}.asc"
+        fi
     fi
 
     # Verify checksum (if SHA256 is set)
