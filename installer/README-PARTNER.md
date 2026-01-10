@@ -189,7 +189,7 @@ sudo ./pdl-installer.sh --source-url https://pdev.yourdomain.com/pdev/api --dry-
 These are stored in:
 - `~/.pdev-live-config` (client URL configuration, 600 permissions)
 - `/opt/pdev-live/.env` (600 permissions, owner-only)
-- `/etc/nginx/.htpasswd` (600 permissions, owner-only)
+- `/etc/nginx/.htpasswd` (644 permissions, root:www-data)
 
 **Project Mode:** No credentials generated - client posts to source server using source server's credentials
 
@@ -398,7 +398,8 @@ curl -u username:password https://pdev.yourdomain.com/health
 **Reset password:**
 ```bash
 htpasswd -c /etc/nginx/.htpasswd newusername
-chmod 600 /etc/nginx/.htpasswd
+chmod 644 /etc/nginx/.htpasswd
+chown root:www-data /etc/nginx/.htpasswd
 nginx -s reload
 ```
 

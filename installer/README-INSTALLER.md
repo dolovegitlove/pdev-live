@@ -142,7 +142,7 @@ Claude Code (/idea, /spec, etc.)
 │  ┌─────────────────────────────────────────────────────────────┐   │
 │  │                                                               │   │
 │  │  /opt/pdev-live/.env                     (600, root:root)    │   │
-│  │  /etc/nginx/.htpasswd                    (600, root:root)    │   │
+│  │  /etc/nginx/.htpasswd                    (644, root:www-data)│   │
 │  │  ~/.pdev-live-config                     (600, user:user)    │   │
 │  │                                                               │   │
 │  │  Log Bypass: Credentials → /dev/tty (NOT logged to file)     │   │

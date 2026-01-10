@@ -67,10 +67,10 @@ check_file_permissions() {
     # Check .htpasswd permissions
     if [[ -f "/etc/nginx/.htpasswd" ]]; then
         local perm=$(stat -c "%a" "/etc/nginx/.htpasswd" 2>/dev/null || stat -f "%A" "/etc/nginx/.htpasswd")
-        if [[ "$perm" == "640" ]]; then
+        if [[ "$perm" == "644" ]]; then
             check_pass ".htpasswd permissions: $perm (correct)"
         else
-            check_warn ".htpasswd permissions: $perm (should be 640)"
+            check_warn ".htpasswd permissions: $perm (should be 644 with root:www-data ownership)"
         fi
     else
         check_fail ".htpasswd file not found"

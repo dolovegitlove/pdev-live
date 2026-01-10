@@ -3,7 +3,7 @@
 # ============================================================================
 # PDev-Live Remote Installer - Downloads from vyxenai.com
 # ============================================================================
-# Version: 1.0.18 (PM2 User Context Fix)
+# Version: 1.0.19 (HTTP Auth Permission Fix)
 # Description: Installs PDev-Live server from remote source (vyxenai.com)
 #
 # Usage: sudo ./pdl-installer.sh [OPTIONS]
@@ -1605,11 +1605,12 @@ configure_nginx() {
     sed "s/PARTNER_DOMAIN/$DOMAIN/g" "$template" > "$nginx_config"
     success "Nginx config generated"
 
-    # CRITICAL FIX: Create .htpasswd with 600 permissions (infrastructure-security-agent requirement)
+    # CRITICAL FIX: Create .htpasswd with correct permissions for nginx to read
     log "Creating HTTP basic auth credentials..."
     htpasswd -bc /etc/nginx/.htpasswd "$HTTP_USER" "$HTTP_PASSWORD"
-    chmod 600 /etc/nginx/.htpasswd  # CRITICAL: 600 not 640
-    success "HTTP auth configured (user: $HTTP_USER, permissions: 600)"
+    chmod 644 /etc/nginx/.htpasswd
+    chown root:www-data /etc/nginx/.htpasswd
+    success "HTTP auth configured (user: $HTTP_USER, permissions: 644, owner: root:www-data)"
 
     # Test nginx configuration
     log "Testing nginx configuration..."
@@ -1729,13 +1730,16 @@ start_pm2_process() {
 
     # Run PM2 startup command (creates and enables systemd service)
     log "Running PM2 startup command..."
-    if ! if [[ "$TARGET_USER" != "$USER" ]]; then
-        sudo -u "$TARGET_USER" pm2 startup systemd -u "$TARGET_USER" --hp "$(getent passwd "$TARGET_USER" | cut -d: -f6)"
+    if [[ "$TARGET_USER" != "$USER" ]]; then
+        if ! sudo -u "$TARGET_USER" pm2 startup systemd -u "$TARGET_USER" --hp "$(getent passwd "$TARGET_USER" | cut -d: -f6)" >/dev/null 2>&1; then
+            fail "PM2 startup command failed (user: $TARGET_USER)"
+            return 1
+        fi
     else
-        pm2 startup systemd -u "$TARGET_USER" --hp "$HOME"
-    fi /root >/dev/null 2>&1; then
-        fail "PM2 startup command failed"
-        return 1
+        if ! pm2 startup systemd -u "$TARGET_USER" --hp "$HOME" >/dev/null 2>&1; then
+            fail "PM2 startup command failed (user: $TARGET_USER)"
+            return 1
+        fi
     fi
 
     # Wait for systemd to process changes
