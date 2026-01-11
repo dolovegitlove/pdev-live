@@ -54,7 +54,7 @@ IFS=$'\n\t'
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
-VERSION="1.0.20"
+VERSION="1.0.21"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="/tmp/pdl-installer-$(date +%s).log"
 
@@ -1623,11 +1623,98 @@ configure_nginx() {
 
     # Generate config with template variable substitution
     if [[ -n "$URL_PREFIX" ]]; then
-        sed "s/URL_PREFIX/$URL_PREFIX/g" "$template" > "$nginx_config"
-        success "Nginx prefix config generated for /$URL_PREFIX/"
+        # URL PREFIX MODE: Inject location block into existing nginx config
+        log "Detecting existing nginx config for domain: $DOMAIN"
+
+        # Find existing nginx config file for this domain
+        local existing_config=""
+        for conf_path in "/etc/nginx/sites-enabled/$DOMAIN" "/etc/nginx/sites-available/$DOMAIN" "/etc/nginx/conf.d/$DOMAIN.conf"; do
+            if [[ -f "$conf_path" ]]; then
+                existing_config="$conf_path"
+                break
+            fi
+        done
+
+        if [[ -z "$existing_config" ]]; then
+            fail "No existing nginx config found for domain: $DOMAIN"
+            fail "URL prefix mode requires an existing server block for this domain"
+            fail "Checked: /etc/nginx/sites-{enabled,available}/$DOMAIN, /etc/nginx/conf.d/$DOMAIN.conf"
+            exit 1
+        fi
+
+        log "Found existing config: $existing_config"
+
+        # Check if location block already exists
+        if grep -q "location /$URL_PREFIX/" "$existing_config"; then
+            warn "Location block /$URL_PREFIX/ already exists in $existing_config"
+            if [[ "$FORCE_INSTALL" == "true" ]]; then
+                log "Force mode enabled - will replace existing location block"
+            else
+                fail "Location block already exists. Use --force to replace it."
+                exit 1
+            fi
+        fi
+
+        # Backup existing config
+        local backup_path="${existing_config}.bak-$(date +%s)"
+        cp "$existing_config" "$backup_path"
+        log "Backed up existing config to: $backup_path"
+
+        # Generate location block from template
+        local location_block="/tmp/pdev-location-block-$$.conf"
+        sed "s/URL_PREFIX/$URL_PREFIX/g" "$template" > "$location_block"
+
+        # Inject location block into server block
+        # Strategy: Find the last closing brace } and insert before it
+        local temp_config="/tmp/pdev-nginx-$$.conf"
+
+        # Use awk to inject location block before last }
+        awk -v location_file="$location_block" '
+        BEGIN { injected = 0 }
+        # Track brace depth
+        {
+            for (i = 1; i <= length($0); i++) {
+                char = substr($0, i, 1)
+                if (char == "{") depth++
+                if (char == "}") depth--
+            }
+        }
+        # When we hit depth 0 (end of server block), inject location block
+        depth == 0 && /^}/ && !injected {
+            while ((getline line < location_file) > 0) {
+                print line
+            }
+            close(location_file)
+            injected = 1
+        }
+        { print }
+        ' "$existing_config" > "$temp_config"
+
+        # Validate the new config
+        nginx -t -c /dev/stdin < "$temp_config" 2>&1 | grep -q "test is successful" || {
+            fail "Generated nginx config failed validation"
+            cat "$temp_config" >&2
+            rm -f "$temp_config" "$location_block"
+            exit 1
+        }
+
+        # Apply the new config
+        mv "$temp_config" "$existing_config"
+        rm -f "$location_block"
+
+        success "Location block /$URL_PREFIX/ injected into $existing_config"
+        success "Backup saved: $backup_path"
+
+        NGINX_CONFIGURED=true
     else
+        # ROOT DOMAIN MODE: Create new standalone nginx config
         sed "s/PARTNER_DOMAIN/$DOMAIN/g" "$template" > "$nginx_config"
         success "Nginx config generated for root domain"
+
+        # Enable site
+        log "Enabling nginx site..."
+        ln -sf "$nginx_config" /etc/nginx/sites-enabled/pdev-live
+        NGINX_CONFIGURED=true
     fi
 
     # CRITICAL FIX: Create .htpasswd with correct permissions for nginx to read
@@ -1656,11 +1743,6 @@ configure_nginx() {
         echo "$nginx_test_output" >&2
         exit 1
     fi
-
-    # Enable site
-    log "Enabling nginx site..."
-    ln -sf "$nginx_config" /etc/nginx/sites-enabled/pdev-live
-    NGINX_CONFIGURED=true
 
     # Reload nginx
     log "Reloading nginx..."
