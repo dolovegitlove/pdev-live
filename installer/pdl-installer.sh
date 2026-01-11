@@ -54,7 +54,7 @@ IFS=$'\n\t'
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
-VERSION="1.0.17"
+VERSION="1.0.20"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="/tmp/pdl-installer-$(date +%s).log"
 
@@ -62,6 +62,7 @@ LOG_FILE="/tmp/pdl-installer-$(date +%s).log"
 MODE="${MODE:-}"  # Auto-detected from flags: 'source' or 'project'
 DOMAIN="${DOMAIN:-}"
 SOURCE_URL="${SOURCE_URL:-}"
+URL_PREFIX="${URL_PREFIX:-}"  # Optional URL prefix (e.g., "pdev" for /pdev/ deployment)
 DB_PASSWORD="${DB_PASSWORD:-}"
 ADMIN_KEY="${ADMIN_KEY:-}"
 HTTP_USER="${HTTP_USER:-admin}"
@@ -246,6 +247,7 @@ REQUIRED (choose one):
 
 OPTIONAL:
   --mode MODE              Explicit mode override (source|project) [auto-detected]
+  --url-prefix PREFIX      Deploy at URL prefix (e.g., "pdev" for /pdev/ location)
   --db-password PASSWORD   PostgreSQL password (source mode, default: auto-generated)
   --admin-key KEY          Admin API key (source mode, default: auto-generated)
   --http-user USERNAME     HTTP auth username (source mode, default: admin)
@@ -259,6 +261,9 @@ OPTIONAL:
 EXAMPLES:
   # Source server (full stack with database)
   sudo ./pdl-installer.sh --domain your-company.com
+
+  # Source server with URL prefix deployment (/pdev/ instead of root)
+  sudo ./pdl-installer.sh --domain walletsnack.com --url-prefix pdev
 
   # Project server (client only, posts to source server)
   sudo ./pdl-installer.sh --source-url https://your-company.com/pdev/api
@@ -445,6 +450,10 @@ parse_arguments() {
                 ;;
             --install-dir)
                 INSTALL_DIR="$2"
+                shift 2
+                ;;
+            --url-prefix)
+                URL_PREFIX="$2"
                 shift 2
                 ;;
             --dry-run)
@@ -1576,7 +1585,17 @@ configure_nginx() {
 
     # Generate nginx config from template
     log "Generating nginx configuration..."
-    local template="$SCRIPT_DIR/nginx-partner-template.conf"
+
+    # Choose template based on URL prefix flag
+    local template
+    if [[ -n "$URL_PREFIX" ]]; then
+        template="$SCRIPT_DIR/nginx-prefix-template.conf"
+        log "Using prefix template for URL prefix: /$URL_PREFIX/"
+    else
+        template="$SCRIPT_DIR/nginx-partner-template.conf"
+        log "Using standard template for root domain deployment"
+    fi
+
     if [[ ! -f "$template" ]]; then
         fail "Nginx template not found: $template"
         exit 1
@@ -1602,8 +1621,14 @@ configure_nginx() {
         fi
     fi
 
-    sed "s/PARTNER_DOMAIN/$DOMAIN/g" "$template" > "$nginx_config"
-    success "Nginx config generated"
+    # Generate config with template variable substitution
+    if [[ -n "$URL_PREFIX" ]]; then
+        sed "s/URL_PREFIX/$URL_PREFIX/g" "$template" > "$nginx_config"
+        success "Nginx prefix config generated for /$URL_PREFIX/"
+    else
+        sed "s/PARTNER_DOMAIN/$DOMAIN/g" "$template" > "$nginx_config"
+        success "Nginx config generated for root domain"
+    fi
 
     # CRITICAL FIX: Create .htpasswd with correct permissions for nginx to read
     log "Creating HTTP basic auth credentials..."
