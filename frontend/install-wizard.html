@@ -161,27 +161,28 @@ After all 7 questions are answered, you must:
 3. Output EXACTLY this format:
 
 **PAGE 1 - Server Connection**
-Server Host: example.com
+Server Host: [ip-address]
 SSH Port: 22
-Username: pdevuser
+Username: [service-user]
 Authentication Method: Password
 Password: [generated]
-Domain Name: pdev.example.com
+Domain Name: [domain]
 
 **PAGE 2 - Configuration**
-Domain Name: example.com
-Company Name: MyCompany
-Server Name: prod
-Valid Servers: prod, staging
-Allowed IP Addresses: 192.168.1.100, 192.168.1.101
-Database Password: [generated 32-char]
+Domain Name: [domain]
+Company Name: [company]
+Server Name: [server-nickname]
+Valid Servers: [comma-separated-list]
+Allowed IP Addresses: [comma-separated-ips]
+Database Password: [generated-32-char]
 HTTP Basic Auth Username: pdev
-HTTP Basic Auth Password: [generated 24-char]
-Session Secret: [generated 32-char]
+HTTP Basic Auth Password: [generated-24-char]
+Session Secret: [generated-32-char]
 
 **SSH Key (ED25519)**
 Public Key: [generated-public-key]
-Private Key: [generated-private-key]</code></pre>
+Private Key: [generated-private-key]
+</code></pre>
             <p><strong>After Claude generates the values:</strong> Copy them into the form fields below.</p>
         </div>
 
