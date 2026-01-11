@@ -320,8 +320,8 @@ MIIEpAIBAAKCAQEA...
 
                     <div class="form-group">
                         <label for="config-db-password">Database Password <span class="required">*</span></label>
-                        <input type="password" id="config-db-password" placeholder="Enter secure database password" required>
-                        <small>PostgreSQL password (minimum 32 characters recommended)</small>
+                        <input type="password" id="config-db-password" placeholder="Enter database password provided by Claude" required>
+                        <small>PostgreSQL password (provided by Claude during setup)</small>
                     </div>
 
                     <div class="form-group">
@@ -332,19 +332,19 @@ MIIEpAIBAAKCAQEA...
 
                     <div class="form-group">
                         <label for="config-auth-password">HTTP Basic Auth Password <span class="required">*</span></label>
-                        <input type="password" id="config-auth-password" placeholder="Enter secure HTTP auth password" required>
-                        <small>Password for web interface access (minimum 24 characters)</small>
+                        <input type="password" id="config-auth-password" placeholder="Enter HTTP auth password provided by Claude" required>
+                        <small>Password for web interface access (provided by Claude during setup)</small>
                     </div>
 
                     <div class="form-group">
                         <label for="config-session-secret">Session Secret <span class="required">*</span></label>
-                        <input type="password" id="config-session-secret" placeholder="Enter secure session secret" required>
-                        <small>Express session encryption key (32 characters)</small>
+                        <input type="password" id="config-session-secret" placeholder="Enter session secret provided by Claude" required>
+                        <small>Express session encryption key (provided by Claude during setup)</small>
                     </div>
                 </div>
 
                 <div class="status-message status-info">
-                    <strong>💡 Security Tip:</strong> Use cryptographically random passwords (minimum 24-32 characters). These credentials will be stored securely in <code>.env</code> on your server.
+                    <strong>💡 Security Tip:</strong> Claude will generate cryptographically random credentials during setup and provide them to you. Copy them into the fields above.
                 </div>
             </div>
 
