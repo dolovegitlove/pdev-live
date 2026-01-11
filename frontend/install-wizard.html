@@ -158,7 +158,7 @@
 After all 7 questions are answered, you must:
 1. Generate a secure random password for the new service user
 2. Create the Linux user on the target server with: home directory, bash shell, passwordless sudo, SSH password authentication
-3. Format ALL values like this:
+3. Output EXACTLY this format:
 
 **PAGE 1 - Server Connection**
 Server Host: example.com
@@ -168,7 +168,7 @@ Authentication Method: Password
 Password: [generated]
 Domain Name: pdev.example.com
 
-**PAGE 2 - Configuration (includes Security Credentials at bottom)**
+**PAGE 2 - Configuration**
 Domain Name: example.com
 Company Name: MyCompany
 Server Name: prod
@@ -177,12 +177,8 @@ Allowed IP Addresses: 192.168.1.100, 192.168.1.101
 Database Password: [generated 32-char]
 HTTP Basic Auth Username: pdev
 HTTP Basic Auth Password: [generated 24-char]
-Session Secret: [generated 32-char]
-
-Also generate:
-- ED25519 SSH keypair for pdev user
-- Credentials for password manager</code></pre>
-            <p><strong>After Claude generates the values:</strong> Copy and paste them into the form fields below.</p>
+Session Secret: [generated 32-char]</code></pre>
+            <p><strong>After Claude generates the values:</strong> Copy them into the form fields below.</p>
         </div>
 
         <div class="wizard-body">
