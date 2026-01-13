@@ -137,15 +137,15 @@ const config = {
     ]),
   },
 
-  // Database configuration
+  // Database configuration (uses PDEV_DB_* prefix to match server.js Pool)
   database: {
-    host: get('DB_HOST', 'localhost'),
-    port: getInt('DB_PORT', 5432),
-    name: get('DB_NAME', 'pdev_live'),
-    user: get('DB_USER', 'pdev_user'),
-    password: get('DB_PASSWORD'),
+    host: get('PDEV_DB_HOST', 'localhost'),
+    port: getInt('PDEV_DB_PORT', 5432),
+    name: get('PDEV_DB_NAME', 'pdev_live'),
+    user: get('PDEV_DB_USER', 'pdev_app'),
+    password: get('PDEV_DB_PASSWORD'),
     connectionString: get('DATABASE_URL') ||
-      `postgresql://${get('DB_USER', 'pdev_user')}:${get('DB_PASSWORD')}@${get('DB_HOST', 'localhost')}:${getInt('DB_PORT', 5432)}/${get('DB_NAME', 'pdev_live')}`,
+      `postgresql://${get('PDEV_DB_USER', 'pdev_app')}:${get('PDEV_DB_PASSWORD')}@${get('PDEV_DB_HOST', 'localhost')}:${getInt('PDEV_DB_PORT', 5432)}/${get('PDEV_DB_NAME', 'pdev_live')}`,
   },
 
   // Deployment paths
@@ -211,7 +211,7 @@ if (config.isProduction) {
     console.warn('[CONFIG] WARNING: No PDEV_AUTH_PASSWORD set for HTTP Basic Auth!');
   }
   if (!config.database.password) {
-    console.warn('[CONFIG] WARNING: No DB_PASSWORD set for database connection!');
+    console.warn('[CONFIG] WARNING: No PDEV_DB_PASSWORD set for database connection!');
   }
 }
 

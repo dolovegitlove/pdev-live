@@ -1525,7 +1525,7 @@ EOF
 
 # Application Environment
 NODE_ENV=production
-PORT=$APP_PORT
+PDEV_API_PORT=$APP_PORT
 
 # ===================================
 # PUBLIC URL
@@ -1846,6 +1846,27 @@ start_pm2_process() {
         warn "lsof not available - cannot check for orphan processes on port $APP_PORT"
     fi
 
+    # =============================================================================
+    # PostgreSQL Readiness Check (Section 20: Service Startup Sequence)
+    # Ensures database is accepting connections before Node.js starts
+    # =============================================================================
+    log "Waiting for PostgreSQL to be ready..."
+    local pg_ready=false
+    local attempt
+    for attempt in {1..30}; do
+        if pg_isready -h localhost -p 5432 -q 2>/dev/null; then
+            pg_ready=true
+            break
+        fi
+        [[ $attempt -lt 30 ]] && sleep 1
+    done
+
+    if [[ "$pg_ready" != "true" ]]; then
+        fail "PostgreSQL not ready after 30 seconds"
+        exit 1
+    fi
+    success "PostgreSQL ready (attempt $attempt/30)"
+
     # Start PM2 process
     log "Starting PM2 process as user: $TARGET_USER..."
 
@@ -2082,17 +2103,30 @@ verify_deployment() {
     fi
     success "Port $APP_PORT bound"
 
-    # Test 3: HTTP health endpoint (local)
+    # Test 3: HTTP health endpoint with retry loop (Section 20: Startup Sequence)
     log "Checking HTTP health endpoint..."
-    sleep 1
-    # Health endpoint is protected by HTTP Basic Auth (401 expected, means server is running)
+    local health_ok=false
     local health_status
-    health_status=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$APP_PORT/health" 2>/dev/null || echo "000")
-    if [[ "$health_status" == "401" ]] || [[ "$health_status" == "200" ]]; then
-        success "HTTP health OK (status: $health_status)"
+    local health_attempt
+    for health_attempt in {1..10}; do
+        health_status=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$APP_PORT/health" 2>/dev/null || echo "000")
+        if [[ "$health_status" == "401" ]] || [[ "$health_status" == "200" ]]; then
+            health_ok=true
+            break
+        fi
+        [[ $health_attempt -lt 10 ]] && log "Health check attempt $health_attempt/10 (status: $health_status), retrying..." && sleep 2
+    done
+
+    if [[ "$health_ok" == "true" ]]; then
+        success "HTTP health OK (status: $health_status, attempt $health_attempt/10)"
     else
-        fail "HTTP health check failed (status: $health_status)"
-        pm2 logs "$PM2_APP_NAME" --lines 50 --nostream
+        fail "HTTP health check failed after 10 retries (last status: $health_status)"
+        warn "=== PM2 ERROR LOGS (last 50 lines) ==="
+        if [[ "$TARGET_USER" != "$USER" ]]; then
+            sudo -u "$TARGET_USER" pm2 logs "$PM2_APP_NAME" --lines 50 --nostream 2>&1 || true
+        else
+            pm2 logs "$PM2_APP_NAME" --lines 50 --nostream 2>&1 || true
+        fi
         exit 1
     fi
 
