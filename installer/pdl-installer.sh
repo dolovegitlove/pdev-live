@@ -54,7 +54,7 @@ IFS=$'\n\t'
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
-VERSION="1.0.22"
+VERSION="1.0.23"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="/tmp/pdl-installer-$(date +%s).log"
 
@@ -69,6 +69,18 @@ HTTP_USER="${HTTP_USER:-admin}"
 HTTP_PASSWORD="${HTTP_PASSWORD:-}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/pdev-live}"
 DRY_RUN="${DRY_RUN:-false}"
+
+# =============================================================================
+# SINGLE SOURCE OF TRUTH - Configuration Constants
+# All references MUST use these variables to prevent mismatches
+# =============================================================================
+PM2_APP_NAME="pdev-live"           # PM2 process name (used in logs, delete, restart, etc.)
+APP_PORT="${APP_PORT:-3016}"       # Application port
+DB_NAME="pdev_live"                # PostgreSQL database name
+DB_USER="pdev_app"                 # PostgreSQL application user
+NGINX_SITE_NAME="pdev-live"        # Nginx site config name
+CLIENT_CONFIG_FILE=".pdev-live-config"  # Client config filename
+TOOLS_DIR_NAME="pdev-live"         # ~/.claude/tools/<name>/ directory
 
 # Detect target user (non-root user who ran sudo)
 # This user will own PM2 processes and config
@@ -159,18 +171,20 @@ rollback_installation() {
     if [[ "$PM2_STARTED" == "true" ]]; then
         log "Stopping PM2 process..."
         if [[ "$TARGET_USER" != "$USER" ]]; then
-            sudo -u "$TARGET_USER" pm2 delete pdev-live 2>/dev/null || true
+            sudo -u "$TARGET_USER" pm2 delete "$PM2_APP_NAME" 2>/dev/null || true
         else
-            pm2 delete pdev-live 2>/dev/null || true
+            pm2 delete "$PM2_APP_NAME" 2>/dev/null || true
         fi
         success "PM2 process stopped"
     fi
 
     # Securely delete .env file (overwrite before removal)
-    if [[ -f "$INSTALL_DIR/.env" ]]; then
+    # NOTE: .env is in server/ subdirectory for multi-dir structure
+    local ENV_PATH="${SERVER_CWD:-$INSTALL_DIR/server}/.env"
+    if [[ -f "$ENV_PATH" ]]; then
         log "Securely deleting .env file..."
-        shred -vfz -n 3 "$INSTALL_DIR/.env" 2>/dev/null || dd if=/dev/urandom of="$INSTALL_DIR/.env" bs=1M count=1 2>/dev/null || true
-        rm -f "$INSTALL_DIR/.env"
+        shred -vfz -n 3 "$ENV_PATH" 2>/dev/null || dd if=/dev/urandom of="$ENV_PATH" bs=1M count=1 2>/dev/null || true
+        rm -f "$ENV_PATH"
         success "Credentials securely deleted"
     fi
 
@@ -186,19 +200,19 @@ rollback_installation() {
     if [[ "$DB_CREATED" == "true" ]]; then
         if [[ "$INTERACTIVE" == "true" ]]; then
             local DROP_DB
-            read -r -p "Drop database pdev_live? (y/n): " DROP_DB
+            read -r -p "Drop database $DB_NAME? (y/n): " DROP_DB
             if [[ "$DROP_DB" == "y" ]]; then
                 log "Dropping database..."
-                sudo -u postgres psql -c "DROP DATABASE IF EXISTS pdev_live;" 2>/dev/null || true
+                sudo -u postgres psql -c "DROP DATABASE IF EXISTS $DB_NAME;" 2>/dev/null || true
                 sudo -u postgres psql -c "DROP USER IF EXISTS pdev_app;" 2>/dev/null || true
                 success "Database dropped"
             else
-                warn "Database preserved - manually drop with: sudo -u postgres psql -c 'DROP DATABASE pdev_live;'"
+                warn "Database preserved - manually drop with: sudo -u postgres psql -c 'DROP DATABASE $DB_NAME;'"
             fi
         else
             # FIX: Auto-drop database in non-interactive rollback
             warn "Non-interactive mode - automatically dropping database (rollback)"
-            sudo -u postgres psql -c "DROP DATABASE IF EXISTS pdev_live;" 2>/dev/null || true
+            sudo -u postgres psql -c "DROP DATABASE IF EXISTS $DB_NAME;" 2>/dev/null || true
             sudo -u postgres psql -c "DROP USER IF EXISTS pdev_app;" 2>/dev/null || true
             success "Database dropped"
         fi
@@ -214,8 +228,8 @@ rollback_installation() {
     # Remove nginx config
     if [[ "$NGINX_CONFIGURED" == "true" ]]; then
         log "Removing nginx configuration..."
-        rm -f "/etc/nginx/sites-enabled/pdev-live"
-        rm -f "/etc/nginx/sites-available/pdev-live"
+        rm -f "/etc/nginx/sites-enabled/$NGINX_SITE_NAME"
+        rm -f "/etc/nginx/sites-available/$NGINX_SITE_NAME"
         nginx -s reload 2>/dev/null || true
         success "Nginx configuration removed"
     fi
@@ -544,8 +558,8 @@ detect_existing_installation() {
     local existing=false
 
     # Check for PM2 process
-    if command -v pm2 &>/dev/null && pm2 show pdev-live &>/dev/null; then
-        warn "Existing PM2 process: pdev-live"
+    if command -v pm2 &>/dev/null && pm2 show "$PM2_APP_NAME" &>/dev/null; then
+        warn "Existing PM2 process: $PM2_APP_NAME"
         existing=true
     fi
 
@@ -556,14 +570,14 @@ detect_existing_installation() {
     fi
 
     # Check for database
-    if command -v psql &>/dev/null && sudo -u postgres psql -lqt 2>/dev/null | cut -d \| -f 1 | grep -qw "pdev_live"; then
-        warn "Existing database: pdev_live"
+    if command -v psql &>/dev/null && sudo -u postgres psql -lqt 2>/dev/null | cut -d \| -f 1 | grep -qw "$DB_NAME"; then
+        warn "Existing database: $DB_NAME"
         existing=true
     fi
 
     # Check for nginx config
-    if [[ -f /etc/nginx/sites-available/pdev-live ]]; then
-        warn "Existing nginx config: /etc/nginx/sites-available/pdev-live"
+    if [[ -f "/etc/nginx/sites-available/$NGINX_SITE_NAME" ]]; then
+        warn "Existing nginx config: /etc/nginx/sites-available/$NGINX_SITE_NAME"
         existing=true
     fi
 
@@ -681,12 +695,12 @@ check_system_requirements() {
         fi
     fi
 
-    # Check port 3016 availability
-    log "Checking port 3016 availability..."
-    if lsof -ti:3016 >/dev/null 2>&1 && [[ "$FORCE_INSTALL" == "false" ]]; then
-        warn "Port 3016 already in use"
+    # Check port availability
+    log "Checking port $APP_PORT availability..."
+    if lsof -ti:"$APP_PORT" >/dev/null 2>&1 && [[ "$FORCE_INSTALL" == "false" ]]; then
+        warn "Port $APP_PORT already in use"
         # FIX: Use pm2 show instead of grep to avoid pipefail issues
-        if command -v pm2 &>/dev/null && pm2 show pdev-live &>/dev/null; then
+        if command -v pm2 &>/dev/null && pm2 show "$PM2_APP_NAME" &>/dev/null; then
             warn "Existing PDev-Live installation detected"
             if [[ "$INTERACTIVE" == "true" ]]; then
                 local OVERWRITE
@@ -697,12 +711,12 @@ check_system_requirements() {
                 exit 1
             fi
         else
-            fail "Port 3016 in use by another process"
-            lsof -i:3016
+            fail "Port $APP_PORT in use by another process"
+            lsof -i:"$APP_PORT"
             exit 1
         fi
     fi
-    success "Port 3016 available"
+    success "Port $APP_PORT available"
 
     # Check SSL certificate
     log "Checking SSL certificate..."
@@ -728,25 +742,25 @@ check_system_requirements() {
 }
 
 # =============================================================================
-# PHASE 2: DATABASE SETUP
+# PHASE 3: DATABASE SETUP (runs after source download)
 # =============================================================================
 setup_database() {
-    header "Phase 2: Database Setup"
+    header "Phase 3: Database Setup"
 
     if [[ "$DRY_RUN" == "true" ]]; then
-        dry_run_msg "Would create database: pdev_live"
+        dry_run_msg "Would create database: $DB_NAME"
         dry_run_msg "Would create user: pdev_app"
-        dry_run_msg "Would run migrations: 001_create_tables.sql, 002_add_missing_objects.sql"
+        dry_run_msg "Would run migrations from downloaded source"
         return 0
     fi
 
     # Check if database already exists
-    if sudo -u postgres psql -lqt | cut -d \| -f 1 | grep -qw "pdev_live"; then
+    if sudo -u postgres psql -lqt | cut -d \| -f 1 | grep -qw "$DB_NAME"; then
         if [[ "$FORCE_INSTALL" == "true" ]]; then
-            warn "Database pdev_live already exists - dropping"
-            sudo -u postgres psql -c "DROP DATABASE pdev_live;"
+            warn "Database $DB_NAME already exists - dropping"
+            sudo -u postgres psql -c "DROP DATABASE $DB_NAME;"
         else
-            warn "Database pdev_live already exists - skipping creation"
+            warn "Database $DB_NAME already exists - skipping creation"
             DB_CREATED=false
             return 0
         fi
@@ -760,23 +774,30 @@ setup_database() {
     }
 
     # Create database
-    log "Creating database: pdev_live"
-    sudo -u postgres psql -c "CREATE DATABASE pdev_live OWNER pdev_app;"
+    log "Creating database: $DB_NAME"
+    sudo -u postgres psql -c "CREATE DATABASE $DB_NAME OWNER $DB_USER;"
     DB_CREATED=true
     success "Database created"
 
     # Run migrations
     log "Running database migrations..."
 
-    local migration_dir="$SCRIPT_DIR/migrations"
+    # Use migrations from downloaded source (installed by install_application)
+    local migration_dir="$INSTALL_DIR/installer/migrations"
+    # Fallback for development mode (running from repo directly)
+    if [[ ! -d "$migration_dir" ]] && [[ -d "$SCRIPT_DIR/migrations" ]]; then
+        migration_dir="$SCRIPT_DIR/migrations"
+        log "Using local migrations (development mode)"
+    fi
     if [[ ! -f "$migration_dir/001_create_tables.sql" ]]; then
         fail "Migration file not found: $migration_dir/001_create_tables.sql"
+        fail "Ensure install_application ran first to download source"
         exit 1
     fi
 
     log "Applying migration: 001_create_tables.sql"
     # Use cat pipe to avoid permission denied (postgres user can't read pdev-source owned files)
-    cat "$migration_dir/001_create_tables.sql" | sudo -u postgres psql -d pdev_live \
+    cat "$migration_dir/001_create_tables.sql" | sudo -u postgres psql -d "$DB_NAME" \
         -v ON_ERROR_STOP=1 \
         --single-transaction \
         -q || {
@@ -786,7 +807,7 @@ setup_database() {
 
     if [[ -f "$migration_dir/002_add_missing_objects.sql" ]]; then
         log "Applying migration: 002_add_missing_objects.sql"
-        cat "$migration_dir/002_add_missing_objects.sql" | sudo -u postgres psql -d pdev_live \
+        cat "$migration_dir/002_add_missing_objects.sql" | sudo -u postgres psql -d "$DB_NAME" \
             -v ON_ERROR_STOP=1 \
             --single-transaction \
             -q || {
@@ -797,7 +818,7 @@ setup_database() {
 
     if [[ -f "$migration_dir/003_create_server_tokens.sql" ]]; then
         log "Applying migration: 003_create_server_tokens.sql"
-        cat "$migration_dir/003_create_server_tokens.sql" | sudo -u postgres psql -d pdev_live \
+        cat "$migration_dir/003_create_server_tokens.sql" | sudo -u postgres psql -d "$DB_NAME" \
             -v ON_ERROR_STOP=1 \
             --single-transaction \
             -q || {
@@ -808,7 +829,7 @@ setup_database() {
 
     # Verify migrations
     local migration_count
-    migration_count=$(sudo -u postgres psql -d pdev_live -t -c "SELECT COUNT(*) FROM pdev_migrations;" 2>/dev/null | tr -d ' ' || echo "0")
+    migration_count=$(sudo -u postgres psql -d "$DB_NAME" -t -c "SELECT COUNT(*) FROM pdev_migrations;" 2>/dev/null | tr -d ' ' || echo "0")
     if [[ "$migration_count" -ge 2 ]]; then
         success "Migrations applied successfully ($migration_count total)"
     else
@@ -819,15 +840,15 @@ setup_database() {
 }
 
 # =============================================================================
-# PHASE 2.5: SERVER TOKEN SETUP (CLI Authentication)
+# PHASE 3.5: SERVER TOKEN SETUP (CLI Authentication)
 # =============================================================================
 setup_server_token() {
-    header "Phase 2.5: Server Token Setup"
+    header "Phase 3.5: Server Token Setup"
 
     if [[ "$DRY_RUN" == "true" ]]; then
         dry_run_msg "Would generate server token (256 bits entropy)"
         dry_run_msg "Would store token in database for server: $(hostname -s)"
-        dry_run_msg "Would create token file: ~/.claude/tools/pdev-live/token"
+        dry_run_msg "Would create token file: ~/.claude/tools/$TOOLS_DIR_NAME/token"
         return 0
     fi
 
@@ -848,7 +869,7 @@ setup_server_token() {
     else
         INSTALL_HOME="$HOME"
     fi
-    local token_dir="$INSTALL_HOME/.claude/tools/pdev-live"
+    local token_dir="$INSTALL_HOME/.claude/tools/$TOOLS_DIR_NAME"
     local token_file="$token_dir/token"
 
     # Check for existing valid token (idempotency)
@@ -857,7 +878,7 @@ setup_server_token() {
         existing_token=$(cat "$token_file" 2>/dev/null | tr -d '\n')
         if [[ -n "$existing_token" ]] && [[ ${#existing_token} -eq 64 ]]; then
             local token_valid
-            token_valid=$(sudo -u postgres psql -d pdev_live -t -c \
+            token_valid=$(sudo -u postgres psql -d "$DB_NAME" -t -c \
                 "SELECT COUNT(*) FROM server_tokens WHERE token = '$existing_token' AND revoked_at IS NULL;" 2>/dev/null | tr -d ' ')
             if [[ "$token_valid" -gt 0 ]]; then
                 success "Existing valid token found - skipping generation"
@@ -874,7 +895,7 @@ setup_server_token() {
     # Insert into database (SQL injection safe via character sanitization)
     local SAFE_SERVER_NAME
     SAFE_SERVER_NAME=$(echo "$SERVER_NAME" | sed "s/'/''/g")
-    sudo -u postgres psql -d pdev_live -v ON_ERROR_STOP=1 -c \
+    sudo -u postgres psql -d "$DB_NAME" -v ON_ERROR_STOP=1 -c \
         "INSERT INTO server_tokens (server_name, token) VALUES ('$SAFE_SERVER_NAME', '$TOKEN')
          ON CONFLICT (server_name) DO UPDATE SET token = EXCLUDED.token, created_at = NOW();" || {
         fail "Failed to insert server token into database"
@@ -884,13 +905,14 @@ setup_server_token() {
 
     # Create token file with secure permissions (atomic)
     mkdir -p "$token_dir"
-    chmod 700 "$token_dir"
-    (umask 077 && echo "$TOKEN" > "$token_file")
 
-    # Fix ownership if running as root
-    if [[ -n "$SUDO_USER" ]]; then
+    # Fix ownership BEFORE chmod if running as root (execution context validation)
+    if [[ -n "${SUDO_USER:-}" ]] && [[ "$SUDO_USER" != "root" ]]; then
         chown -R "$SUDO_USER:$SUDO_USER" "$INSTALL_HOME/.claude"
     fi
+
+    chmod 700 "$token_dir"
+    (umask 077 && echo "$TOKEN" > "$token_file")
 
     success "Token stored: $token_file (600 permissions)"
 
@@ -1120,10 +1142,16 @@ store_token_from_response() {
     fi
 
     # Create token file with secure permissions
-    local token_dir="$HOME/.claude/tools/pdev-live"
+    local token_dir="$HOME/.claude/tools/$TOOLS_DIR_NAME"
     local token_file="$token_dir/token"
 
     mkdir -p "$token_dir"
+
+    # Fix ownership BEFORE chmod if running as root (execution context validation)
+    if [[ -n "${SUDO_USER:-}" ]] && [[ "$SUDO_USER" != "root" ]]; then
+        chown -R "$SUDO_USER:$SUDO_USER" "$token_dir"
+    fi
+
     chmod 700 "$token_dir"
 
     # Atomic write with secure permissions
@@ -1366,10 +1394,10 @@ extract_source() {
 
 
 # =============================================================================
-# PHASE 3: APPLICATION INSTALLATION
+# PHASE 2: APPLICATION INSTALLATION (downloads source with migrations)
 # =============================================================================
 install_application() {
-    header "Phase 3: Application Installation"
+    header "Phase 2: Application Installation"
 
     if [[ "$DRY_RUN" == "true" ]]; then
         dry_run_msg "Would create directory: $INSTALL_DIR"
@@ -1390,7 +1418,9 @@ install_application() {
     # Install source files (REMOTE-ONLY, NO FALLBACK)
     # CRITICAL: v1.0.2+ includes frontend files, v1.0.0 does NOT
     # v1.0.3 includes DB_HOST=127.0.0.1 fix for password auth
-    local VERSION="1.0.3"
+    # v1.0.4 includes installer-server.js for web wizard
+    # v1.0.5 includes chown fix for TARGET_USER ownership
+    local VERSION="1.0.5"
     local REMOTE_SOURCE="https://vyxenai.com/pdev/install/pdev-source-v${VERSION}.tar.gz"
     local CHECKSUM_URL="${REMOTE_SOURCE}.sha256"
 
@@ -1434,9 +1464,8 @@ install_application() {
     success "Source files installed from vyxenai.com"
     rm -f "$DOWNLOAD_FILE"  # Cleanup temp file after success
 
-    # Copy migrations for reference
-    mkdir -p "$INSTALL_DIR/installer"
-    cp -r "$SCRIPT_DIR/migrations" "$INSTALL_DIR/installer/migrations"
+    # NOTE: Migrations are already in tarball at installer/migrations/
+    # No need to copy from SCRIPT_DIR (fails in curl|bash mode anyway)
 
     # CRITICAL FIX: Generate/Update ecosystem.config.js for multi-directory structure
     log "Configuring PM2 ecosystem.config.js..."
@@ -1461,14 +1490,14 @@ install_application() {
     cat > "$INSTALL_DIR/ecosystem.config.js" <<EOF
 module.exports = {
   apps: [{
-    name: 'pdev-live-server',
+    name: '$PM2_APP_NAME',
     script: '$SERVER_SCRIPT',
     cwd: '$SERVER_CWD',
     instances: 1,
     exec_mode: 'fork',
     env: {
       NODE_ENV: 'production',
-      PORT: 3016
+      PORT: $APP_PORT
     },
     error_file: '$INSTALL_DIR/logs/error.log',
     out_file: '$INSTALL_DIR/logs/out.log',
@@ -1496,7 +1525,7 @@ EOF
 
 # Application Environment
 NODE_ENV=production
-PORT=3016
+PORT=$APP_PORT
 
 # ===================================
 # PUBLIC URL
@@ -1526,7 +1555,7 @@ PDEV_PASSWORD=$HTTP_PASSWORD
 # 127.0.0.1 forces TCP/IP which uses password authentication via pg_hba.conf
 PDEV_DB_HOST=127.0.0.1
 PDEV_DB_PORT=5432
-PDEV_DB_NAME=pdev_live
+PDEV_DB_NAME=$DB_NAME
 PDEV_DB_USER=pdev_app
 PDEV_DB_PASSWORD=$DB_PASSWORD
 
@@ -1542,6 +1571,10 @@ PDEV_INSTALL_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 PDEV_INSTALLER_VERSION=$VERSION
 EOF
 
+    # CRITICAL FIX: Set ownership to TARGET_USER so PM2 can access files
+    log "Setting ownership to $TARGET_USER..."
+    chown -R "$TARGET_USER:$TARGET_USER" "$INSTALL_DIR"
+
     # CRITICAL FIX: Set correct file permissions (infrastructure-security-agent requirement)
     log "Setting file permissions..."
     chmod 750 "$INSTALL_DIR"
@@ -1553,13 +1586,13 @@ EOF
     # Create symlinks for CLI tools (if client/ directory exists)
     if [[ -d "$INSTALL_DIR/client" ]]; then
         log "Creating CLI tool symlinks..."
-        mkdir -p ~/.claude/tools/pdev-live/
-        ln -sf "$INSTALL_DIR/client/client.sh" ~/.claude/tools/pdev-live/client.sh
-        if [[ -f "$INSTALL_DIR/client/pdev-live-sync.sh" ]]; then
-            ln -sf "$INSTALL_DIR/client/pdev-live-sync.sh" ~/.claude/tools/pdev-live/pdev-live-sync.sh
+        mkdir -p ~/.claude/tools/$TOOLS_DIR_NAME/
+        ln -sf "$INSTALL_DIR/client/client.sh" ~/.claude/tools/$TOOLS_DIR_NAME/client.sh
+        if [[ -f "$INSTALL_DIR/client/$TOOLS_DIR_NAME-sync.sh" ]]; then
+            ln -sf "$INSTALL_DIR/client/$TOOLS_DIR_NAME-sync.sh" ~/.claude/tools/$TOOLS_DIR_NAME/$TOOLS_DIR_NAME-sync.sh
         fi
         chmod +x "$INSTALL_DIR/client"/*.sh 2>/dev/null || true
-        success "CLI symlinks created: ~/.claude/tools/pdev-live/ → $INSTALL_DIR/client/"
+        success "CLI symlinks created: ~/.claude/tools/$TOOLS_DIR_NAME/ → $INSTALL_DIR/client/"
     else
         log "No client/ directory found - skipping CLI symlinks"
     fi
@@ -1578,7 +1611,7 @@ configure_nginx() {
     if [[ "$DRY_RUN" == "true" ]]; then
         dry_run_msg "Would generate nginx config from template"
         dry_run_msg "Would create .htpasswd file (600 permissions)"
-        dry_run_msg "Would enable site: /etc/nginx/sites-enabled/pdev-live"
+        dry_run_msg "Would enable site: /etc/nginx/sites-enabled/$NGINX_SITE_NAME"
         dry_run_msg "Would reload nginx"
         return 0
     fi
@@ -1587,12 +1620,13 @@ configure_nginx() {
     log "Generating nginx configuration..."
 
     # Choose template based on URL prefix flag
+    # Templates are in $INSTALL_DIR/installer/ (from tarball extraction)
     local template
     if [[ -n "$URL_PREFIX" ]]; then
-        template="$SCRIPT_DIR/nginx-prefix-template.conf"
+        template="$INSTALL_DIR/installer/nginx-prefix-template.conf"
         log "Using prefix template for URL prefix: /$URL_PREFIX/"
     else
-        template="$SCRIPT_DIR/nginx-partner-template.conf"
+        template="$INSTALL_DIR/installer/nginx-partner-template.conf"
         log "Using standard template for root domain deployment"
     fi
 
@@ -1601,7 +1635,7 @@ configure_nginx() {
         exit 1
     fi
 
-    local nginx_config="/etc/nginx/sites-available/pdev-live"
+    local nginx_config="/etc/nginx/sites-available/$NGINX_SITE_NAME"
 
     # IDEMPOTENCY: Check for existing nginx config
     if [[ -f "$nginx_config" ]] && [[ "$FORCE_INSTALL" == "false" ]]; then
@@ -1713,7 +1747,7 @@ configure_nginx() {
 
         # Enable site
         log "Enabling nginx site..."
-        ln -sf "$nginx_config" /etc/nginx/sites-enabled/pdev-live
+        ln -sf "$nginx_config" "/etc/nginx/sites-enabled/$NGINX_SITE_NAME"
         NGINX_CONFIGURED=true
     fi
 
@@ -1770,29 +1804,57 @@ start_pm2_process() {
     fi
 
     # Stop existing process if running
-    # FIX: Use pm2 show instead of grep to avoid pipefail issues
-    # Run as target user to check their PM2 instance
-    if [[ "$TARGET_USER" != "$USER" ]]; then
-        if sudo -u "$TARGET_USER" pm2 show pdev-live &>/dev/null; then
-            log "Stopping existing PM2 process (user: $TARGET_USER)..."
-            sudo -u "$TARGET_USER" pm2 delete pdev-live 2>/dev/null || true
+    # =============================================================================
+    # Kill legacy PM2 process names that might hold the port
+    # This handles migration from old naming conventions (e.g., pdev-live-server)
+    # =============================================================================
+    local LEGACY_NAMES=("pdev-live-server" "$PM2_APP_NAME")
+    for name in "${LEGACY_NAMES[@]}"; do
+        if [[ "$TARGET_USER" != "$USER" ]]; then
+            if sudo -u "$TARGET_USER" pm2 show "$name" &>/dev/null; then
+                log "Stopping legacy PM2 process: $name (user: $TARGET_USER)"
+                sudo -u "$TARGET_USER" pm2 delete "$name" 2>/dev/null || true
+            fi
+        else
+            if pm2 show "$name" &>/dev/null; then
+                log "Stopping legacy PM2 process: $name"
+                pm2 delete "$name" 2>/dev/null || true
+            fi
+        fi
+    done
+
+    # Fallback: Kill any process holding the port (non-PM2 orphans)
+    if command -v lsof &>/dev/null; then
+        local port_pid
+        port_pid=$(lsof -ti:"$APP_PORT" 2>/dev/null || true)
+        if [[ -n "$port_pid" ]]; then
+            log "Killing process holding port $APP_PORT (PID: $port_pid)..."
+            kill "$port_pid" 2>/dev/null || true
+            # Wait for port release with timeout
+            local wait_count=0
+            while lsof -ti:"$APP_PORT" &>/dev/null && [[ $wait_count -lt 5 ]]; do
+                sleep 1
+                ((wait_count++))
+            done
+            if lsof -ti:"$APP_PORT" &>/dev/null; then
+                warn "Port $APP_PORT still in use after kill - forcing..."
+                kill -9 "$port_pid" 2>/dev/null || true
+                sleep 1
+            fi
         fi
     else
-        if pm2 show pdev-live &>/dev/null; then
-            log "Stopping existing PM2 process..."
-            pm2 delete pdev-live 2>/dev/null || true
-        fi
+        warn "lsof not available - cannot check for orphan processes on port $APP_PORT"
     fi
 
     # Start PM2 process
     log "Starting PM2 process as user: $TARGET_USER..."
-    cd "$INSTALL_DIR"
 
     # CRITICAL: Run PM2 as the target user, NOT root
+    # Use full path to ecosystem.config.js (it's in $INSTALL_DIR, not $SERVER_CWD)
     if [[ "$TARGET_USER" != "$USER" ]]; then
-        sudo -u "$TARGET_USER" pm2 start ecosystem.config.js
+        sudo -u "$TARGET_USER" pm2 start "$INSTALL_DIR/ecosystem.config.js"
     else
-        pm2 start ecosystem.config.js
+        pm2 start "$INSTALL_DIR/ecosystem.config.js"
     fi
     PM2_STARTED=true
     success "PM2 process started (user: $TARGET_USER)"
@@ -1883,6 +1945,68 @@ start_pm2_process() {
 }
 
 # =============================================================================
+# PHASE 5.5: INSTALLER SERVER SETUP (Web Wizard Bootstrap)
+# =============================================================================
+setup_installer_server() {
+    header "Phase 5.5: Installer Server Setup"
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        dry_run_msg "Would create installer server directory: /opt/services/pdev-installer"
+        dry_run_msg "Would deploy installer-server.js for web wizard"
+        dry_run_msg "Would start PM2 process: pdev-installer on port 3078"
+        return 0
+    fi
+
+    local INSTALLER_DIR="/opt/services/pdev-installer"
+    local SOURCE_INSTALLER="$INSTALL_DIR/installer"
+
+    # Check if installer-server.js exists in downloaded source
+    if [[ ! -f "$SOURCE_INSTALLER/installer-server.js" ]]; then
+        warn "installer-server.js not found in downloaded source"
+        warn "Web installation wizard will not be available"
+        return 0
+    fi
+
+    # Create installer server directory
+    log "Creating installer server directory: $INSTALLER_DIR"
+    mkdir -p "$INSTALLER_DIR"
+
+    # Copy installer server files
+    log "Deploying installer server files..."
+    cp "$SOURCE_INSTALLER/installer-server.js" "$INSTALLER_DIR/installer-server.js"
+    cp "$SOURCE_INSTALLER/package.installer.json" "$INSTALLER_DIR/package.json"
+    cp "$SOURCE_INSTALLER/ecosystem.installer.config.js" "$INSTALLER_DIR/ecosystem.config.js"
+
+    # Install dependencies
+    log "Installing installer server dependencies..."
+    cd "$INSTALLER_DIR"
+    npm install --production
+    success "Installer server dependencies installed"
+
+    # Stop existing process if running
+    if pm2 show pdev-installer &>/dev/null; then
+        log "Stopping existing pdev-installer process..."
+        pm2 delete pdev-installer 2>/dev/null || true
+    fi
+
+    # Start PM2 process for installer server
+    log "Starting installer server (port 3078)..."
+    pm2 start ecosystem.config.js
+    pm2 save
+    success "Installer server started"
+
+    # Verify it's running
+    sleep 2
+    if curl -sf http://localhost:3078/health >/dev/null 2>&1; then
+        success "Installer server health check passed"
+    else
+        warn "Installer server health check failed - check PM2 logs"
+    fi
+
+    return 0
+}
+
+# =============================================================================
 # PHASE 6: POST-DEPLOYMENT VALIDATION
 # =============================================================================
 verify_deployment() {
@@ -1890,7 +2014,7 @@ verify_deployment() {
 
     if [[ "$DRY_RUN" == "true" ]]; then
         dry_run_msg "Would validate PM2 process status"
-        dry_run_msg "Would check port 3016 binding"
+        dry_run_msg "Would check port $APP_PORT binding"
         dry_run_msg "Would test HTTP health endpoint"
         dry_run_msg "Would verify database connectivity"
         dry_run_msg "Would test HTTPS endpoint"
@@ -1898,45 +2022,84 @@ verify_deployment() {
     fi
 
     # Test 1: PM2 process health
+    # CRITICAL: Check TARGET_USER's PM2 instance, not root's
     log "Checking PM2 process status..."
     sleep 2  # Give PM2 time to start
     local pm2_status
-    pm2_status=$(pm2 jlist | jq -r '.[0].pm2_env.status' 2>/dev/null || echo "error")
+    if [[ "$TARGET_USER" != "$USER" ]]; then
+        pm2_status=$(sudo -u "$TARGET_USER" pm2 jlist | jq -r '.[0].pm2_env.status' 2>/dev/null || echo "error")
+    else
+        pm2_status=$(pm2 jlist | jq -r '.[0].pm2_env.status' 2>/dev/null || echo "error")
+    fi
     if [[ "$pm2_status" != "online" ]]; then
         fail "PM2 process not online (status: $pm2_status)"
-        pm2 logs pdev-live --lines 50 --nostream
+        if [[ "$TARGET_USER" != "$USER" ]]; then
+            sudo -u "$TARGET_USER" pm2 logs "$PM2_APP_NAME" --lines 50 --nostream
+        else
+            pm2 logs "$PM2_APP_NAME" --lines 50 --nostream
+        fi
         exit 1
     fi
     success "PM2 process online"
 
-    # Test 2: Port binding
-    log "Checking port 3016 binding..."
-    sleep 1
-    if ! netstat -tuln 2>/dev/null | grep -q ":3016.*LISTEN" && ! lsof -ti:3016 >/dev/null 2>&1; then
-        fail "Port 3016 not listening"
-        pm2 logs pdev-live --lines 50 --nostream
+    # Test 2: Port binding (with retry loop for startup timing)
+    log "Checking port $APP_PORT binding..."
+    local port_bound=false
+    for attempt in 1 2 3 4 5; do
+        if ss -tlnp 2>/dev/null | grep -qE ":${APP_PORT}\b" || \
+           netstat -tlnp 2>/dev/null | grep -qE ":${APP_PORT}\b" || \
+           lsof -ti:"$APP_PORT" >/dev/null 2>&1; then
+            port_bound=true
+            break
+        fi
+        [[ $attempt -lt 5 ]] && log "Port $APP_PORT not bound yet, retry $attempt/5..."
+        sleep 2
+    done
+
+    if [[ "$port_bound" != "true" ]]; then
+        fail "Port $APP_PORT not listening after 5 retries"
+        warn "=== PM2 ERROR LOGS (last 100 lines) ==="
+        if [[ "$TARGET_USER" != "$USER" ]]; then
+            sudo -u "$TARGET_USER" pm2 logs "$PM2_APP_NAME" --lines 100 --nostream 2>&1 || true
+            warn "=== PM2 STATUS ==="
+            sudo -u "$TARGET_USER" pm2 status 2>&1 || true
+            warn "=== PM2 DESCRIBE ==="
+            sudo -u "$TARGET_USER" pm2 describe "$PM2_APP_NAME" 2>&1 || true
+        else
+            pm2 logs "$PM2_APP_NAME" --lines 100 --nostream 2>&1 || true
+            warn "=== PM2 STATUS ==="
+            pm2 status 2>&1 || true
+            warn "=== PM2 DESCRIBE ==="
+            pm2 describe "$PM2_APP_NAME" 2>&1 || true
+        fi
+        warn "=== .env file (sanitized) ==="
+        cat "$INSTALL_DIR/server/.env" 2>/dev/null | grep -v PASSWORD | grep -v SECRET || true
+        warn "=== Node version ==="
+        node --version 2>&1 || true
+        warn "=== Server.js first 20 lines ==="
+        head -20 "$INSTALL_DIR/server/server.js" 2>/dev/null || true
         exit 1
     fi
-    success "Port 3016 bound"
+    success "Port $APP_PORT bound"
 
     # Test 3: HTTP health endpoint (local)
     log "Checking HTTP health endpoint..."
     sleep 1
     # Health endpoint is protected by HTTP Basic Auth (401 expected, means server is running)
     local health_status
-    health_status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3016/health 2>/dev/null || echo "000")
+    health_status=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$APP_PORT/health" 2>/dev/null || echo "000")
     if [[ "$health_status" == "401" ]] || [[ "$health_status" == "200" ]]; then
         success "HTTP health OK (status: $health_status)"
     else
         fail "HTTP health check failed (status: $health_status)"
-        pm2 logs pdev-live --lines 50 --nostream
+        pm2 logs "$PM2_APP_NAME" --lines 50 --nostream
         exit 1
     fi
 
     # Test 4: Database connectivity
     log "Checking database connectivity..."
     local health_json
-    health_json=$(curl -s http://localhost:3016/health 2>/dev/null || echo "{}")
+    health_json=$(curl -s "http://localhost:$APP_PORT/health" 2>/dev/null || echo "{}")
     if ! echo "$health_json" | jq -e '.database.status == "healthy"' >/dev/null 2>&1; then
         warn "Database health check unclear"
         echo "$health_json" | jq . 2>/dev/null || echo "$health_json"
@@ -1981,13 +2144,12 @@ run_security_audit() {
         return 0
     fi
 
-    local audit_script="$SCRIPT_DIR/security-audit.sh"
+    local audit_script="$INSTALL_DIR/installer/security-audit.sh"
     if [[ -f "$audit_script" ]]; then
         log "Running security audit..."
         bash "$audit_script" || warn "Security audit completed with warnings"
     else
-        warn "Security audit script not found: $audit_script"
-        warn "Manual security review recommended"
+        warn "Security audit script not found - skipping"
     fi
 
     return 0
@@ -2000,22 +2162,22 @@ install_client() {
     header "Installing PDev Live Client"
 
     if [[ "$DRY_RUN" == "true" ]]; then
-        dry_run_msg "Would install client to ~/.claude/tools/pdev-live/"
-        dry_run_msg "Would create config: ~/.pdev-live-config"
+        dry_run_msg "Would install client to ~/.claude/tools/$TOOLS_DIR_NAME/"
+        dry_run_msg "Would create config: ~/$CLIENT_CONFIG_FILE"
         return 0
     fi
 
     # Create client directory
-    local client_dir="$HOME/.claude/tools/pdev-live"
+    local client_dir="$HOME/.claude/tools/$TOOLS_DIR_NAME"
     log "Creating client directory: $client_dir"
     mkdir -p "$client_dir"
 
-    # Copy client.sh from installer directory
-    local source_client="$SCRIPT_DIR/../client/client.sh"
+    # Copy client.sh from extracted tarball
+    local source_client="$INSTALL_DIR/client/client.sh"
     if [[ ! -f "$source_client" ]]; then
-        fail "Client script not found: $source_client"
-        error "Installer package may be corrupted"
-        return 1
+        warn "Client script not found: $source_client"
+        warn "Skipping client installation"
+        return 0
     fi
 
     log "Installing client script..."
@@ -2035,7 +2197,7 @@ install_client() {
     log "Generating client configuration..."
     if [[ "$MODE" == "source" ]]; then
         # Source mode: use domain
-        cat > "$HOME/.pdev-live-config" <<EOF
+        cat > "$HOME/$CLIENT_CONFIG_FILE" <<EOF
 # PDev Live Client Configuration
 # Generated by pdl-installer.sh v$VERSION (source mode)
 # Last updated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -2049,7 +2211,7 @@ EOF
     elif [[ "$MODE" == "project" ]]; then
         # Project mode: use source URL
         local base_url="${SOURCE_URL%/api}"
-        cat > "$HOME/.pdev-live-config" <<EOF
+        cat > "$HOME/$CLIENT_CONFIG_FILE" <<EOF
 # PDev Live Client Configuration
 # Generated by pdl-installer.sh v$VERSION (project mode)
 # Last updated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -2063,7 +2225,7 @@ EOF
 
         # Add HTTP auth credentials if provided (for authenticated source servers)
         if [[ -n "${HTTP_USER:-}" ]] && [[ -n "${HTTP_PASSWORD:-}" ]]; then
-            cat >> "$HOME/.pdev-live-config" <<EOF
+            cat >> "$HOME/$CLIENT_CONFIG_FILE" <<EOF
 
 # HTTP Basic Auth (for authenticated source servers)
 # These credentials are used by client.sh to authenticate API requests
@@ -2074,8 +2236,8 @@ EOF
         fi
     fi
 
-    chmod 600 "$HOME/.pdev-live-config"
-    success "Client config: $HOME/.pdev-live-config (600 permissions)"
+    chmod 600 "$HOME/$CLIENT_CONFIG_FILE"
+    success "Client config: $HOME/$CLIENT_CONFIG_FILE (600 permissions)"
 
     return 0
 }
@@ -2128,20 +2290,23 @@ main() {
 
     # Phase 2-5: Source mode only (skip in project mode)
     if [[ "$MODE" == "source" ]]; then
-        # Phase 2: Database setup
+        # Phase 2: Application installation (downloads source with migrations)
+        install_application
+
+        # Phase 3: Database setup (uses migrations from downloaded source)
         setup_database
 
-        # Phase 2.5: Server token setup (CLI authentication)
+        # Phase 3.5: Server token setup (CLI authentication)
         setup_server_token
-
-        # Phase 3: Application installation
-        install_application
 
         # Phase 4: Nginx configuration
         configure_nginx
 
         # Phase 5: PM2 process management
         start_pm2_process
+
+        # Phase 5.5: Installer server setup (web wizard bootstrap)
+        setup_installer_server
 
         # Phase 6: Post-deployment validation
         verify_deployment
@@ -2184,9 +2349,9 @@ main() {
             echo "📋 Log File:       $LOG_FILE (NO credentials logged - secure)"
             echo ""
             echo "CREDENTIALS STORED IN (600 permissions, owner-only):"
-            echo "  - $INSTALL_DIR/.env"
+            echo "  - $INSTALL_DIR/server/.env"
             echo "  - /etc/nginx/.htpasswd"
-            echo "  - $HOME/.pdev-live-config"
+            echo "  - $HOME/$CLIENT_CONFIG_FILE"
             echo ""
             echo "NEVER log, email, or share these credentials insecurely."
             echo ""
@@ -2207,9 +2372,9 @@ main() {
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo ""
         echo "NEXT STEPS:"
-        echo "  1. Test health: curl http://localhost:3016/health"
+        echo "  1. Test health: curl http://localhost:$APP_PORT/health"
         echo "  2. Test HTTPS: curl -u $HTTP_USER:*** https://$DOMAIN/health"
-        echo "  3. Monitor logs: pm2 logs pdev-live"
+        echo "  3. Monitor logs: pm2 logs $PM2_APP_NAME"
         echo "  4. Check status: pm2 status"
         echo ""
         echo "PROJECT SERVERS:"
@@ -2218,9 +2383,9 @@ main() {
         echo ""
         echo "SUPPORT:"
         echo "  Documentation: $INSTALL_DIR/README.md"
-        echo "  Logs: pm2 logs pdev-live"
+        echo "  Logs: pm2 logs $PM2_APP_NAME"
         echo "  Status: pm2 status"
-        echo "  Restart: pm2 restart pdev-live"
+        echo "  Restart: pm2 restart $PM2_APP_NAME"
         echo ""
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
@@ -2231,8 +2396,8 @@ main() {
         echo "PDev-Live Project Server Installed Successfully"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo ""
-        echo "✅ Client installed: $HOME/.claude/tools/pdev-live/client.sh"
-        echo "✅ Config file: $HOME/.pdev-live-config (600 permissions)"
+        echo "✅ Client installed: $HOME/.claude/tools/$TOOLS_DIR_NAME/client.sh"
+        echo "✅ Config file: $HOME/$CLIENT_CONFIG_FILE (600 permissions)"
         echo "✅ Source server: $SOURCE_URL"
         echo ""
         if [[ -L /usr/local/bin/pdev-client ]]; then
@@ -2240,20 +2405,20 @@ main() {
             echo ""
         fi
         echo "NEXT STEPS:"
-        echo "  1. Test client: $HOME/.claude/tools/pdev-live/client.sh --help"
+        echo "  1. Test client: $HOME/.claude/tools/$TOOLS_DIR_NAME/client.sh --help"
         echo "  2. Start session: client.sh start <project> <command>"
         echo "  3. Push step: client.sh step \"output\" \"content\""
         echo "  4. View at: ${SOURCE_URL%/api}/live/"
         echo ""
         echo "USAGE:"
         echo "  # Start PDev session"
-        echo "  ~/.claude/tools/pdev-live/client.sh start myproject /spec"
+        echo "  ~/.claude/tools/$TOOLS_DIR_NAME/client.sh start myproject /spec"
         echo ""
         echo "  # Push pipeline document"
-        echo "  ~/.claude/tools/pdev-live/client.sh doc IDEATION /path/to/IDEATION.md"
+        echo "  ~/.claude/tools/$TOOLS_DIR_NAME/client.sh doc IDEATION /path/to/IDEATION.md"
         echo ""
         echo "  # End session"
-        echo "  ~/.claude/tools/pdev-live/client.sh end"
+        echo "  ~/.claude/tools/$TOOLS_DIR_NAME/client.sh end"
         echo ""
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     fi
