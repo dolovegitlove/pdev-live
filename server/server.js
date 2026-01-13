@@ -595,9 +595,9 @@ function broadcastGlobal(event) {
 async function createSession({ server, hostname, project, projectPath, cwd, commandType, commandArgs, user, gitBranch, gitCommit }) {
   const result = await pool.query(`
     INSERT INTO pdev_sessions (
-      server_origin, server_hostname, project_name, project_path,
-      working_directory, command_type, command_args, user_identifier,
-      git_branch, git_commit_sha
+      server_origin, hostname, project_name, project_path,
+      cwd, command_type, command_args, user_name,
+      git_branch, git_commit
     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     RETURNING id, started_at
   `, [server, hostname, project, projectPath, cwd, commandType, commandArgs, user, gitBranch, gitCommit]);
