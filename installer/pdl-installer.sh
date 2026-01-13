@@ -67,6 +67,8 @@ DB_PASSWORD="${DB_PASSWORD:-}"
 ADMIN_KEY="${ADMIN_KEY:-}"
 HTTP_USER="${HTTP_USER:-admin}"
 HTTP_PASSWORD="${HTTP_PASSWORD:-}"
+VALID_SERVERS="${VALID_SERVERS:-}"
+ALLOWED_IPS="${ALLOWED_IPS:-}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/pdev-live}"
 DRY_RUN="${DRY_RUN:-false}"
 
@@ -468,6 +470,14 @@ parse_arguments() {
                 ;;
             --url-prefix)
                 URL_PREFIX="$2"
+                shift 2
+                ;;
+            --valid-servers)
+                VALID_SERVERS="$2"
+                shift 2
+                ;;
+            --allowed-ips)
+                ALLOWED_IPS="$2"
                 shift 2
                 ;;
             --dry-run)
@@ -1566,6 +1576,12 @@ PDEV_DB_PASSWORD=$DB_PASSWORD
 # ADMIN API KEY
 # ===================================
 PDEV_ADMIN_KEY=$ADMIN_KEY
+
+# ===================================
+# SERVER INVENTORY
+# ===================================
+VALID_SERVERS=$VALID_SERVERS
+ALLOWED_IPS=$ALLOWED_IPS
 
 # ===================================
 # INSTALLER METADATA

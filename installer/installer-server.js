@@ -217,6 +217,9 @@ wss.on('connection', (ws, request) => {
       // Pass HTTP auth credentials from wizard config
       if (config && config.authUser) installCmd += ' --http-user ' + escapeShellArg(config.authUser);
       if (config && config.authPassword) installCmd += ' --http-password ' + escapeShellArg(config.authPassword);
+      // Pass server inventory from wizard config
+      if (config && config.validServers) installCmd += ' --valid-servers ' + escapeShellArg(config.validServers);
+      if (config && config.allowedIps) installCmd += ' --allowed-ips ' + escapeShellArg(config.allowedIps);
     } else {
       installCmd += ' --source-url ' + escapeShellArg(sourceUrl);
     }
