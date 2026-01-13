@@ -1583,19 +1583,12 @@ EOF
     chmod 755 "$INSTALL_DIR"/*.sh 2>/dev/null || true
     success "Permissions set (750 dirs, 600 .env - owner-only)"
 
-    # Create symlinks for CLI tools (if client/ directory exists)
-    if [[ -d "$INSTALL_DIR/client" ]]; then
-        log "Creating CLI tool symlinks..."
-        mkdir -p ~/.claude/tools/$TOOLS_DIR_NAME/
-        ln -sf "$INSTALL_DIR/client/client.sh" ~/.claude/tools/$TOOLS_DIR_NAME/client.sh
-        if [[ -f "$INSTALL_DIR/client/$TOOLS_DIR_NAME-sync.sh" ]]; then
-            ln -sf "$INSTALL_DIR/client/$TOOLS_DIR_NAME-sync.sh" ~/.claude/tools/$TOOLS_DIR_NAME/$TOOLS_DIR_NAME-sync.sh
-        fi
-        chmod +x "$INSTALL_DIR/client"/*.sh 2>/dev/null || true
-        success "CLI symlinks created: ~/.claude/tools/$TOOLS_DIR_NAME/ → $INSTALL_DIR/client/"
-    else
-        log "No client/ directory found - skipping CLI symlinks"
-    fi
+    # NOTE: CLI tool installation moved to install_client() function
+    # This prevents symlink/copy conflicts on re-install (idempotency)
+    # The install_client() function handles:
+    # - Copying client.sh to ~/.claude/tools/
+    # - Creating symlink to /usr/local/bin/pdev-client
+    # - Generating client configuration
 
     success "Application installed"
 
@@ -2215,6 +2208,9 @@ install_client() {
     fi
 
     log "Installing client script..."
+    # Remove existing symlink or file to avoid "same file" error on re-install
+    # This handles idempotency when previous install created a symlink
+    [[ -e "$client_dir/client.sh" || -L "$client_dir/client.sh" ]] && rm -f "$client_dir/client.sh"
     cp "$source_client" "$client_dir/client.sh"
     chmod +x "$client_dir/client.sh"
     success "Client installed: $client_dir/client.sh"
