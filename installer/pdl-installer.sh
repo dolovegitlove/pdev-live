@@ -1511,7 +1511,10 @@ EOF
     # Install dependencies in correct directory
     log "Installing Node.js dependencies in $SERVER_CWD..."
     cd "$SERVER_CWD" || { error "Cannot cd to $SERVER_CWD"; return 1; }
-    npm install --production
+    if ! npm install --production; then
+        fail "npm install failed in $SERVER_CWD"
+        exit 1
+    fi
     NPM_INSTALLED=true
     success "Dependencies installed in $SERVER_CWD"
 
@@ -1865,10 +1868,20 @@ start_pm2_process() {
 
     # CRITICAL: Run PM2 as the target user, NOT root
     # Use full path to ecosystem.config.js (it's in $INSTALL_DIR, not $SERVER_CWD)
+    local pm2_start_failed=false
     if [[ "$TARGET_USER" != "$USER" ]]; then
-        sudo -u "$TARGET_USER" pm2 start "$INSTALL_DIR/ecosystem.config.js"
+        if ! sudo -u "$TARGET_USER" pm2 start "$INSTALL_DIR/ecosystem.config.js"; then
+            pm2_start_failed=true
+        fi
     else
-        pm2 start "$INSTALL_DIR/ecosystem.config.js"
+        if ! pm2 start "$INSTALL_DIR/ecosystem.config.js"; then
+            pm2_start_failed=true
+        fi
+    fi
+
+    if [[ "$pm2_start_failed" == "true" ]]; then
+        fail "PM2 failed to start application"
+        exit 1
     fi
     PM2_STARTED=true
     success "PM2 process started (user: $TARGET_USER)"
@@ -1993,8 +2006,11 @@ setup_installer_server() {
 
     # Install dependencies
     log "Installing installer server dependencies..."
-    cd "$INSTALLER_DIR"
-    npm install --production
+    cd "$INSTALLER_DIR" || { warn "Cannot cd to $INSTALLER_DIR"; return 0; }
+    if ! npm install --production; then
+        warn "npm install failed for installer server"
+        return 0
+    fi
     success "Installer server dependencies installed"
 
     # Stop existing process if running
@@ -2005,7 +2021,10 @@ setup_installer_server() {
 
     # Start PM2 process for installer server
     log "Starting installer server (port 3078)..."
-    pm2 start ecosystem.config.js
+    if ! pm2 start ecosystem.config.js; then
+        warn "Failed to start installer server"
+        return 0
+    fi
     pm2 save
     success "Installer server started"
 
