@@ -1420,7 +1420,7 @@ install_application() {
     # v1.0.3 includes DB_HOST=127.0.0.1 fix for password auth
     # v1.0.4 includes installer-server.js for web wizard
     # v1.0.5 includes chown fix for TARGET_USER ownership
-    local VERSION="1.0.5"
+    local VERSION="1.0.6"
     local REMOTE_SOURCE="https://vyxenai.com/pdev/install/pdev-source-v${VERSION}.tar.gz"
     local CHECKSUM_URL="${REMOTE_SOURCE}.sha256"
 

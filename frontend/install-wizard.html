@@ -636,6 +636,7 @@ MIIEpAIBAAKCAQEA...
                 mode: selectedMode,
                 domain: selectedMode === 'source' ? document.getElementById('install-domain').value : '',
                 sourceUrl: selectedMode === 'project' ? document.getElementById('install-source-url').value : '',
+                urlPrefix: selectedMode === 'source' ? 'pdev' : '',
                 envContent: envContent,
                 config: config
             });
