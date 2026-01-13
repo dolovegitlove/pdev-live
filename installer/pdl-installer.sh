@@ -1547,8 +1547,8 @@ PDEV_FRONTEND_DIR=$INSTALL_DIR/frontend
 # CRITICAL: Set to 'true' for dual-layer auth (nginx + Express)
 # PRIMARY auth at nginx layer, this is BACKUP layer
 PDEV_HTTP_AUTH=true
-PDEV_USERNAME=$HTTP_USER
-PDEV_PASSWORD=$HTTP_PASSWORD
+PDEV_AUTH_USER=$HTTP_USER
+PDEV_AUTH_PASSWORD=$HTTP_PASSWORD
 
 # ===================================
 # DATABASE CONFIGURATION

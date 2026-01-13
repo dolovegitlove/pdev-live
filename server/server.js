@@ -348,11 +348,11 @@ if (process.env.PDEV_SERVE_STATIC === 'true') {
 if (process.env.PDEV_HTTP_AUTH === 'true') {
   const basicAuth = require('express-basic-auth');
 
-  const username = process.env.PDEV_USERNAME;
-  const password = process.env.PDEV_PASSWORD;
+  const username = config.auth.user;
+  const password = config.auth.password;
 
   if (!username || !password) {
-    console.error('FATAL: PDEV_HTTP_AUTH=true but PDEV_USERNAME or PDEV_PASSWORD not set');
+    console.error('FATAL: PDEV_HTTP_AUTH=true but PDEV_AUTH_USER or PDEV_AUTH_PASSWORD not set');
     process.exit(1);
   }
 
