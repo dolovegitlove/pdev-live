@@ -3,7 +3,7 @@
 # ============================================================================
 # PDev-Live Remote Installer - Downloads from vyxenai.com
 # ============================================================================
-# Version: 1.0.19 (HTTP Auth Permission Fix)
+# Version: 1.0.19 (HTTP Auth Permission Fix + Workflow Cleanup)
 # Description: Installs PDev-Live server from remote source (vyxenai.com)
 #
 # Usage: sudo ./pdl-installer.sh [OPTIONS]
