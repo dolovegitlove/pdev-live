@@ -181,6 +181,10 @@ jobs:
 
           echo "Verifying required directories/files in tarball..."
 
+          # Get tarball contents to a file to avoid subprocess issues
+          TAR_LIST=$(mktemp)
+          tar -tzf "${TARBALL_NAME}" > "$TAR_LIST"
+
           REQUIRED_ITEMS=(
             "installer/pdl-installer.sh"
             "installer/installer-server.js"
@@ -194,7 +198,7 @@ jobs:
 
           MISSING=0
           for item in "${REQUIRED_ITEMS[@]}"; do
-            if tar -tzf "${TARBALL_NAME}" 2>/dev/null | grep -q "^${item}" || tar -tzf "${TARBALL_NAME}" 2>/dev/null | grep -q "${item}"; then
+            if grep -q "${item}" "$TAR_LIST"; then
               echo "✓ Found: ${item}"
             else
               echo "✗ Missing: ${item}"
@@ -205,10 +209,12 @@ jobs:
           if [ ${MISSING} -gt 0 ]; then
             echo "ERROR: ${MISSING} required items missing from tarball"
             echo "Actual tarball contents (first 20 items):"
-            tar -tzf "${TARBALL_NAME}" 2>/dev/null | head -20
+            head -20 "$TAR_LIST"
+            rm -f "$TAR_LIST"
             exit 1
           fi
 
+          rm -f "$TAR_LIST"
           echo "All required items verified in tarball"
 
       - name: Verify excluded content
