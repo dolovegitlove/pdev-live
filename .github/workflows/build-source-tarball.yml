@@ -16,7 +16,7 @@ on:
         required: false
 
 env:
-  DEPLOY_HOST: acme
+  DEPLOY_HOST: 194.32.107.30
   DEPLOY_PATH: /var/www/vyxenai.com/pdev/install
   DEPLOY_USER: github-deploy
 
