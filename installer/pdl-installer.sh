@@ -1998,60 +1998,283 @@ setup_installer_server() {
         dry_run_msg "Would create installer server directory: /opt/services/pdev-installer"
         dry_run_msg "Would deploy installer-server.js for web wizard"
         dry_run_msg "Would start PM2 process: pdev-installer on port 3078"
+        dry_run_msg "Would validate health check (port 3078)"
         return 0
     fi
 
     local INSTALLER_DIR="/opt/services/pdev-installer"
-    local SOURCE_INSTALLER="$INSTALL_DIR/installer"
+    local SOURCE_INSTALLER="${INSTALL_DIR}/installer"
+    local npm_error_log
+    local pm2_error_log
+    local health_check_attempts=0
+    local max_health_checks=5
 
-    # Check if installer-server.js exists in downloaded source
-    if [[ ! -f "$SOURCE_INSTALLER/installer-server.js" ]]; then
-        warn "installer-server.js not found in downloaded source"
-        warn "Web installation wizard will not be available"
-        return 0
+    # ==========================================================================
+    # PHASE 5.5.1: VALIDATE ALL REQUIRED FILES EXIST BEFORE ANY OPERATIONS
+    # ==========================================================================
+    log "Validating installer server files exist..."
+
+    # Validate installer-server.js
+    if [[ ! -f "${SOURCE_INSTALLER}/installer-server.js" ]]; then
+        fail "CRITICAL: installer-server.js not found at: ${SOURCE_INSTALLER}/installer-server.js"
+        fail "Web installation wizard is MANDATORY - cannot proceed without it"
+        fail "Ensure install_application downloaded source tarball successfully"
+        exit 1
+    fi
+    log "✓ Found installer-server.js"
+
+    # Validate package.installer.json
+    if [[ ! -f "${SOURCE_INSTALLER}/package.installer.json" ]]; then
+        fail "CRITICAL: package.installer.json not found at: ${SOURCE_INSTALLER}/package.installer.json"
+        fail "Cannot install dependencies without package manifest"
+        exit 1
+    fi
+    log "✓ Found package.installer.json"
+
+    # Validate ecosystem.installer.config.js
+    if [[ ! -f "${SOURCE_INSTALLER}/ecosystem.installer.config.js" ]]; then
+        fail "CRITICAL: ecosystem.installer.config.js not found at: ${SOURCE_INSTALLER}/ecosystem.installer.config.js"
+        fail "Cannot start PM2 process without configuration"
+        exit 1
+    fi
+    log "✓ Found ecosystem.installer.config.js"
+
+    success "All required installer files validated"
+
+    # ==========================================================================
+    # PHASE 5.5.2: CREATE INSTALLER SERVER DIRECTORY WITH ERROR HANDLING
+    # ==========================================================================
+    log "Creating installer server directory: ${INSTALLER_DIR}"
+    if ! mkdir -p "${INSTALLER_DIR}"; then
+        fail "Failed to create directory: ${INSTALLER_DIR}"
+        exit 1
     fi
 
-    # Create installer server directory
-    log "Creating installer server directory: $INSTALLER_DIR"
-    mkdir -p "$INSTALLER_DIR"
+    # Create logs subdirectory for PM2
+    log "Creating logs directory for PM2..."
+    if ! mkdir -p "${INSTALLER_DIR}/logs"; then
+        fail "Failed to create logs directory: ${INSTALLER_DIR}/logs"
+        exit 1
+    fi
 
-    # Copy installer server files
+    # ==========================================================================
+    # PHASE 5.5.3: DEPLOY INSTALLER SERVER FILES WITH VALIDATION
+    # ==========================================================================
     log "Deploying installer server files..."
-    cp "$SOURCE_INSTALLER/installer-server.js" "$INSTALLER_DIR/installer-server.js"
-    cp "$SOURCE_INSTALLER/package.installer.json" "$INSTALLER_DIR/package.json"
-    cp "$SOURCE_INSTALLER/ecosystem.installer.config.js" "$INSTALLER_DIR/ecosystem.config.js"
 
-    # Install dependencies
-    log "Installing installer server dependencies..."
-    cd "$INSTALLER_DIR" || { warn "Cannot cd to $INSTALLER_DIR"; return 0; }
-    if ! npm install --production; then
-        warn "npm install failed for installer server"
-        return 0
+    # Copy installer-server.js
+    if ! cp "${SOURCE_INSTALLER}/installer-server.js" "${INSTALLER_DIR}/installer-server.js"; then
+        fail "Failed to copy installer-server.js"
+        exit 1
     fi
-    success "Installer server dependencies installed"
+    log "✓ Deployed installer-server.js"
 
-    # Stop existing process if running
+    # Copy and rename package.installer.json → package.json
+    if ! cp "${SOURCE_INSTALLER}/package.installer.json" "${INSTALLER_DIR}/package.json"; then
+        fail "Failed to copy package.installer.json"
+        exit 1
+    fi
+    log "✓ Deployed package.json (from package.installer.json)"
+
+    # Copy and rename ecosystem.installer.config.js → ecosystem.config.js
+    if ! cp "${SOURCE_INSTALLER}/ecosystem.installer.config.js" "${INSTALLER_DIR}/ecosystem.config.js"; then
+        fail "Failed to copy ecosystem.installer.config.js"
+        exit 1
+    fi
+    log "✓ Deployed ecosystem.config.js (from ecosystem.installer.config.js)"
+
+    success "Installer server files deployed"
+
+    # ==========================================================================
+    # PHASE 5.5.4: INSTALL DEPENDENCIES WITH ERROR CAPTURE AND LOGGING
+    # ==========================================================================
+    log "Installing installer server dependencies (express, ssh2, ws)..."
+
+    # Change to installer directory with error handling
+    if ! cd "${INSTALLER_DIR}"; then
+        fail "Cannot change directory to: ${INSTALLER_DIR}"
+        exit 1
+    fi
+
+    # Create temp log file for npm error output
+    npm_error_log=$(mktemp /tmp/pdev-installer-npm-XXXXXX.log)
+    if [[ -z "${npm_error_log}" ]]; then
+        fail "Failed to create temp file for npm logs"
+        exit 1
+    fi
+
+    # Run npm install with error capture
+    log "Executing: npm install --production --no-audit --no-fund"
+    if ! npm install --production --no-audit --no-fund >"${npm_error_log}" 2>&1; then
+        fail "npm install FAILED for installer server"
+        fail ""
+        fail "npm error output:"
+        fail "─────────────────────────────────────────────────────"
+        while IFS= read -r line; do
+            fail "  ${line}"
+        done < "${npm_error_log}"
+        fail "─────────────────────────────────────────────────────"
+        fail ""
+        fail "Troubleshooting steps:"
+        fail "  1. Check Node.js version: node --version (must be >= 18.0.0)"
+        fail "  2. Check npm version: npm --version"
+        fail "  3. Check disk space: df -h"
+        fail "  4. Check npm cache: npm cache clean --force"
+        fail "  5. Check error log: ${npm_error_log}"
+        fail ""
+        rm -f "${npm_error_log}"
+        exit 1
+    fi
+
+    # Verify node_modules exists and contains expected packages
+    if [[ ! -d "${INSTALLER_DIR}/node_modules" ]]; then
+        fail "npm install appeared successful but node_modules directory not found"
+        fail "Location: ${INSTALLER_DIR}/node_modules"
+        rm -f "${npm_error_log}"
+        exit 1
+    fi
+
+    # Verify express package installed
+    if [[ ! -d "${INSTALLER_DIR}/node_modules/express" ]]; then
+        fail "Critical dependency 'express' not installed"
+        rm -f "${npm_error_log}"
+        exit 1
+    fi
+
+    # Verify ssh2 package installed
+    if [[ ! -d "${INSTALLER_DIR}/node_modules/ssh2" ]]; then
+        fail "Critical dependency 'ssh2' not installed"
+        rm -f "${npm_error_log}"
+        exit 1
+    fi
+
+    # Verify ws package installed
+    if [[ ! -d "${INSTALLER_DIR}/node_modules/ws" ]]; then
+        fail "Critical dependency 'ws' not installed"
+        rm -f "${npm_error_log}"
+        exit 1
+    fi
+
+    success "Installer server dependencies installed successfully"
+    rm -f "${npm_error_log}"
+
+    # ==========================================================================
+    # PHASE 5.5.5: STOP EXISTING PM2 PROCESS IF RUNNING
+    # ==========================================================================
+    log "Checking for existing pdev-installer PM2 process..."
     if pm2 show pdev-installer &>/dev/null; then
         log "Stopping existing pdev-installer process..."
-        pm2 delete pdev-installer 2>/dev/null || true
-    fi
-
-    # Start PM2 process for installer server
-    log "Starting installer server (port 3078)..."
-    if ! pm2 start ecosystem.config.js; then
-        warn "Failed to start installer server"
-        return 0
-    fi
-    pm2 save
-    success "Installer server started"
-
-    # Verify it's running
-    sleep 2
-    if curl -sf http://localhost:3078/health >/dev/null 2>&1; then
-        success "Installer server health check passed"
+        if ! pm2 delete pdev-installer 2>/dev/null; then
+            warn "Could not delete old pdev-installer process (may already be gone)"
+        fi
+        sleep 1
     else
-        warn "Installer server health check failed - check PM2 logs"
+        log "No existing pdev-installer process found (clean start)"
     fi
+
+    # ==========================================================================
+    # PHASE 5.5.6: START PM2 PROCESS WITH ERROR CAPTURE AND LOGGING
+    # ==========================================================================
+    log "Starting installer server PM2 process (port 3078)..."
+
+    # Create temp log file for pm2 error output
+    pm2_error_log=$(mktemp /tmp/pdev-installer-pm2-XXXXXX.log)
+    if [[ -z "${pm2_error_log}" ]]; then
+        fail "Failed to create temp file for pm2 logs"
+        exit 1
+    fi
+
+    # Run pm2 start with error capture
+    log "Executing: pm2 start ecosystem.config.js"
+    if ! pm2 start ecosystem.config.js >"${pm2_error_log}" 2>&1; then
+        fail "pm2 start FAILED for installer server"
+        fail ""
+        fail "pm2 error output:"
+        fail "─────────────────────────────────────────────────────"
+        while IFS= read -r line; do
+            fail "  ${line}"
+        done < "${pm2_error_log}"
+        fail "─────────────────────────────────────────────────────"
+        fail ""
+        fail "Troubleshooting steps:"
+        fail "  1. Check PM2 status: pm2 status"
+        fail "  2. Check PM2 logs: pm2 logs pdev-installer"
+        fail "  3. Check Node.js: node --version"
+        fail "  4. Test script directly: node installer-server.js"
+        fail "  5. Check error log: ${pm2_error_log}"
+        fail ""
+        rm -f "${pm2_error_log}"
+        exit 1
+    fi
+
+    # Save PM2 process list for startup hook
+    log "Saving PM2 process list for startup persistence..."
+    if ! pm2 save; then
+        warn "Failed to save PM2 process list (process may still run)"
+    fi
+
+    success "Installer server PM2 process started"
+    rm -f "${pm2_error_log}"
+
+    # ==========================================================================
+    # PHASE 5.5.7: VALIDATE PM2 PROCESS STATUS
+    # ==========================================================================
+    log "Validating PM2 process status..."
+    if ! pm2 show pdev-installer &>/dev/null; then
+        fail "pm2 show pdev-installer returned error - process may have crashed"
+        fail "Check PM2 logs: pm2 logs pdev-installer"
+        exit 1
+    fi
+    log "✓ PM2 process status verified"
+
+    # ==========================================================================
+    # PHASE 5.5.8: HEALTH CHECK WITH RETRY LOGIC (MANDATORY)
+    # ==========================================================================
+    log "Starting health check (up to ${max_health_checks} attempts)..."
+    local success_indicator=0
+
+    while [[ $health_check_attempts -lt $max_health_checks ]]; do
+        health_check_attempts=$((health_check_attempts + 1))
+        local wait_time=$((health_check_attempts * 2))
+
+        log "Health check attempt ${health_check_attempts}/${max_health_checks} (waiting ${wait_time}s for server startup)..."
+        sleep "$wait_time"
+
+        # Test health endpoint with timeout
+        if curl -sf --max-time 5 http://localhost:3078/health >/dev/null 2>&1; then
+            success_indicator=1
+            log "✓ Health check passed on attempt ${health_check_attempts}"
+            break
+        fi
+
+        if [[ $health_check_attempts -lt $max_health_checks ]]; then
+            warn "Health check attempt ${health_check_attempts} failed, retrying..."
+        fi
+    done
+
+    # ==========================================================================
+    # PHASE 5.5.9: FINAL HEALTH CHECK VALIDATION (HARD REQUIREMENT)
+    # ==========================================================================
+    if [[ $success_indicator -ne 1 ]]; then
+        fail "CRITICAL: Installer server health check FAILED after ${max_health_checks} attempts"
+        fail "Server did not respond to http://localhost:3078/health"
+        fail ""
+        fail "Diagnostics:"
+        fail "  Port check: $(netstat -tuln 2>/dev/null | grep 3078 || echo 'Port 3078 not listening')"
+        fail "  PM2 status: $(pm2 show pdev-installer 2>/dev/null || echo 'Process not found')"
+        fail "  PM2 logs:"
+        fail "─────────────────────────────────────────────────────"
+        pm2 logs pdev-installer --lines 20 --err 2>/dev/null | while IFS= read -r line; do
+            fail "    ${line}"
+        done
+        fail "─────────────────────────────────────────────────────"
+        fail ""
+        fail "Web installation wizard is MANDATORY - cannot proceed without health check"
+        exit 1
+    fi
+
+    success "Installer server health check PASSED - web wizard ready"
+    success "Web installation wizard available at: http://localhost:3078"
 
     return 0
 }
