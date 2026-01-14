@@ -83,7 +83,7 @@ DB_USER="pdev_app"                 # PostgreSQL application user
 NGINX_SITE_NAME="pdev-live"        # Nginx site config name
 CLIENT_CONFIG_FILE=".pdev-live-config"  # Client config filename
 TOOLS_DIR_NAME="pdev-live"         # ~/.claude/tools/<name>/ directory
-TARBALL_VERSION="1.0.4"            # Source package version (pdev-source-v*.tar.gz)
+TARBALL_VERSION="1.1.0"            # Source package version (pdev-source-v*.tar.gz)
 
 # Detect target user (non-root user who ran sudo)
 # This user will own PM2 processes and config
