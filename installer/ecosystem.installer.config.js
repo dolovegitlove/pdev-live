@@ -1,33 +1,40 @@
 // PM2 Ecosystem Config - PDev Installer Server
+const baseDir = process.env.PDEV_INSTALLER_DIR || '/opt/services/pdev-installer';
+
 module.exports = {
   apps: [{
     name: 'pdev-installer',
     script: 'installer-server.js',
-    cwd: '/opt/services/pdev-installer',
+    cwd: baseDir,
     exec_mode: 'fork',
     instances: 1,
 
-    // Restart Policy
+    // Restart Policy (DB-001 compliance)
     autorestart: true,
     max_restarts: 10,
-    min_uptime: '30s',
-    exp_backoff_restart_delay: 5000,
+    min_uptime: '60s',
+    restart_delay: 4000,
+    exp_backoff_restart_delay: 30000,
 
     // Timeouts
     kill_timeout: 5000,
     listen_timeout: 10000,
 
-    // Environment
+    // Development Environment
     env: {
+      NODE_ENV: 'development',
+      PORT: parseInt(process.env.INSTALLER_PORT, 10) || 3078
+    },
+
+    // Production Environment
+    env_production: {
       NODE_ENV: 'production',
-      PORT: 3078,
-      SOURCE_AUTH_USER: 'pdev',
-      SOURCE_AUTH_PASSWORD: 'PdevLive0987@@'
+      PORT: parseInt(process.env.INSTALLER_PORT, 10) || 3078
     },
 
     // Logging
-    error_file: '/opt/services/pdev-installer/logs/error.log',
-    out_file: '/opt/services/pdev-installer/logs/out.log',
+    error_file: baseDir + '/logs/error.log',
+    out_file: baseDir + '/logs/out.log',
     merge_logs: true,
     log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
 
@@ -37,6 +44,6 @@ module.exports = {
     // No watch in production
     watch: false,
 
-    version: '1.0.0'
+    version: '1.0.1'
   }]
 };

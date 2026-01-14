@@ -1,32 +1,42 @@
 // PM2 Ecosystem Config - Standardized with Restart Protection
+const baseDir = process.env.PDEV_SERVER_DIR || '/home/acme/pdev-live/server';
+
 module.exports = {
   apps: [{
     name: 'pdev-live',
     script: 'server.js',
-    cwd: '/home/acme/pdev-live/server',
+    cwd: baseDir,
     exec_mode: 'fork',
     instances: 1,
 
-    // Restart Policy (Prevents infinite loops)
+    // Restart Policy (Prevents infinite loops + DB-001 compliance)
     autorestart: true,
     max_restarts: 10,
     min_uptime: '60s',
+    restart_delay: 4000,
     exp_backoff_restart_delay: 30000,
 
     // Timeouts
     kill_timeout: 5000,
     listen_timeout: 10000,
 
-    // Environment
+    // Development Environment
     env: {
+      NODE_ENV: 'development'
+      // PORT loaded from .env via dotenv.config()
+      // PDEV_ADMIN_KEY must be set in .env file - NEVER hardcode secrets
+    },
+
+    // Production Environment
+    env_production: {
       NODE_ENV: 'production'
       // PORT loaded from .env via dotenv.config()
       // PDEV_ADMIN_KEY must be set in .env file - NEVER hardcode secrets
     },
 
     // Logging
-    error_file: '/home/acme/pdev-live/server/logs/error.log',
-    out_file: '/home/acme/pdev-live/server/logs/out.log',
+    error_file: baseDir + '/logs/error.log',
+    out_file: baseDir + '/logs/out.log',
     merge_logs: true,
     log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
 
@@ -37,6 +47,6 @@ module.exports = {
     watch: false,
 
     // Metadata
-    version: '3.0.0'
+    version: '3.0.1'
   }]
 };

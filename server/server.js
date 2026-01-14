@@ -13,6 +13,7 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const path = require('path');
 const http = require('http');
 const crypto = require('crypto');
@@ -72,7 +73,19 @@ const pool = new Pool({
   port: parseInt(process.env.PDEV_DB_PORT || '5432', 10),
   database: process.env.PDEV_DB_NAME || 'pdev_live',
   user: process.env.PDEV_DB_USER || 'pdev_app',
-  password: process.env.PDEV_DB_PASSWORD || (() => { console.error('FATAL: PDEV_DB_PASSWORD required'); process.exit(1); })(),
+  password: (() => {
+    const dbPassword = process.env.PDEV_DB_PASSWORD;
+    if (!dbPassword) {
+      console.error('FATAL: PDEV_DB_PASSWORD required');
+      process.exit(1);
+    }
+    if (dbPassword.length < 16) {
+      console.error('FATAL: PDEV_DB_PASSWORD must be at least 16 characters');
+      console.error('Generate with: openssl rand -base64 24');
+      process.exit(1);
+    }
+    return dbPassword;
+  })(),
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,  // Increased from 2000ms to 10000ms (10 seconds)
@@ -283,6 +296,31 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'X-Admin-Key', 'X-Share-Token', 'X-User', 'X-Pdev-Token']
 }));
 
+// Security headers (Helmet.js)
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"]
+    }
+  },
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true
+  },
+  frameguard: { action: 'deny' },
+  xssFilter: true,
+  noSniff: true
+}));
+
 // Rate limiting
 const rateLimit = require('express-rate-limit');
 const apiLimiter = rateLimit({
@@ -348,11 +386,11 @@ if (process.env.PDEV_SERVE_STATIC === 'true') {
 if (process.env.PDEV_HTTP_AUTH === 'true') {
   const basicAuth = require('express-basic-auth');
 
-  const username = config.auth.user;
-  const password = config.auth.password;
+  const username = process.env.PDEV_USERNAME;
+  const password = process.env.PDEV_PASSWORD;
 
   if (!username || !password) {
-    console.error('FATAL: PDEV_HTTP_AUTH=true but PDEV_AUTH_USER or PDEV_AUTH_PASSWORD not set');
+    console.error('FATAL: PDEV_HTTP_AUTH=true but PDEV_USERNAME or PDEV_PASSWORD not set');
     process.exit(1);
   }
 
@@ -595,9 +633,9 @@ function broadcastGlobal(event) {
 async function createSession({ server, hostname, project, projectPath, cwd, commandType, commandArgs, user, gitBranch, gitCommit }) {
   const result = await pool.query(`
     INSERT INTO pdev_sessions (
-      server_origin, hostname, project_name, project_path,
-      cwd, command_type, command_args, user_name,
-      git_branch, git_commit
+      server_origin, server_hostname, project_name, project_path,
+      working_directory, command_type, command_args, user_identifier,
+      git_branch, git_commit_sha
     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     RETURNING id, started_at
   `, [server, hostname, project, projectPath, cwd, commandType, commandArgs, user, gitBranch, gitCommit]);
@@ -2330,7 +2368,31 @@ wss.on('connection', (ws, request, token) => {
   let sshStream = null;
   let installTimeout = null;
 
+  // Message rate limiting per connection (10 messages per second)
+  const messageTimestamps = [];
+  const MESSAGE_RATE_LIMIT = 10;
+  const MESSAGE_RATE_WINDOW = 1000; // 1 second
+
   ws.on('message', async (message) => {
+    // Rate limit check
+    const now = Date.now();
+    messageTimestamps.push(now);
+    // Remove timestamps older than 1 second
+    while (messageTimestamps.length > 0 && messageTimestamps[0] < now - MESSAGE_RATE_WINDOW) {
+      messageTimestamps.shift();
+    }
+    if (messageTimestamps.length > MESSAGE_RATE_LIMIT) {
+      ws.send(JSON.stringify({ type: 'error', message: 'Message rate limit exceeded' }));
+      ws.close(1008, 'Rate limit');
+      return;
+    }
+
+    // Message size limit (64KB)
+    if (message.length > 65536) {
+      ws.send(JSON.stringify({ type: 'error', message: 'Message too large' }));
+      ws.close(1009, 'Message too large');
+      return;
+    }
     let data;
     try {
       data = JSON.parse(message);
