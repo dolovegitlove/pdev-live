@@ -1,0 +1,464 @@
+name: Build & Deploy PDev Source Tarball
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'installer/**'
+      - 'server/**'
+      - 'frontend/**'
+      - 'client/**'
+      - '.github/workflows/build-source-tarball.yml'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (e.g., 1.0.5). Leave empty for auto-increment.'
+        required: false
+
+env:
+  DEPLOY_HOST: acme
+  DEPLOY_PATH: /var/www/vyxenai.com/pdev/install
+  DEPLOY_USER: github-deploy
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Parse version from pdl-installer.sh
+        id: current_version
+        run: |
+          TARBALL_VERSION=$(grep -oP 'TARBALL_VERSION="\K[0-9.]+' installer/pdl-installer.sh || echo "1.0.3")
+          echo "current_version=${TARBALL_VERSION}" >> $GITHUB_OUTPUT
+          echo "Current TARBALL_VERSION: ${TARBALL_VERSION}"
+
+      - name: Calculate new version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            NEW_VERSION="${{ github.event.inputs.version }}"
+            echo "Using manual version: ${NEW_VERSION}"
+          else
+            # Auto-increment minor version
+            CURRENT="${{ steps.current_version.outputs.current_version }}"
+            MAJOR=$(echo "${CURRENT}" | cut -d. -f1)
+            MINOR=$(echo "${CURRENT}" | cut -d. -f2)
+            PATCH=$(echo "${CURRENT}" | cut -d. -f3)
+            MINOR=$((MINOR + 1))
+            PATCH=0
+            NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+            echo "Auto-incremented from ${CURRENT} to ${NEW_VERSION}"
+          fi
+          echo "version=${NEW_VERSION}" >> $GITHUB_OUTPUT
+          echo "Building PDev Source Tarball v${NEW_VERSION}"
+
+      - name: Validate target directory on acme
+        env:
+          SSH_HOST_KEY: ${{ secrets.WALLETSNACK_HOST_KEY }}
+        run: |
+          set -euo pipefail
+
+          echo "Validating deployment path on acme..."
+
+          # Setup SSH with host key verification
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          # Store host key with proper formatting
+          echo "$SSH_HOST_KEY" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+          echo "Host key configured for SSH verification"
+
+      - name: Setup SSH key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.VYXENAI_DEPLOY_KEY }}
+          name: deploy_key
+          known_hosts: ${{ secrets.WALLETSNACK_HOST_KEY }}
+          if_key_exists: fail
+
+      - name: Check if version already exists
+        id: check_version
+        run: |
+          set -euo pipefail
+
+          VERSION="${{ steps.version.outputs.version }}"
+          TARBALL_NAME="pdev-source-v${VERSION}.tar.gz"
+
+          echo "Checking if ${TARBALL_NAME} already exists on acme..."
+
+          # Check remote file existence
+          if ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" \
+             "test -f ${DEPLOY_PATH}/${TARBALL_NAME}"; then
+            echo "ERROR: Version ${VERSION} already exists on acme"
+            echo "status=exists" >> $GITHUB_OUTPUT
+            exit 1
+          else
+            echo "Version ${VERSION} is new, proceeding with build"
+            echo "status=new" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build pdev-source tarball
+        id: build
+        run: |
+          set -euo pipefail
+
+          VERSION="${{ steps.version.outputs.version }}"
+          TARBALL_NAME="pdev-source-v${VERSION}.tar.gz"
+          CHECKSUM_FILE="${TARBALL_NAME}.sha256"
+
+          echo "Creating ${TARBALL_NAME}..."
+
+          # Create tarball with proper exclusions
+          tar -czf "${TARBALL_NAME}" \
+            --dereference \
+            --exclude='.git' \
+            --exclude='.gitignore' \
+            --exclude='.github' \
+            --exclude='node_modules' \
+            --exclude='node_modules/.cache' \
+            --exclude='*.log' \
+            --exclude='*.tmp' \
+            --exclude='*.bak' \
+            --exclude='.DS_Store' \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --exclude='installer/dist' \
+            --exclude='installer/bundle/node_modules' \
+            --exclude='installer/*.backup*' \
+            --exclude='desktop' \
+            --exclude='tests' \
+            --exclude='visual-validation' \
+            --exclude='.cache' \
+            --exclude='.npm' \
+            server/ installer/ frontend/ client/ || {
+            echo "ERROR: Failed to create tarball"
+            exit 1
+          }
+
+          if [ ! -f "${TARBALL_NAME}" ]; then
+            echo "ERROR: Tarball file not created"
+            exit 1
+          fi
+
+          # Verify tarball is readable and has content
+          TARBALL_SIZE=$(stat -f%z "${TARBALL_NAME}" 2>/dev/null || stat -c%s "${TARBALL_NAME}")
+          if [ "$TARBALL_SIZE" -lt 100000 ]; then
+            echo "ERROR: Tarball size ${TARBALL_SIZE} bytes is suspiciously small"
+            exit 1
+          fi
+
+          echo "Tarball created: ${TARBALL_NAME} ($(numfmt --to=iec-i --suffix=B ${TARBALL_SIZE} 2>/dev/null || echo "${TARBALL_SIZE} bytes"))"
+
+          # Generate SHA256 checksum
+          sha256sum "${TARBALL_NAME}" > "${CHECKSUM_FILE}"
+
+          if [ ! -f "${CHECKSUM_FILE}" ]; then
+            echo "ERROR: Failed to create checksum file"
+            exit 1
+          fi
+
+          echo "Checksum file created: ${CHECKSUM_FILE}"
+
+          echo "tarball_name=${TARBALL_NAME}" >> $GITHUB_OUTPUT
+          echo "checksum_file=${CHECKSUM_FILE}" >> $GITHUB_OUTPUT
+
+      - name: Verify tarball contents
+        run: |
+          set -euo pipefail
+
+          TARBALL_NAME="${{ steps.build.outputs.tarball_name }}"
+
+          echo "Verifying required directories/files in tarball..."
+
+          REQUIRED_ITEMS=(
+            "installer/pdl-installer.sh"
+            "installer/installer-server.js"
+            "installer/package.installer.json"
+            "installer/ecosystem.installer.config.js"
+            "installer/migrations/"
+            "server/"
+            "frontend/"
+            "client/"
+          )
+
+          MISSING=0
+          for item in "${REQUIRED_ITEMS[@]}"; do
+            if tar -tzf "${TARBALL_NAME}" | grep -q "^${item}"; then
+              echo "✓ Found: ${item}"
+            else
+              echo "✗ Missing: ${item}"
+              MISSING=$((MISSING + 1))
+            fi
+          done
+
+          if [ ${MISSING} -gt 0 ]; then
+            echo "ERROR: ${MISSING} required items missing from tarball"
+            exit 1
+          fi
+
+          echo "All required items verified in tarball"
+
+      - name: Verify excluded content
+        run: |
+          set -euo pipefail
+
+          TARBALL_NAME="${{ steps.build.outputs.tarball_name }}"
+
+          echo "Verifying excluded content..."
+
+          EXCLUDED_PATTERNS=(
+            "\.git/"
+            "node_modules/"
+            "\.env"
+            "\.log$"
+            "\.bak$"
+          )
+
+          FOUND_EXCLUDED=0
+          for pattern in "${EXCLUDED_PATTERNS[@]}"; do
+            if tar -tzf "${TARBALL_NAME}" | grep -E "${pattern}" | head -5; then
+              echo "WARNING: Found excluded pattern: ${pattern}"
+              FOUND_EXCLUDED=$((FOUND_EXCLUDED + 1))
+            fi
+          done
+
+          if [ ${FOUND_EXCLUDED} -gt 0 ]; then
+            echo "WARNING: ${FOUND_EXCLUDED} excluded patterns found in tarball"
+          else
+            echo "No excluded content detected"
+          fi
+
+      - name: Upload tarball artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdev-source-tarball-v${{ steps.version.outputs.version }}
+          path: |
+            pdev-source-v${{ steps.version.outputs.version }}.tar.gz
+            pdev-source-v${{ steps.version.outputs.version }}.tar.gz.sha256
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Deploy tarball to acme
+        id: deploy
+        run: |
+          set -euo pipefail
+
+          TARBALL_NAME="${{ steps.build.outputs.tarball_name }}"
+          CHECKSUM_FILE="${{ steps.build.outputs.checksum_file }}"
+
+          echo "Deploying ${TARBALL_NAME} to acme:${DEPLOY_PATH}..."
+
+          # Create trap for SSH cleanup
+          trap 'ssh -i ~/.ssh/deploy_key -O exit "${DEPLOY_USER}@${DEPLOY_HOST}" 2>/dev/null || true' EXIT
+
+          # Deploy files via SCP
+          scp -i ~/.ssh/deploy_key \
+              "${TARBALL_NAME}" \
+              "${CHECKSUM_FILE}" \
+              "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/" || {
+            echo "ERROR: Failed to upload files to acme"
+            exit 1
+          }
+
+          echo "Files uploaded successfully"
+
+          # Set permissions and verify
+          ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "cd ${DEPLOY_PATH} && \
+             sudo chown www-data:www-data ${TARBALL_NAME} ${CHECKSUM_FILE} && \
+             sudo chmod 644 ${TARBALL_NAME} ${CHECKSUM_FILE} && \
+             stat --printf='%n: %a (%A) size=%s\n' ${TARBALL_NAME} ${CHECKSUM_FILE}" || {
+            echo "ERROR: Failed to set permissions on deployed files"
+            exit 1
+          }
+
+          echo "Permissions verified"
+          echo "deploy_status=success" >> $GITHUB_OUTPUT
+
+      - name: Verify deployed tarball
+        id: verify
+        run: |
+          set -euo pipefail
+
+          TARBALL_NAME="${{ steps.build.outputs.tarball_name }}"
+          CHECKSUM_FILE="${{ steps.build.outputs.checksum_file }}"
+          VERSION="${{ steps.version.outputs.version }}"
+
+          echo "Verifying deployed tarball on acme..."
+
+          # Create trap for SSH cleanup
+          trap 'ssh -i ~/.ssh/deploy_key -O exit "${DEPLOY_USER}@${DEPLOY_HOST}" 2>/dev/null || true' EXIT
+
+          # Get local checksum
+          LOCAL_CHECKSUM=$(sha256sum "${TARBALL_NAME}" | awk '{print $1}')
+
+          # Get remote checksum
+          REMOTE_CHECKSUM=$(ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "cat ${DEPLOY_PATH}/${CHECKSUM_FILE}" | awk '{print $1}')
+
+          if [ "${LOCAL_CHECKSUM}" != "${REMOTE_CHECKSUM}" ]; then
+            echo "ERROR: Checksum mismatch!"
+            echo "Local:  ${LOCAL_CHECKSUM}"
+            echo "Remote: ${REMOTE_CHECKSUM}"
+            exit 1
+          fi
+
+          echo "Checksums match: ${LOCAL_CHECKSUM}"
+
+          # Verify remote file exists and is readable
+          ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "test -r ${DEPLOY_PATH}/${TARBALL_NAME} && \
+             echo 'Remote file is readable' && \
+             stat --printf='Deployed file: %s bytes\n' ${DEPLOY_PATH}/${TARBALL_NAME}" || {
+            echo "ERROR: Cannot verify remote file"
+            exit 1
+          }
+
+          echo "verify_status=success" >> $GITHUB_OUTPUT
+
+      - name: Update TARBALL_VERSION in pdl-installer.sh
+        id: update_version
+        run: |
+          set -euo pipefail
+
+          VERSION="${{ steps.version.outputs.version }}"
+
+          echo "Updating TARBALL_VERSION to ${VERSION}..."
+
+          # Check current value
+          CURRENT=$(grep -oP 'TARBALL_VERSION="\K[0-9.]+' installer/pdl-installer.sh)
+          echo "Current TARBALL_VERSION: ${CURRENT}"
+
+          # Update version with proper escaping
+          sed -i "s/TARBALL_VERSION=\"[0-9.]*\"/TARBALL_VERSION=\"${VERSION}\"/" installer/pdl-installer.sh
+
+          # Verify update
+          UPDATED=$(grep -oP 'TARBALL_VERSION="\K[0-9.]+' installer/pdl-installer.sh)
+
+          if [ "${UPDATED}" != "${VERSION}" ]; then
+            echo "ERROR: Failed to update TARBALL_VERSION"
+            echo "Expected: ${VERSION}"
+            echo "Got: ${UPDATED}"
+            exit 1
+          fi
+
+          echo "TARBALL_VERSION updated successfully to ${VERSION}"
+          echo "update_status=success" >> $GITHUB_OUTPUT
+
+      - name: Commit and push version update
+        if: steps.update_version.outcome == 'success'
+        run: |
+          set -euo pipefail
+
+          VERSION="${{ steps.version.outputs.version }}"
+
+          echo "Committing version update..."
+
+          # Configure git
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+          # Verify there are changes
+          if ! git diff --quiet installer/pdl-installer.sh; then
+            git add installer/pdl-installer.sh
+            git commit -m "chore: Update TARBALL_VERSION to ${VERSION}"
+            git push origin main || {
+              echo "ERROR: Failed to push version update"
+              exit 1
+            }
+            echo "Version update committed and pushed"
+          else
+            echo "No version changes detected"
+          fi
+
+      - name: Create GitHub Release
+        if: steps.deploy.outcome == 'success' && steps.verify.outcome == 'success'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            pdev-source-v${{ steps.version.outputs.version }}.tar.gz
+            pdev-source-v${{ steps.version.outputs.version }}.tar.gz.sha256
+          tag_name: pdev-source-v${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: false
+          body: |
+            # PDev Source Tarball v${{ steps.version.outputs.version }}
+
+            Production-ready self-contained installer tarball for PDev Live.
+
+            ## Build Information
+            - **Built:** ${{ github.event.head_commit.timestamp }}
+            - **Commit:** [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
+            - **Deployer:** ${{ github.actor }}
+
+            ## Package Contents
+            - ✓ `installer/` - Installation scripts and configuration
+              - pdl-installer.sh - Main installation script
+              - installer-server.js - Web installation wizard backend
+              - package.installer.json - NPM dependencies
+              - ecosystem.installer.config.js - PM2 configuration
+              - migrations/ - Database migrations
+            - ✓ `server/` - Backend API and services
+            - ✓ `frontend/` - Web UI components and assets
+            - ✓ `client/` - CLI client tools
+
+            ## Verification
+
+            Download and verify the tarball:
+            ```bash
+            # Download
+            curl -L -o pdev-source-v${{ steps.version.outputs.version }}.tar.gz \
+              https://vyxenai.com/pdev/install/pdev-source-v${{ steps.version.outputs.version }}.tar.gz
+
+            # Verify SHA256
+            sha256sum -c pdev-source-v${{ steps.version.outputs.version }}.tar.gz.sha256
+
+            # Extract
+            tar -xzf pdev-source-v${{ steps.version.outputs.version }}.tar.gz
+            ```
+
+            ## Deployment Path
+            - **Location:** `/var/www/vyxenai.com/pdev/install/`
+            - **Served by:** nginx (vyxenai.com)
+            - **Permissions:** 644 (www-data:www-data)
+
+            ## Installation Instructions
+
+            See [PARTNER_ONBOARDING_CHECKLIST.md](https://github.com/${{ github.repository }}/blob/main/PARTNER_ONBOARDING_CHECKLIST.md) for detailed setup instructions.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify deployment complete
+        if: always()
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TARBALL_NAME="${{ steps.build.outputs.tarball_name }}"
+
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "PDev Source Tarball Deployment Summary"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Version:        v${VERSION}"
+          echo "Tarball:        ${TARBALL_NAME}"
+          echo "Deployed to:    acme:${DEPLOY_PATH}/"
+          echo "Updated:        installer/pdl-installer.sh"
+          echo "Repository:     GitHub Release tagged pdev-source-v${VERSION}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+          if [ "${{ steps.deploy.outcome }}" = "success" ] && \
+             [ "${{ steps.verify.outcome }}" = "success" ]; then
+            echo "Status: ✓ DEPLOYMENT SUCCESSFUL"
+          else
+            echo "Status: ✗ DEPLOYMENT FAILED"
+            exit 1
+          fi
