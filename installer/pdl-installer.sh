@@ -83,6 +83,7 @@ DB_USER="pdev_app"                 # PostgreSQL application user
 NGINX_SITE_NAME="pdev-live"        # Nginx site config name
 CLIENT_CONFIG_FILE=".pdev-live-config"  # Client config filename
 TOOLS_DIR_NAME="pdev-live"         # ~/.claude/tools/<name>/ directory
+TARBALL_VERSION="1.0.3"            # Source package version (pdev-source-v*.tar.gz)
 
 # Detect target user (non-root user who ran sudo)
 # This user will own PM2 processes and config
@@ -1430,8 +1431,8 @@ install_application() {
     # v1.0.3 includes DB_HOST=127.0.0.1 fix for password auth
     # v1.0.4 includes installer-server.js for web wizard
     # v1.0.5 includes chown fix for TARGET_USER ownership
-    local VERSION="1.0.6"
-    local REMOTE_SOURCE="https://vyxenai.com/pdev/install/pdev-source-v${VERSION}.tar.gz"
+    # v1.0.6 includes client.sh in tarball
+    local REMOTE_SOURCE="https://vyxenai.com/pdev/install/pdev-source-v${TARBALL_VERSION}.tar.gz"
     local CHECKSUM_URL="${REMOTE_SOURCE}.sha256"
 
     # Create temp file (FAIL HARD if mktemp fails)
@@ -2378,6 +2379,56 @@ main() {
 
         # Phase 7: Security audit
         run_security_audit
+    fi
+
+    # Project mode: Download tarball from source server (same pattern as source mode)
+    if [[ "$MODE" == "project" ]]; then
+        header "Downloading Client Package from Source Server"
+
+        # Derive tarball URL from SOURCE_URL (e.g., https://domain/pdev/api -> https://domain/pdev/install/pdev-source-v*.tar.gz)
+        local base_url="${SOURCE_URL%/api}"
+        local REMOTE_SOURCE="${base_url}/install/pdev-source-v${TARBALL_VERSION}.tar.gz"
+        local CHECKSUM_URL="${REMOTE_SOURCE}.sha256"
+
+        # Create installation directory
+        mkdir -p "$INSTALL_DIR"
+
+        # Create temp file
+        local DOWNLOAD_FILE
+        DOWNLOAD_FILE=$(mktemp /tmp/pdev-source.XXXXXX.tar.gz) || {
+            fail "Failed to create temp file for download"
+            exit 1
+        }
+
+        # Download with optional HTTP auth
+        log "Downloading package from source server: $REMOTE_SOURCE"
+        local curl_auth_opts=""
+        if [[ -n "${HTTP_USER:-}" ]] && [[ -n "${HTTP_PASSWORD:-}" ]]; then
+            curl_auth_opts="-u ${HTTP_USER}:${HTTP_PASSWORD}"
+        fi
+
+        if ! curl -fsSL $curl_auth_opts --connect-timeout 30 --max-time 300 -o "$DOWNLOAD_FILE" "$REMOTE_SOURCE"; then
+            fail "Failed to download package from source server"
+            error ""
+            error "TROUBLESHOOTING:"
+            error "  1. Verify source URL is correct: $SOURCE_URL"
+            error "  2. Check HTTP auth credentials if server requires authentication"
+            error "  3. Test manually: curl $curl_auth_opts -I $REMOTE_SOURCE"
+            error ""
+            rm -f "$DOWNLOAD_FILE"
+            exit 1
+        fi
+
+        # Extract tarball
+        log "Extracting package..."
+        if ! tar -xzf "$DOWNLOAD_FILE" -C "$INSTALL_DIR" --strip-components=1; then
+            fail "Failed to extract package"
+            rm -f "$DOWNLOAD_FILE"
+            exit 1
+        fi
+
+        rm -f "$DOWNLOAD_FILE"
+        success "Package downloaded and extracted from source server"
     fi
 
     # Install client (both modes)
