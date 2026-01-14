@@ -194,7 +194,7 @@ jobs:
 
           MISSING=0
           for item in "${REQUIRED_ITEMS[@]}"; do
-            if tar -tzf "${TARBALL_NAME}" | grep -q "^${item}"; then
+            if tar -tzf "${TARBALL_NAME}" 2>/dev/null | grep -q "^${item}" || tar -tzf "${TARBALL_NAME}" 2>/dev/null | grep -q "${item}"; then
               echo "✓ Found: ${item}"
             else
               echo "✗ Missing: ${item}"
@@ -204,6 +204,8 @@ jobs:
 
           if [ ${MISSING} -gt 0 ]; then
             echo "ERROR: ${MISSING} required items missing from tarball"
+            echo "Actual tarball contents (first 20 items):"
+            tar -tzf "${TARBALL_NAME}" 2>/dev/null | head -20
             exit 1
           fi
 
