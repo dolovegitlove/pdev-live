@@ -63,7 +63,7 @@ jobs:
 
       - name: Validate target directory on acme
         env:
-          SSH_HOST_KEY: ${{ secrets.WALLETSNACK_HOST_KEY }}
+          SSH_HOST_KEY: ${{ secrets.ACME_HOST_KEY }}
         run: |
           set -euo pipefail
 
@@ -84,7 +84,7 @@ jobs:
         with:
           key: ${{ secrets.VYXENAI_DEPLOY_KEY }}
           name: deploy_key
-          known_hosts: ${{ secrets.WALLETSNACK_HOST_KEY }}
+          known_hosts: ${{ secrets.ACME_HOST_KEY }}
           if_key_exists: fail
 
       - name: Check if version already exists
