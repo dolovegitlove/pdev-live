@@ -37,19 +37,19 @@ NC='\033[0m' # No Color
 
 # Logging functions
 log_info() {
-  printf "${BLUE}ℹ${NC} %s\n" "$*"
+  printf '%s\n' "${BLUE}ℹ${NC} $*"
 }
 
 log_success() {
-  printf "${GREEN}✓${NC} %s\n" "$*"
+  printf '%s\n' "${GREEN}✓${NC} $*"
 }
 
 log_warning() {
-  printf "${YELLOW}⚠${NC} %s\n" "$*"
+  printf '%s\n' "${YELLOW}⚠${NC} $*"
 }
 
 log_error() {
-  printf "${RED}✗${NC} %s\n" "$*" >&2
+  printf '%s\n' "${RED}✗${NC} $*" >&2
 }
 
 # Cleanup on exit
@@ -99,7 +99,8 @@ get_current_version() {
   fi
 
   local version
-  version=$(grep -oP 'TARBALL_VERSION="\K[0-9.]+' installer/pdl-installer.sh || echo "1.0.0")
+  version=$(sed -n 's/.*TARBALL_VERSION="\([0-9.]*\)".*/\1/p' installer/pdl-installer.sh | head -1 || echo "1.0.0")
+  version="${version:-1.0.0}"
 
   if [ -z "${version}" ]; then
     log_warning "Could not parse TARBALL_VERSION, using default 1.0.0"
@@ -364,9 +365,9 @@ main() {
   local version="${1:-}"
   local output_dir="${2:-.}"
 
-  printf "\n${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
-  printf "${BLUE}PDev Source Tarball Builder${NC}\n"
-  printf "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n\n"
+  printf '%s\n' "\n${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  printf '%s\n' "${BLUE}PDev Source Tarball Builder${NC}"
+  printf '%s\n\n' "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
   # Validate environment
   validate_environment
@@ -412,13 +413,13 @@ main() {
   # Extract and verify structure
   verify_extracted_structure "${tarball_path}"
 
-  printf "\n${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
-  printf "${GREEN}Build Successful${NC}\n"
-  printf "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
-  printf "Version:     ${GREEN}v${version}${NC}\n"
-  printf "Tarball:     ${GREEN}${tarball_path}${NC}\n"
-  printf "Checksum:    ${GREEN}${tarball_path}.sha256${NC}\n"
-  printf "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n\n"
+  printf '%s\n' "\n${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  printf '%s\n' "${GREEN}Build Successful${NC}"
+  printf '%s\n' "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  printf '%s\n' "Version:     ${GREEN}v${version}${NC}"
+  printf '%s\n' "Tarball:     ${GREEN}${tarball_path}${NC}"
+  printf '%s\n' "Checksum:    ${GREEN}${tarball_path}.sha256${NC}"
+  printf '%s\n\n' "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
   # Clear cleanup list since build was successful
   CLEANUP_FILES=()

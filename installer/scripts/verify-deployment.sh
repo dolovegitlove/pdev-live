@@ -58,20 +58,20 @@ SSH_CONNECTED=false
 
 # Logging functions
 log_info() {
-  printf "${BLUE}ℹ${NC} %s\n" "$*"
+  printf '%s\n' "${BLUE}ℹ${NC} $*"
 }
 
 log_success() {
-  printf "${GREEN}✓${NC} %s\n" "$*"
+  printf '%s\n' "${GREEN}✓${NC} $*"
   TESTS_PASSED=$((TESTS_PASSED + 1))
 }
 
 log_warning() {
-  printf "${YELLOW}⚠${NC} %s\n" "$*"
+  printf '%s\n' "${YELLOW}⚠${NC} $*"
 }
 
 log_error() {
-  printf "${RED}✗${NC} %s\n" "$*" >&2
+  printf '%s\n' "${RED}✗${NC} $*" >&2
   TESTS_FAILED=$((TESTS_FAILED + 1))
 }
 
@@ -179,14 +179,14 @@ verify_files_exist() {
   log_info "Checking if files exist on remote server..."
 
   # Check tarball exists
-  if ! ssh_exec "test -f ${DEPLOY_PATH}/${tarball_name}"; then
+  if ! ssh_exec "test -f '${DEPLOY_PATH}/${tarball_name}'"; then
     log_error "Tarball not found: ${DEPLOY_PATH}/${tarball_name}"
     return 1
   fi
   log_success "Tarball exists: ${tarball_name}"
 
   # Check checksum file exists
-  if ! ssh_exec "test -f ${DEPLOY_PATH}/${checksum_file}"; then
+  if ! ssh_exec "test -f '${DEPLOY_PATH}/${checksum_file}'"; then
     log_error "Checksum file not found: ${DEPLOY_PATH}/${checksum_file}"
     return 1
   fi
@@ -204,8 +204,8 @@ verify_file_permissions() {
 
   # Check permissions using stat
   local stat_output
-  stat_output=$(ssh_exec "stat --printf='%a %U:%G\n' ${DEPLOY_PATH}/${tarball_name} 2>/dev/null || \
-                            stat -f '%Lp %Su:%Lg' ${DEPLOY_PATH}/${tarball_name}" || true)
+  stat_output=$(ssh_exec "stat --printf='%a %U:%G\n' '${DEPLOY_PATH}/${tarball_name}' 2>/dev/null || \
+                            stat -f '%Lp %Su:%Lg' '${DEPLOY_PATH}/${tarball_name}'" || true)
 
   if [ -z "${stat_output}" ]; then
     log_error "Cannot read file permissions for ${tarball_name}"
@@ -246,7 +246,7 @@ verify_checksum() {
 
   # Get remote checksum
   local remote_checksum
-  remote_checksum=$(ssh_exec "cat ${DEPLOY_PATH}/${checksum_file}" | awk '{print $1}')
+  remote_checksum=$(ssh_exec "cat '${DEPLOY_PATH}/${checksum_file}'" | awk '{print $1}')
 
   if [ -z "${remote_checksum}" ]; then
     log_error "Cannot read remote checksum"
@@ -258,7 +258,7 @@ verify_checksum() {
 
   local temp_tarball
   temp_tarball=$(mktemp)
-  trap "rm -f ${temp_tarball}" RETURN
+  trap 'rm -f "${temp_tarball}"' RETURN
 
   if ! curl -sf \
       --max-time "${VERIFY_TIMEOUT}" \
@@ -292,7 +292,7 @@ verify_tarball_integrity() {
 
   local temp_dir
   temp_dir=$(mktemp -d)
-  trap "rm -rf ${temp_dir}" RETURN
+  trap 'rm -rf "${temp_dir}"' RETURN
 
   # Download and test extraction
   if ! curl -sf \
@@ -304,7 +304,7 @@ verify_tarball_integrity() {
   fi
 
   # List contents without extracting (faster)
-  if ! tar -tzf "${temp_dir}/${tarball_name}" &>/dev/null | head -20 &>/dev/null; then
+  if ! tar -tzf "${temp_dir}/${tarball_name}" | head -20 > /dev/null 2>&1; then
     log_error "Tarball is not readable or corrupted"
     return 1
   fi
@@ -386,26 +386,26 @@ generate_report() {
   local pass_rate
   pass_rate=$(( TESTS_PASSED * 100 / total_tests ))
 
-  printf "\n${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
-  printf "${BLUE}Deployment Verification Report${NC}\n"
-  printf "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
-  printf "Version:          ${GREEN}v${version}${NC}\n"
-  printf "Tarball:          ${GREEN}${tarball_name}${NC}\n"
-  printf "Deployment Host:  ${GREEN}${DEPLOY_HOST}${NC}\n"
-  printf "Deployment Path:  ${GREEN}${DEPLOY_PATH}${NC}\n"
-  printf "Web URL:          ${GREEN}${TARBALL_BASE_URL}/${tarball_name}${NC}\n"
-  printf "\n${BLUE}Test Results:${NC}\n"
-  printf "  Passed:  ${GREEN}${TESTS_PASSED}${NC}\n"
-  printf "  Failed:  $([ ${TESTS_FAILED} -eq 0 ] && echo "${GREEN}${TESTS_FAILED}${NC}" || echo "${RED}${TESTS_FAILED}${NC}")\n"
-  printf "  Total:   ${total_tests}\n"
-  printf "  Rate:    %d%%\n" "${pass_rate}"
-  printf "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n\n"
+  printf '%s\n' "\n${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  printf '%s\n' "${BLUE}Deployment Verification Report${NC}"
+  printf '%s\n' "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  printf '%s\n' "Version:          ${GREEN}v${version}${NC}"
+  printf '%s\n' "Tarball:          ${GREEN}${tarball_name}${NC}"
+  printf '%s\n' "Deployment Host:  ${GREEN}${DEPLOY_HOST}${NC}"
+  printf '%s\n' "Deployment Path:  ${GREEN}${DEPLOY_PATH}${NC}"
+  printf '%s\n' "Web URL:          ${GREEN}${TARBALL_BASE_URL}/${tarball_name}${NC}"
+  printf '%s\n' "\n${BLUE}Test Results:${NC}"
+  printf '%s\n' "  Passed:  ${GREEN}${TESTS_PASSED}${NC}"
+  printf '%s\n' "  Failed:  $([ ${TESTS_FAILED} -eq 0 ] && echo "${GREEN}${TESTS_FAILED}${NC}" || echo "${RED}${TESTS_FAILED}${NC}")"
+  printf '%s\n' "  Total:   ${total_tests}"
+  printf '%d%%\n' "${pass_rate}" | sed 's/^/  Rate:    /'
+  printf '%s\n\n' "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
   if [ ${TESTS_FAILED} -eq 0 ]; then
-    printf "${GREEN}✓ All verification tests passed${NC}\n"
+    printf '%s\n' "${GREEN}✓ All verification tests passed${NC}"
     return 0
   else
-    printf "${RED}✗ ${TESTS_FAILED} verification test(s) failed${NC}\n"
+    printf '%s\n' "${RED}✗ ${TESTS_FAILED} verification test(s) failed${NC}"
     return 1
   fi
 }
@@ -425,9 +425,9 @@ main() {
   # Validate version argument
   version=$(validate_arguments "${version}")
 
-  printf "\n${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
-  printf "${BLUE}PDev Tarball Deployment Verifier${NC}\n"
-  printf "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n\n"
+  printf '%s\n' "\n${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  printf '%s\n' "${BLUE}PDev Tarball Deployment Verifier${NC}"
+  printf '%s\n\n' "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
   local tarball_name="pdev-source-v${version}.tar.gz"
 
@@ -435,7 +435,7 @@ main() {
   validate_prerequisites
   test_ssh_connectivity
 
-  printf "\n${BLUE}Running deployment verification tests...${NC}\n\n"
+  printf '%s\n\n' "\n${BLUE}Running deployment verification tests...${NC}"
 
   # File verification tests
   verify_files_exist "${tarball_name}" || true
