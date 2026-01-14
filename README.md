@@ -212,6 +212,57 @@ ssh acme "sudo mv /tmp/install-wizard.html /var/www/vyxenai.com/pdev/install-wiz
 
 **See:** [DEPLOYMENT.md](DEPLOYMENT.md) for full deployment documentation.
 
+### Source Tarball Build & Deployment (GitHub Actions)
+
+The installer and partner deployments require pre-built source tarballs to be available at `https://vyxenai.com/pdev/install/`. These tarballs are automatically created and deployed by GitHub Actions when code changes are pushed to main.
+
+**Automated Build Process:**
+The GitHub Actions workflow (`.github/workflows/build-source-tarball.yml`) automatically:
+1. ✅ Detects changes to `installer/`, `server/`, `frontend/`, or `client/` directories
+2. ✅ Creates a gzipped tarball (`pdev-source-vX.Y.Z.tar.gz`)
+3. ✅ Auto-increments version (minor version +1, patch reset to 0)
+4. ✅ Generates SHA256 checksum for integrity verification
+5. ✅ Deploys tarball to `acme:/var/www/vyxenai.com/pdev/install/`
+6. ✅ Updates `TARBALL_VERSION` in `installer/pdl-installer.sh`
+7. ✅ Creates GitHub Release with files and documentation
+
+**Manual Build (if needed):**
+```bash
+# Build locally with auto-increment
+cd ~/projects/pdev-live
+./installer/scripts/build-source-tarball.sh
+
+# Build with specific version
+./installer/scripts/build-source-tarball.sh "1.0.5"
+
+# Build with custom output directory
+./installer/scripts/build-source-tarball.sh "1.0.5" "/tmp/builds"
+```
+
+**Verify Deployment:**
+```bash
+# Check tarball exists on server
+./installer/scripts/verify-deployment.sh "1.1.0"
+
+# Manual verification
+curl -I https://vyxenai.com/pdev/install/pdev-source-v1.1.0.tar.gz
+sha256sum -c pdev-source-v1.1.0.tar.gz.sha256
+```
+
+**Tarball Contents:**
+- `server/` - Backend API and services
+- `installer/` - Installation scripts and configuration
+- `frontend/` - Web UI components
+- `client/` - CLI tools
+
+**Why This Approach?**
+- ✅ Partners can install from a self-contained tarball (no git clone needed)
+- ✅ Version pinning prevents breaking changes for installers
+- ✅ Checksums ensure integrity during download
+- ✅ GitHub Releases provide download history and documentation
+
+**See:** [GITHUB_ACTIONS_BUILD_GUIDE.md](GITHUB_ACTIONS_BUILD_GUIDE.md) for complete build/deployment documentation.
+
 ### Partner Self-Hosted Installation
 
 The installer supports two modes:
