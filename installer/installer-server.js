@@ -33,7 +33,7 @@ app.set('trust proxy', 1);
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ noServer: true, maxPayload: 64 * 1024 });
 
-const PORT = parseInt(process.env.PORT || '3078', 10);
+const PORT = parseInt(process.env.PORT || '3077', 10);
 
 // Whitelist allowed install script URLs
 const ALLOWED_INSTALL_URLS = [
@@ -41,6 +41,10 @@ const ALLOWED_INSTALL_URLS = [
   'https://walletsnack.com/pdev/install/pdl-installer.sh',
 ];
 const INSTALL_SCRIPT_URL = process.env.INSTALL_SCRIPT_URL || ALLOWED_INSTALL_URLS[0];
+
+// Source server auth credentials (provided to project server installers)
+const SOURCE_AUTH_USER = process.env.SOURCE_AUTH_USER || 'pdev';
+const SOURCE_AUTH_PASSWORD = process.env.SOURCE_AUTH_PASSWORD || '';
 
 // Validate config at startup
 if (isNaN(PORT) || PORT < 1 || PORT > 65535) {
@@ -118,6 +122,34 @@ function isValidUrl(url) {
   catch { return false; }
 }
 
+/**
+ * Normalize SSH private key - remove leading whitespace from each line.
+ * Keys pasted from code blocks or formatted displays often have indentation.
+ */
+function normalizePrivateKey(key) {
+  if (typeof key !== 'string') return key;
+  // Remove leading whitespace from each line, then trim the whole string
+  return key.split('\n').map(line => line.trimStart()).join('\n').trim();
+}
+
+/**
+ * Validate SSH private key format before attempting connection.
+ * ssh2 throws SYNCHRONOUSLY on invalid key format, crashing the server.
+ */
+function isValidPrivateKeyFormat(key) {
+  if (typeof key !== 'string') return false;
+  const normalized = normalizePrivateKey(key);
+  const validHeaders = [
+    '-----BEGIN RSA PRIVATE KEY-----',
+    '-----BEGIN OPENSSH PRIVATE KEY-----',
+    '-----BEGIN EC PRIVATE KEY-----',
+    '-----BEGIN DSA PRIVATE KEY-----',
+    '-----BEGIN PRIVATE KEY-----',
+    '-----BEGIN ENCRYPTED PRIVATE KEY-----'
+  ];
+  return validHeaders.some(header => normalized.startsWith(header));
+}
+
 function validateSSHParams(data) {
   const errors = [];
   if (!data.host || typeof data.host !== 'string' || data.host.length > 253) errors.push('Invalid host');
@@ -132,7 +164,13 @@ function validateSSHParams(data) {
   
   if (!['password', 'privateKey'].includes(data.authMethod)) errors.push('Invalid auth method');
   if (data.authMethod === 'password' && (!data.password || data.password.length < 1)) errors.push('Password required');
-  if (data.authMethod === 'privateKey' && (!data.privateKey || data.privateKey.length < 100)) errors.push('Private key required');
+  if (data.authMethod === 'privateKey') {
+    if (!data.privateKey || data.privateKey.length < 100) {
+      errors.push('Private key required');
+    } else if (!isValidPrivateKeyFormat(data.privateKey)) {
+      errors.push('Invalid private key format. Must be PEM or OpenSSH format.');
+    }
+  }
   
   if (!['source', 'project'].includes(data.mode)) errors.push('Invalid mode');
   if (data.mode === 'source' && (!data.domain || !isValidDomain(data.domain))) errors.push('Invalid domain');
@@ -158,13 +196,19 @@ app.get('/health', (req, res) => {
 
 app.post('/pdev/installer/token', (req, res) => {
   if (isShuttingDown) return res.status(503).json({ error: 'Service shutting down' });
-  const clientIP = req.ip;
+  let clientIP = req.ip;
+  if (clientIP?.startsWith('::ffff:')) clientIP = clientIP.substring(7);
   if (!checkRateLimit(clientIP)) return res.status(429).json({ error: 'Too many attempts' });
   const token = generateToken();
   installerTokens.set(token, { ip: clientIP, createdAt: Date.now() });
   setTimeout(() => installerTokens.delete(token), TOKEN_TTL);
   console.log('[TOKEN] Generated for', clientIP);
-  res.json({ token, expiresIn: TOKEN_TTL / 1000 });
+  // Include source server auth for project mode installations
+  const response = { token, expiresIn: TOKEN_TTL / 1000 };
+  if (SOURCE_AUTH_PASSWORD) {
+    response.sourceAuth = { user: SOURCE_AUTH_USER, password: SOURCE_AUTH_PASSWORD };
+  }
+  res.json(response);
 });
 
 server.on('upgrade', (request, socket, head) => {
@@ -222,12 +266,15 @@ wss.on('connection', (ws, request) => {
       if (config && config.allowedIps) installCmd += ' --allowed-ips ' + escapeShellArg(config.allowedIps);
     } else {
       installCmd += ' --source-url ' + escapeShellArg(sourceUrl);
+      // Pass HTTP auth credentials for authenticated source servers
+      if (config && config.authUser) installCmd += ' --http-user ' + escapeShellArg(config.authUser);
+      if (config && config.authPassword) installCmd += ' --http-password ' + escapeShellArg(config.authPassword);
     }
 
     sshConn = new Client();
     const sshConfig = { host: host.trim(), port: parseInt(port, 10), username: username.trim(), readyTimeout: 30000, keepaliveInterval: 10000 };
     if (authMethod === 'password') sshConfig.password = password;
-    else sshConfig.privateKey = privateKey;
+    else sshConfig.privateKey = normalizePrivateKey(privateKey);
 
     sshConn.on('ready', () => {
       safeSend(ws, { type: 'output', data: '\r\n\x1b[32mSSH connected\x1b[0m\r\n\x1b[33mStarting installation...\x1b[0m\r\n\r\n' });
@@ -248,7 +295,23 @@ wss.on('connection', (ws, request) => {
     });
     sshConn.on('error', (err) => { console.error('[WEBSSH] SSH error:', err.message); safeSend(ws, { type: 'error', message: getSafeErrorMessage(err) }); cleanup(); ws.close(1011); });
     sshConn.on('timeout', () => { safeSend(ws, { type: 'error', message: 'SSH connection timed out' }); cleanup(); ws.close(1011); });
-    sshConn.connect(sshConfig);
+
+    // CRITICAL: ssh2.connect() throws SYNCHRONOUSLY on invalid key format.
+    // Without try-catch, this crashes the entire server (uncaughtException).
+    try {
+      sshConn.connect(sshConfig);
+    } catch (err) {
+      console.error('[WEBSSH] SSH connect sync error:', err.message);
+      const userMessage = err.message.includes('privateKey')
+        ? 'Invalid SSH private key format.'
+        : err.message.includes('passphrase')
+        ? 'Encrypted private keys not supported.'
+        : getSafeErrorMessage(err);
+      safeSend(ws, { type: 'error', message: userMessage });
+      cleanup();
+      ws.close(1008);
+      return;
+    }
   });
 
   ws.on('close', () => { console.log('[WEBSSH] Client disconnected'); activeWSConnections--; cleanup(); });

@@ -145,20 +145,29 @@
             <p><strong>Copy this prompt into Claude Code:</strong></p>
             <pre><code>I need to install PDev-Live. Ask me these questions ONE AT A TIME and wait for my answer before asking the next:
 
-1. What domain will PDev-Live run on?
-2. What's your company name?
-3. What do you call this server?
-4. What is the IP address of this server?
-5. What other servers do you plan on using as project servers?
-6. What are the IP addresses of the servers that will be used as project servers?
-7. What username should I create for the PDev-Live service user?
+1. Is this a Source Server or Project Server?
+   - Source Server: Full installation with database, nginx, PM2 (hosts the PDev Live backend)
+   - Project Server: Client-only installation (connects to existing Source Server)
+
+2. What domain will PDev-Live run on?
+3. What's your company name?
+4. What do you call this server?
+5. What is the IP address of this server?
+
+**[ONLY ASK IF SOURCE SERVER - Skip for Project Server]**
+6. What other servers do you plan on using as project servers?
+7. What are the IP addresses of the servers that will be used as project servers?
+
+8. What username should I create for the PDev-Live service user?
    (This will be a NEW dedicated Linux user with passwordless sudo privileges)
    (Default: pdevuser - or provide a custom username like pdev-source)
 
-After all 7 questions are answered, you must:
+After all questions are answered, you must:
 1. Generate a secure random password for the new service user
 2. Create the Linux user on the target server with: home directory, bash shell, passwordless sudo, SSH password authentication
 3. Output EXACTLY this format:
+
+**Installation Mode:** [Source Server / Project Server]
 
 **PAGE 1 - Server Connection**
 Server Host: [ip-address]
@@ -167,8 +176,9 @@ Username: [service-user]
 Authentication Method: Password
 Password: [generated]
 Domain Name: [domain]
+Source Server URL: [only for Project Server: https://source-domain/pdev/api]
 
-**PAGE 2 - Configuration**
+**PAGE 2 - Configuration** [Source Server only - skip for Project Server]
 Domain Name: [domain]
 Company Name: [company]
 Server Name: [server-nickname]
@@ -237,7 +247,7 @@ Private Key: [generated-private-key]
                     <label for="auth-method">Authentication Method</label>
                     <select id="auth-method">
                         <option value="password">Password</option>
-                        <option value="key">SSH Private Key</option>
+                        <option value="privateKey">SSH Private Key</option>
                     </select>
                 </div>
 
@@ -271,6 +281,7 @@ MIIEpAIBAAKCAQEA...
                     <input type="text" id="install-source-url" placeholder="e.g., https://pdev.example.com/pdev/api">
                     <small>Required for Project Server installation</small>
                 </div>
+
             </div>
 
             <!-- Step 3: Configuration -->
@@ -419,7 +430,12 @@ MIIEpAIBAAKCAQEA...
                 goToStep(2);
             } else if (currentStep === 2) {
                 if (validateSSHStep()) {
-                    goToStep(3);
+                    // Project Server skips config step (Step 3) - go directly to install
+                    if (selectedMode === 'project') {
+                        startInstallation();
+                    } else {
+                        goToStep(3);
+                    }
                 }
             } else if (currentStep === 3) {
                 if (validateConfigStep()) {
@@ -461,8 +477,14 @@ MIIEpAIBAAKCAQEA...
             // Show next button on all steps except last
             if (step < 4) {
                 nextBtn.classList.remove('hidden');
-                // Change button text on config step
-                nextBtn.textContent = (step === 3) ? 'Start Installation →' : 'Next →';
+                // Change button text on config step (Step 3) or SSH step for Project Server
+                if (step === 3) {
+                    nextBtn.textContent = 'Start Installation →';
+                } else if (step === 2 && selectedMode === 'project') {
+                    nextBtn.textContent = 'Start Installation →';
+                } else {
+                    nextBtn.textContent = 'Next →';
+                }
             } else {
                 nextBtn.classList.add('hidden');
             }
@@ -503,7 +525,7 @@ MIIEpAIBAAKCAQEA...
             const username = document.getElementById('ssh-username').value;
             const authMethod = document.getElementById('auth-method').value;
             const password = authMethod === 'password' ? document.getElementById('ssh-password').value : '';
-            const privateKey = authMethod === 'key' ? document.getElementById('ssh-key').value : '';
+            const privateKey = authMethod === 'privateKey' ? document.getElementById('ssh-key').value : '';
             const domain = selectedMode === 'source' ? document.getElementById('install-domain').value : '';
             const sourceUrl = selectedMode === 'project' ? document.getElementById('install-source-url').value : '';
 
@@ -595,23 +617,30 @@ MIIEpAIBAAKCAQEA...
             const username = document.getElementById('ssh-username').value;
             const authMethod = document.getElementById('auth-method').value;
             const password = authMethod === 'password' ? document.getElementById('ssh-password').value : '';
-            const privateKey = authMethod === 'key' ? document.getElementById('ssh-key').value : '';
+            const privateKey = authMethod === 'privateKey' ? document.getElementById('ssh-key').value : '';
 
-            // Collect configuration
-            const config = {
-                partnerDomain: document.getElementById('config-partner-domain').value,
-                partnerName: document.getElementById('config-partner-name').value || document.getElementById('config-partner-domain').value,
-                serverName: document.getElementById('config-server-name').value,
-                validServers: document.getElementById('config-valid-servers').value,
-                allowedIps: document.getElementById('config-allowed-ips').value,
-                dbPassword: document.getElementById('config-db-password').value,
-                authUser: document.getElementById('config-auth-user').value,
-                authPassword: document.getElementById('config-auth-password').value,
-                sessionSecret: document.getElementById('config-session-secret').value
-            };
+            // Collect configuration based on mode
+            let config = {};
+            if (selectedMode === 'source') {
+                config = {
+                    partnerDomain: document.getElementById('config-partner-domain').value,
+                    partnerName: document.getElementById('config-partner-name').value || document.getElementById('config-partner-domain').value,
+                    serverName: document.getElementById('config-server-name').value,
+                    validServers: document.getElementById('config-valid-servers').value,
+                    allowedIps: document.getElementById('config-allowed-ips').value,
+                    dbPassword: document.getElementById('config-db-password').value,
+                    authUser: document.getElementById('config-auth-user').value,
+                    authPassword: document.getElementById('config-auth-password').value,
+                    sessionSecret: document.getElementById('config-session-secret').value
+                };
+            } else if (selectedMode === 'project') {
+                // Project mode credentials come from source server's token response
+                // Will be populated in connectWebSocket after token fetch
+                config = { pendingSourceAuth: true };
+            }
 
-            // Generate .env file content
-            const envContent = generateEnvFile(config);
+            // Generate .env file content (source mode only)
+            const envContent = selectedMode === 'source' ? generateEnvFile(config) : '';
 
             // SECURITY: Clear all sensitive fields immediately after reading
             document.getElementById('ssh-password').value = '';
@@ -636,7 +665,6 @@ MIIEpAIBAAKCAQEA...
                 mode: selectedMode,
                 domain: selectedMode === 'source' ? document.getElementById('install-domain').value : '',
                 sourceUrl: selectedMode === 'project' ? document.getElementById('install-source-url').value : '',
-                urlPrefix: selectedMode === 'source' ? 'pdev' : '',
                 envContent: envContent,
                 config: config
             });
@@ -831,7 +859,22 @@ PM2_MAX_MEMORY_RESTART=512M
                 if (!tokenRes.ok) {
                     throw new Error('Failed to obtain installation token');
                 }
-                const { token } = await tokenRes.json();
+                const tokenData = await tokenRes.json();
+                const token = tokenData.token;
+
+                // For project mode, use sourceAuth from token response
+                // Note: config.config is the nested config object that server expects
+                if (config.config && config.config.pendingSourceAuth && tokenData.sourceAuth) {
+                    config.config.authUser = tokenData.sourceAuth.user;
+                    config.config.authPassword = tokenData.sourceAuth.password;
+                    delete config.config.pendingSourceAuth;
+                } else if (config.config && config.config.pendingSourceAuth) {
+                    // Fallback if source server doesn't provide auth
+                    config.config.authUser = 'pdev';
+                    config.config.authPassword = '';
+                    delete config.config.pendingSourceAuth;
+                    showStatus('warning', 'Source server auth not configured');
+                }
 
                 showStatus('info', 'Connecting to server...');
 
