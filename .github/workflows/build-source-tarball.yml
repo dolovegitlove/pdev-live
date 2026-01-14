@@ -187,48 +187,38 @@ jobs:
           TAR_LIST=$(mktemp)
           tar -tzf "${TARBALL_NAME}" > "$TAR_LIST"
 
-          # Comprehensive file manifest (catches missing files within directories)
-          REQUIRED_FILES=(
-            # Installer core (4 files)
-            "installer/pdl-installer.sh"
-            "installer/installer-server.js"
-            "installer/package.installer.json"
-            "installer/ecosystem.installer.config.js"
+          # Load required files from manifest (single source of truth)
+          MANIFEST_FILE="installer/TARBALL_MANIFEST.txt"
 
-            # Database migrations (6 files - CRITICAL for installer)
-            "installer/migrations/001_create_tables.sql"
-            "installer/migrations/002_add_missing_objects.sql"
-            "installer/migrations/003_create_server_tokens.sql"
-            "installer/migrations/004_create_registration_codes.sql"
-            "installer/migrations/005_create_guest_tokens.sql"
-            "installer/migrations/006_fix_permissions_security.sql"
+          if [ ! -f "${MANIFEST_FILE}" ]; then
+            echo "ERROR: Manifest file not found: ${MANIFEST_FILE}"
+            exit 1
+          fi
 
-            # Server core (3 files - CRITICAL for runtime)
-            "server/package.json"
-            "server/server.js"
-            "server/ecosystem.config.js"
+          echo "Loading required files from ${MANIFEST_FILE}..."
 
-            # Frontend core (5 files - CRITICAL for UI)
-            "frontend/index.html"
-            "frontend/dashboard.html"
-            "frontend/live.html"
-            "frontend/mgmt.js"
-            "frontend/version-check.js"
-
-            # Client core (1 file)
-            "client/client.sh"
-          )
-
+          # Read manifest, skip comments and empty lines
           MISSING=0
-          for item in "${REQUIRED_FILES[@]}"; do
-            # Use line-start anchor for exact path matching
+          TOTAL=0
+
+          while IFS= read -r item || [ -n "$item" ]; do
+            # Skip comments and empty lines
+            [[ "$item" =~ ^#.*$ ]] && continue
+            [[ -z "$item" ]] && continue
+
+            TOTAL=$((TOTAL + 1))
+
+            # Use line-start and line-end anchors for exact path matching
             if grep -q "^${item}$" "$TAR_LIST"; then
               echo "✓ Found: ${item}"
             else
               echo "✗ MISSING CRITICAL FILE: ${item}"
               MISSING=$((MISSING + 1))
             fi
-          done
+          done < "${MANIFEST_FILE}"
+
+          echo ""
+          echo "Validation: ${TOTAL} files checked, ${MISSING} missing"
 
           if [ ${MISSING} -gt 0 ]; then
             echo "ERROR: ${MISSING} required items missing from tarball"

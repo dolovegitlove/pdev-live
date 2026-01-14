@@ -1,0 +1,34 @@
+# PDev Source Tarball Required Files Manifest
+# This file defines the minimum required files for a functional PDev Live installation
+# Used by: build-source-tarball.sh, GitHub Actions workflow
+# Format: One file path per line (relative to tarball root)
+# Comments start with #
+
+# Installer Core (4 files)
+installer/pdl-installer.sh
+installer/installer-server.js
+installer/package.installer.json
+installer/ecosystem.installer.config.js
+
+# Database Migrations (6 files - CRITICAL)
+installer/migrations/001_create_tables.sql
+installer/migrations/002_add_missing_objects.sql
+installer/migrations/003_create_server_tokens.sql
+installer/migrations/004_create_registration_codes.sql
+installer/migrations/005_create_guest_tokens.sql
+installer/migrations/006_fix_permissions_security.sql
+
+# Server Core (3 files - CRITICAL for runtime)
+server/package.json
+server/server.js
+server/ecosystem.config.js
+
+# Frontend Core (5 files - CRITICAL for UI)
+frontend/index.html
+frontend/dashboard.html
+frontend/live.html
+frontend/mgmt.js
+frontend/version-check.js
+
+# Client Core (1 file)
+client/client.sh

@@ -250,40 +250,27 @@ verify_tarball_contents() {
 
   log_info "Verifying tarball contents..."
 
-  # Comprehensive file manifest (catches missing files within directories)
-  local required_files=(
-    # Installer core (4 files)
-    "installer/pdl-installer.sh"
-    "installer/installer-server.js"
-    "installer/package.installer.json"
-    "installer/ecosystem.installer.config.js"
+  # Load required files from manifest (single source of truth)
+  local manifest_file="$SCRIPT_DIR/../TARBALL_MANIFEST.txt"
 
-    # Database migrations (6 files - CRITICAL for installer)
-    "installer/migrations/001_create_tables.sql"
-    "installer/migrations/002_add_missing_objects.sql"
-    "installer/migrations/003_create_server_tokens.sql"
-    "installer/migrations/004_create_registration_codes.sql"
-    "installer/migrations/005_create_guest_tokens.sql"
-    "installer/migrations/006_fix_permissions_security.sql"
+  if [ ! -f "$manifest_file" ]; then
+    log_error "Manifest file not found: $manifest_file"
+    exit 1
+  fi
 
-    # Server core (3 files - CRITICAL for runtime)
-    "server/package.json"
-    "server/server.js"
-    "server/ecosystem.config.js"
+  log_info "Loading required files from TARBALL_MANIFEST.txt..."
 
-    # Frontend core (5 files - CRITICAL for UI)
-    "frontend/index.html"
-    "frontend/dashboard.html"
-    "frontend/live.html"
-    "frontend/mgmt.js"
-    "frontend/version-check.js"
-
-    # Client core (1 file)
-    "client/client.sh"
-  )
-
+  # Read manifest, skip comments and empty lines
   local missing=0
-  for item in "${required_files[@]}"; do
+  local total=0
+
+  while IFS= read -r item || [ -n "$item" ]; do
+    # Skip comments and empty lines
+    [[ "$item" =~ ^#.*$ ]] && continue
+    [[ -z "$item" ]] && continue
+
+    total=$((total + 1))
+
     # Use line-start and line-end anchors for exact path matching
     if tar -tzf "${tarball_path}" | grep -q "^${item}$"; then
       log_success "Found: ${item}"
@@ -291,7 +278,10 @@ verify_tarball_contents() {
       log_error "MISSING CRITICAL FILE: ${item}"
       missing=$((missing + 1))
     fi
-  done
+  done < "$manifest_file"
+
+  echo ""
+  log_info "Validation: ${total} files checked, ${missing} missing"
 
   if [ ${missing} -gt 0 ]; then
     log_error "${missing} required items missing from tarball"
