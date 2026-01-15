@@ -149,16 +149,19 @@
    - Source Server: Full installation with database, nginx, PM2 (hosts the PDev Live backend)
    - Project Server: Client-only installation (connects to existing Source Server)
 
+**[ONLY ASK IF SOURCE SERVER - Skip for Project Server]**
 2. What domain will PDev-Live run on?
 3. What's your company name?
-4. What do you call this server?
-5. What is the IP address of this server?
+4. What other servers do you plan on using as project servers?
+5. What are the IP addresses of the servers that will be used as project servers?
 
-**[ONLY ASK IF SOURCE SERVER - Skip for Project Server]**
-6. What other servers do you plan on using as project servers?
-7. What are the IP addresses of the servers that will be used as project servers?
+**[ONLY ASK IF PROJECT SERVER - Skip for Source Server]**
+6. What is the Source Server URL? (e.g., https://source-domain/pdev/api)
 
-8. What username should I create for the PDev-Live service user?
+**[ASK FOR ALL INSTALLATIONS]**
+7. What do you call this server?
+8. What is the IP address of this server?
+9. What username should I create for the PDev-Live service user?
    (This will be a NEW dedicated Linux user with passwordless sudo privileges)
    (Default: pdevuser - or provide a custom username like pdev-source)
 
