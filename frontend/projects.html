@@ -32,6 +32,7 @@
             <div class="header-right">
                 <span class="project-count" id="projectCount">-</span>
                 <span class="project-count-label">projects</span>
+                <button type="button" class="btn btn-primary add-project-btn" onclick="openAddProjectModal()" aria-label="Add new project">+ Add Project</button>
             </div>
         </header>
 
@@ -109,6 +110,40 @@
         </section>
     </div>
 
+    <!-- Add Project Modal -->
+    <div id="addProjectModal" class="modal hidden" role="dialog" aria-labelledby="addProjectTitle" aria-modal="true">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="addProjectTitle">Add New Project</h3>
+                <button type="button" class="modal-close" onclick="closeAddProjectModal()" aria-label="Close modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="projectName">Project Name</label>
+                    <input type="text" id="projectName" placeholder="my-project" pattern="[a-zA-Z0-9_-]+" required aria-describedby="projectNameHelp">
+                    <small id="projectNameHelp" class="form-help">Letters, numbers, dashes, and underscores only</small>
+                </div>
+                <div class="form-group">
+                    <label for="projectServer">Server</label>
+                    <select id="projectServer" required>
+                        <option value="">Select server...</option>
+                        <option value="cfree">cfree</option>
+                        <option value="ittz">ittz</option>
+                        <option value="acme">acme</option>
+                        <option value="rmlve">rmlve</option>
+                        <option value="wdress">wdress</option>
+                        <option value="djm">djm</option>
+                    </select>
+                </div>
+                <div id="addProjectError" class="error-message hidden" role="alert"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="closeAddProjectModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" id="createProjectBtn" onclick="createProject()">Create Project</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const API_BASE = '/pdev';
         let allProjects = [];
@@ -140,7 +175,7 @@
         function showElement(el) { el.classList.remove('hidden'); }
         function hideElement(el) { el.classList.add('hidden'); }
 
-        // Render a single project card
+        // Render a single project card with action buttons
         function renderProjectCard(project) {
             const lastActivity = timeAgo(project.last_activity);
             const datetime = project.last_activity || '';
@@ -149,24 +184,27 @@
                 : 'No activity';
             const docCount = project.total_steps || 0;
             const sessionCount = project.session_count || 0;
+            const hasSession = project.has_active_session || false;
 
             return `
-                <a href="project.html?server=${encodeURIComponent(project.server_origin)}&project=${encodeURIComponent(project.project_name)}"
-                   class="project-card"
-                   role="listitem"
-                   aria-label="View ${escapeHtml(project.project_name)} project on ${escapeHtml(project.server_origin)}">
+                <div class="project-card" role="listitem" aria-label="${escapeHtml(project.project_name)} project on ${escapeHtml(project.server_origin)}">
                     <div class="project-card-header">
                         <span class="server-badge">${escapeHtml(project.server_origin)}</span>
                         <span class="doc-count">${escapeHtml(String(docCount))} docs</span>
                     </div>
                     <div class="project-card-body">
                         <h3 class="project-name">${escapeHtml(project.project_name)}</h3>
+                        <div class="project-meta">
+                            <span class="session-count">${escapeHtml(String(sessionCount))} sessions</span>
+                            <time datetime="${escapeHtml(datetime)}" title="${escapeHtml(fullDate)}">${escapeHtml(lastActivity)}</time>
+                        </div>
                     </div>
-                    <div class="project-card-footer">
-                        <span class="session-count">${escapeHtml(String(sessionCount))} sessions</span>
-                        <time datetime="${escapeHtml(datetime)}" title="${escapeHtml(fullDate)}">${escapeHtml(lastActivity)}</time>
+                    <div class="project-card-actions">
+                        <a href="project.html?server=${encodeURIComponent(project.server_origin)}&project=${encodeURIComponent(project.project_name)}" class="btn btn-outline btn-sm" aria-label="View ${escapeHtml(project.project_name)} documents">View</a>
+                        <button type="button" class="btn btn-outline btn-sm" onclick="shareProject('${escapeHtml(project.server_origin)}', '${escapeHtml(project.project_name)}')" aria-label="Share ${escapeHtml(project.project_name)}">Share</button>
+                        <button type="button" class="btn btn-primary btn-sm ${hasSession ? '' : 'btn-disabled'}" onclick="resumeProject('${escapeHtml(project.server_origin)}', '${escapeHtml(project.project_name)}')" ${hasSession ? '' : 'disabled'} aria-label="Resume ${escapeHtml(project.project_name)} session" title="${hasSession ? 'Resume last session' : 'No active session to resume'}">Resume</button>
                     </div>
-                </a>
+                </div>
             `;
         }
 
@@ -302,7 +340,113 @@
             // Server filter change
             const serverFilter = document.getElementById('serverFilter');
             serverFilter.addEventListener('change', applyFiltersAndRender);
+
+            // Close modal on escape key
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') closeAddProjectModal();
+            });
         });
+
+        // Add Project Modal Functions
+        function openAddProjectModal() {
+            document.getElementById('addProjectModal').classList.remove('hidden');
+            document.getElementById('projectName').value = '';
+            document.getElementById('projectServer').value = '';
+            hideElement(document.getElementById('addProjectError'));
+            document.getElementById('createProjectBtn').disabled = false;
+            document.getElementById('createProjectBtn').textContent = 'Create Project';
+            document.getElementById('projectName').focus();
+        }
+
+        function closeAddProjectModal() {
+            document.getElementById('addProjectModal').classList.add('hidden');
+        }
+
+        async function createProject() {
+            const name = document.getElementById('projectName').value.trim();
+            const server = document.getElementById('projectServer').value;
+            const errorEl = document.getElementById('addProjectError');
+            const btn = document.getElementById('createProjectBtn');
+
+            // Validate inputs
+            if (!name) {
+                errorEl.textContent = 'Please enter a project name';
+                showElement(errorEl);
+                return;
+            }
+
+            if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
+                errorEl.textContent = 'Project name can only contain letters, numbers, dashes, and underscores';
+                showElement(errorEl);
+                return;
+            }
+
+            if (!server) {
+                errorEl.textContent = 'Please select a server';
+                showElement(errorEl);
+                return;
+            }
+
+            hideElement(errorEl);
+            btn.disabled = true;
+            btn.textContent = 'Creating...';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/projects/init`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, server })
+                });
+
+                if (!response.ok) {
+                    const data = await response.json().catch(() => ({}));
+                    throw new Error(data.error || 'Failed to create project');
+                }
+
+                const data = await response.json();
+                btn.textContent = 'Created!';
+
+                // Redirect to the new project
+                setTimeout(() => {
+                    window.location.href = `project.html?server=${encodeURIComponent(server)}&project=${encodeURIComponent(name)}`;
+                }, 500);
+
+            } catch (error) {
+                console.error('Failed to create project:', error);
+                errorEl.textContent = error.message || 'Failed to create project. Please try again.';
+                showElement(errorEl);
+                btn.disabled = false;
+                btn.textContent = 'Create Project';
+            }
+        }
+
+        // Share project - redirect to project page with share modal open
+        function shareProject(server, project) {
+            window.location.href = `project.html?server=${encodeURIComponent(server)}&project=${encodeURIComponent(project)}&action=share`;
+        }
+
+        // Resume project session
+        async function resumeProject(server, project) {
+            try {
+                const response = await fetch(`${API_BASE}/api/sessions/resume`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ server, project })
+                });
+
+                if (!response.ok) {
+                    const data = await response.json().catch(() => ({}));
+                    throw new Error(data.error || 'Failed to resume session');
+                }
+
+                // Redirect to live view
+                window.location.href = `/pdev/live/?server=${encodeURIComponent(server)}&project=${encodeURIComponent(project)}`;
+
+            } catch (error) {
+                console.error('Failed to resume session:', error);
+                alert('Could not resume session: ' + error.message);
+            }
+        }
     </script>
 </body>
 </html>

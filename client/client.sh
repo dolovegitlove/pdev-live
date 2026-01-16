@@ -75,6 +75,15 @@ load_pdev_config() {
         PDEV_TOKEN)
           export PDEV_TOKEN="$value"
           ;;
+        PDEV_HTTP_USER)
+          export PDEV_HTTP_USER="$value"
+          ;;
+        PDEV_HTTP_PASSWORD)
+          export PDEV_HTTP_PASSWORD="$value"
+          ;;
+        PDEV_SERVER)
+          export PDEV_SERVER="$value"
+          ;;
       esac
     done < "$config_file"
 
@@ -168,6 +177,11 @@ fi
 
 # Build curl auth header
 CURL_AUTH=(-H "X-Pdev-Token: $PDEV_TOKEN")
+
+# Add HTTP Basic Auth if configured (for nginx layer)
+if [ -n "$PDEV_HTTP_USER" ] && [ -n "$PDEV_HTTP_PASSWORD" ]; then
+  CURL_AUTH+=(-u "$PDEV_HTTP_USER:$PDEV_HTTP_PASSWORD")
+fi
 
 # Detect current server hostname for session tracking
 PDEV_SERVER=$(detect_server)

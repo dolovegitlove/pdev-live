@@ -38,6 +38,15 @@
         </div>
         <div class="main-content">
             <div class="sidebar">
+                <div class="sidebar-card pipeline-progress-card">
+                    <h3>Pipeline Progress</h3>
+                    <div class="pipeline-progress" id="pipeline-progress">
+                        <div class="progress-bar-container">
+                            <div class="progress-bar progress-0" id="progress-bar"></div>
+                        </div>
+                        <div class="progress-text" id="progress-text">Loading...</div>
+                    </div>
+                </div>
                 <div class="sidebar-card">
                     <h3>Pipeline Documents</h3>
                     <ul class="doc-list" id="doc-list">
@@ -178,6 +187,18 @@
             const list = document.getElementById('doc-list');
             list.innerHTML = '';
             const hasAnyDocs = Object.keys(docs).some(k => k !== 'lastModified');
+
+            // Update pipeline progress indicator
+            var completedDocs = PIPELINE_DOCS.filter(function(d) { return docs[d.type]; }).length;
+            var totalDocs = PIPELINE_DOCS.length;
+            var progressPercent = Math.round((completedDocs / totalDocs) * 100);
+            var progressBar = document.getElementById('progress-bar');
+            var progressText = document.getElementById('progress-text');
+            if (progressBar && progressText) {
+                progressBar.className = 'progress-bar';
+                progressBar.setAttribute('data-progress', progressPercent);
+                progressText.textContent = completedDocs + ' of ' + totalDocs + ' docs (' + progressPercent + '%)';
+            }
 
             // Show onboarding if no docs exist
             if (!hasAnyDocs) {
@@ -437,9 +458,18 @@
                     return;
                 }
                 list.innerHTML = sessions.slice(0, 10).map(function(s) {
-                    return '<li><a href="session.html?id=' + escapeHtml(s.id) + '">/' + escapeHtml(s.command_type || 'session') + '</a> ' +
+                    var isResumable = s.session_status === 'active' || s.session_status === 'paused';
+                    var resumeBtn = isResumable ?
+                        '<button class="btn btn-sm btn-primary session-resume-btn" onclick="resumeSession(\'' + escapeHtml(s.id) + '\')">Resume</button>' :
+                        '';
+                    return '<li class="session-item">' +
+                        '<div class="session-info">' +
+                        '<a href="session.html?id=' + escapeHtml(s.id) + '">/' + escapeHtml(s.command_type || 'session') + '</a> ' +
                         '<span class="session-date">' + escapeHtml(new Date(s.created_at).toLocaleDateString()) + '</span> ' +
-                        '<span>(' + escapeHtml(String(s.step_count || 0)) + ' steps)</span></li>';
+                        '<span class="session-steps">(' + escapeHtml(String(s.step_count || 0)) + ' steps)</span>' +
+                        '</div>' +
+                        '<div class="session-actions">' + resumeBtn + '</div>' +
+                        '</li>';
                 }).join('');
             } catch (err) {
                 document.getElementById('session-list').innerHTML = '<li>Sessions unavailable - try refreshing</li>';
@@ -447,6 +477,24 @@
         }
         
         init();
+
+        // Resume Session Function
+        async function resumeSession(sessionId) {
+            try {
+                var response = await fetch(API_BASE + '/sessions/' + sessionId + '/reopen', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                if (!response.ok) {
+                    throw new Error('Failed to resume session');
+                }
+                // Redirect to session view
+                window.location.href = 'session.html?id=' + sessionId;
+            } catch (err) {
+                console.error('Resume error:', err);
+                alert('Failed to resume session: ' + err.message);
+            }
+        }
 
         // Share Modal Functions
         function openShareModal() {

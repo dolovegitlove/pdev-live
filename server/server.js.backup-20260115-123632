@@ -341,195 +341,10 @@ app.use(apiLimiter);
 app.use(express.json({ limit: '10mb' }));
 
 // ============================================================================
-// SESSION-BASED AUTHENTICATION
-// ============================================================================
-// Cookie-based session auth for browser/web UI access
-// Replaces HTTP Basic Auth for better UX (no repeated password prompts)
-// Coexists with: X-Admin-Key (admin ops), X-Pdev-Token (CLI), Guest tokens
-// NOTE: Session middleware MUST come BEFORE static file serving to protect HTML pages
-
-const SESSION_SECRET = process.env.PDEV_SESSION_SECRET;
-if (!SESSION_SECRET || SESSION_SECRET.length < 32) {
-  console.error('FATAL: PDEV_SESSION_SECRET must be at least 32 characters');
-  console.error('Generate with: openssl rand -hex 32');
-  process.exit(1);
-}
-
-app.use(session({
-  secret: SESSION_SECRET,
-  name: 'pdev.sid',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    httpOnly: true,
-    sameSite: 'strict',
-    maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
-  }
-}));
-
-// Rate limiter for login endpoint (5 attempts per 15 minutes)
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5,
-  message: { error: 'Too many login attempts, try again later' },
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
-// Login endpoint
-app.post('/auth/login', loginLimiter, (req, res) => {
-  const { username, password } = req.body;
-
-  // Input validation
-  if (typeof username !== 'string' || typeof password !== 'string') {
-    return res.status(400).json({ error: 'Invalid request format' });
-  }
-  if (username.length > 100 || password.length > 200) {
-    return res.status(400).json({ error: 'Invalid credentials' });
-  }
-
-  const validUser = process.env.PDEV_USERNAME;
-  const validPass = process.env.PDEV_PASSWORD;
-
-  if (!validUser || !validPass) {
-    console.error('[AUTH] PDEV_USERNAME or PDEV_PASSWORD not configured');
-    return res.status(500).json({ error: 'Auth not configured' });
-  }
-
-  // Timing-safe comparison for BOTH username and password
-  const usernameBuffer = Buffer.from(String(username));
-  const validUserBuffer = Buffer.from(String(validUser));
-  const passwordBuffer = Buffer.from(String(password));
-  const validPassBuffer = Buffer.from(String(validPass));
-
-  const maxUserLen = Math.max(usernameBuffer.length, validUserBuffer.length);
-  const maxPassLen = Math.max(passwordBuffer.length, validPassBuffer.length);
-
-  const paddedUsername = Buffer.alloc(maxUserLen);
-  const paddedValidUser = Buffer.alloc(maxUserLen);
-  const paddedPassword = Buffer.alloc(maxPassLen);
-  const paddedValidPass = Buffer.alloc(maxPassLen);
-
-  usernameBuffer.copy(paddedUsername);
-  validUserBuffer.copy(paddedValidUser);
-  passwordBuffer.copy(paddedPassword);
-  validPassBuffer.copy(paddedValidPass);
-
-  const userMatch = crypto.timingSafeEqual(paddedUsername, paddedValidUser);
-  const passMatch = crypto.timingSafeEqual(paddedPassword, paddedValidPass);
-  const lengthMatch = usernameBuffer.length === validUserBuffer.length &&
-                      passwordBuffer.length === validPassBuffer.length;
-
-  if (userMatch && passMatch && lengthMatch) {
-    req.session.regenerate((err) => {
-      if (err) {
-        console.error('[AUTH] Session regenerate error:', err);
-        return res.status(500).json({ error: 'Session error' });
-      }
-      req.session.authenticated = true;
-      req.session.loginTime = Date.now();
-      req.session.save((err) => {
-        if (err) {
-          console.error('[AUTH] Session save error:', err);
-          return res.status(500).json({ error: 'Session error' });
-        }
-        console.log('[AUTH] Login successful for user:', username);
-        res.json({ success: true });
-      });
-    });
-  } else {
-    console.log('[AUTH] Login failed for user:', username);
-    res.status(401).json({ error: 'Invalid credentials' });
-  }
-});
-
-// Logout endpoint
-app.post('/auth/logout', (req, res) => {
-  const sessionId = req.session.id;
-  req.session.destroy((err) => {
-    if (err) {
-      console.error('[AUTH] Session destroy error:', err);
-    }
-    res.clearCookie('pdev.sid', {
-      secure: process.env.NODE_ENV === 'production',
-      httpOnly: true,
-      sameSite: 'strict'
-    });
-    console.log('[AUTH] Logout for session:', sessionId);
-    res.json({ success: true });
-  });
-});
-
-// Auth check endpoint
-app.get('/auth/check', (req, res) => {
-  res.json({
-    authenticated: !!req.session.authenticated,
-    loginTime: req.session.loginTime || null
-  });
-});
-
-// Session middleware - protects browser/web UI access only
-// Bypasses: X-Admin-Key, X-Pdev-Token, public paths, guest tokens
-function requireSession(req, res, next) {
-  // BYPASS: Requests with X-Admin-Key (admin API operations)
-  if (req.headers['x-admin-key']) {
-    return next();
-  }
-
-  // BYPASS: Requests with X-Pdev-Token (CLI/server automation)
-  if (req.headers['x-pdev-token']) {
-    return next();
-  }
-
-  // BYPASS: Public API paths
-  const publicPaths = [
-    '/auth/login', '/auth/logout', '/auth/check',
-    '/health', '/guest/', '/contract', '/version',
-    '/pdev/installer', '/webssh'
-  ];
-  if (publicPaths.some(p => req.path.startsWith(p))) {
-    return next();
-  }
-
-  // BYPASS: Static assets (CSS, JS, images, fonts)
-  if (req.path.match(/\.(css|js|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$/)) {
-    return next();
-  }
-
-  // BYPASS: Login page
-  if (req.path === '/live/login.html' || req.path === '/login.html' || req.path === '/login') {
-    return next();
-  }
-
-  // REQUIRE SESSION: Browser requests without special auth headers
-  if (!req.session.authenticated) {
-    // API requests get 401 JSON response
-    if (req.headers.accept?.includes('application/json') ||
-        req.xhr ||
-        req.path.startsWith('/sessions') ||
-        req.path.startsWith('/api') ||
-        req.path.startsWith('/projects') ||
-        req.path.startsWith('/servers')) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-    // HTML page requests redirect to login (use /pdev/ prefix for nginx proxy)
-    return res.redirect('/pdev/live/login.html');
-  }
-
-  next();
-}
-
-app.use(requireSession);
-
-console.log('[Auth] Session-based authentication enabled (30-day cookie)');
-
-// ============================================================================
 // STATIC FILE SERVING (Partner Self-Hosted Mode)
 // ============================================================================
 // For partner deployments, serve frontend HTML/CSS/JS files
-// NOTE: Static serving comes AFTER session auth middleware - HTML pages require auth
-// Static assets (CSS, JS, images) bypass auth via requireSession path matching
+// Walletsnack uses nginx to serve static files, so this is disabled there
 if (process.env.PDEV_SERVE_STATIC === 'true') {
   const path = require('path');
   const FRONTEND_DIR = process.env.PDEV_FRONTEND_DIR || path.join(__dirname, '..', 'frontend');
@@ -541,7 +356,8 @@ if (process.env.PDEV_SERVE_STATIC === 'true') {
     index: 'index.html',
     redirect: false,
     setHeaders: (res, filePath) => {
-      // Prevent caching of HTML (always get latest)
+      // Prevent caching of HTML (always get latest) but allow credential caching
+      // Note: no-store breaks HTTP Basic Auth credential caching in browsers
       if (filePath.endsWith('.html')) {
         res.setHeader('Cache-Control', 'no-cache, must-revalidate');
         res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -561,6 +377,31 @@ if (process.env.PDEV_SERVE_STATIC === 'true') {
 
   // Serve static files at /pdev/live/ (for guest links via regex location)
   app.use('/pdev/live', express.static(FRONTEND_DIR, staticOptions));
+}
+
+// ============================================================================
+// HTTP BASIC AUTH (Partner Self-Hosted Mode - Backup Layer)
+// ============================================================================
+// Optional backup authentication layer for partner deployments
+// Primary auth should be at nginx level - this is defense-in-depth
+if (process.env.PDEV_HTTP_AUTH === 'true') {
+  const basicAuth = require('express-basic-auth');
+
+  const username = process.env.PDEV_USERNAME;
+  const password = process.env.PDEV_PASSWORD;
+
+  if (!username || !password) {
+    console.error('FATAL: PDEV_HTTP_AUTH=true but PDEV_USERNAME or PDEV_PASSWORD not set');
+    process.exit(1);
+  }
+
+  console.log('[Auth] HTTP Basic Auth enabled (backup layer)');
+
+  app.use(basicAuth({
+    users: { [username]: password },
+    challenge: true,
+    realm: 'PDev-Live'
+  }));
 }
 
 // API: Expose document contract (SINGLE SOURCE OF TRUTH for frontend)
@@ -1185,94 +1026,6 @@ app.get('/servers/:server/sessions', async (req, res) => {
     res.json(sessions);
   } catch (err) {
     res.status(500).json({ error: err.message });
-  }
-});
-
-// =============================================================================
-// PROJECT MANAGEMENT API (Button-based UI support)
-// =============================================================================
-
-// Initialize/register a new project
-app.post('/projects/init', mutationLimiter, async (req, res) => {
-  try {
-    const { server_origin, project_name } = req.body;
-
-    if (!server_origin || !project_name) {
-      return res.status(400).json({ error: 'Missing required fields: server_origin, project_name' });
-    }
-
-    if (!VALID_SERVERS.includes(server_origin)) {
-      return res.status(400).json({ error: `Invalid server_origin: ${server_origin}. Must be one of: ${VALID_SERVERS.join(', ')}` });
-    }
-
-    const sanitizedName = project_name.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
-    if (!sanitizedName) {
-      return res.status(400).json({ error: 'Invalid project_name: must contain alphanumeric characters' });
-    }
-
-    const result = await pool.query(
-      `INSERT INTO pdev_sessions (server_origin, project_name, command_type, session_status, started_at)
-       VALUES ($1, $2, 'init', 'completed', NOW())
-       ON CONFLICT (server_origin, project_name) WHERE command_type = 'init'
-       DO UPDATE SET started_at = NOW(), last_activity_at = NOW()
-       RETURNING id`,
-      [server_origin, sanitizedName]
-    );
-
-    broadcastGlobal({ type: 'project_init', server: server_origin, project: sanitizedName });
-    res.status(201).json({ success: true, project_id: result.rows[0]?.id, project_name: sanitizedName });
-  } catch (err) {
-    console.error('Project init error:', err);
-    res.status(500).json({ error: 'Failed to initialize project' });
-  }
-});
-
-// Resume a project session (find most recent active/paused session)
-app.post('/sessions/resume', mutationLimiter, async (req, res) => {
-  try {
-    const { server_origin, project_name } = req.body;
-
-    if (!server_origin || !project_name) {
-      return res.status(400).json({ error: 'Missing required fields: server_origin, project_name' });
-    }
-
-    if (!VALID_SERVERS.includes(server_origin)) {
-      return res.status(400).json({ error: `Invalid server_origin: ${server_origin}` });
-    }
-
-    const sanitizedName = project_name.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
-    if (!sanitizedName) {
-      return res.status(400).json({ error: 'Invalid project_name' });
-    }
-
-    const result = await pool.query(
-      `UPDATE pdev_sessions
-       SET session_status = 'active', last_activity_at = NOW()
-       WHERE server_origin = $1 AND project_name = $2
-         AND session_status IN ('active', 'paused')
-         AND deleted_at IS NULL
-         AND id = (
-           SELECT id FROM pdev_sessions
-           WHERE server_origin = $1 AND project_name = $2
-             AND session_status IN ('active', 'paused')
-             AND deleted_at IS NULL
-           ORDER BY started_at DESC
-           LIMIT 1
-           FOR UPDATE SKIP LOCKED
-         )
-       RETURNING id, command_type, session_status`,
-      [server_origin, sanitizedName]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'No resumable session found for this project' });
-    }
-
-    broadcastGlobal({ type: 'session_resumed', server: server_origin, project: sanitizedName, sessionId: result.rows[0].id });
-    res.json({ success: true, session: result.rows[0] });
-  } catch (err) {
-    console.error('Session resume error:', err);
-    res.status(500).json({ error: 'Failed to resume session' });
   }
 });
 

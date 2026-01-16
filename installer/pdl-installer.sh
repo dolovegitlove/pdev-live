@@ -3,7 +3,7 @@
 # ============================================================================
 # PDev-Live Remote Installer - Downloads from vyxenai.com
 # ============================================================================
-# Version: 1.0.19 (HTTP Auth Permission Fix + Workflow Cleanup)
+# Version: 1.0.28 (Disable Express HTTP Auth - nginx handles auth)
 # Description: Installs PDev-Live server from remote source (vyxenai.com)
 #
 # Usage: sudo ./pdl-installer.sh [OPTIONS]
@@ -54,7 +54,7 @@ IFS=$'\n\t'
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
-VERSION="1.0.23"
+VERSION="1.0.28"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="/tmp/pdl-installer-$(date +%s).log"
 
@@ -71,6 +71,7 @@ VALID_SERVERS="${VALID_SERVERS:-}"
 ALLOWED_IPS="${ALLOWED_IPS:-}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/pdev-live}"
 DRY_RUN="${DRY_RUN:-false}"
+PROJECT_NAME="${PROJECT_NAME:-}"  # Project name for auto-registration in projects.json
 
 # =============================================================================
 # SINGLE SOURCE OF TRUTH - Configuration Constants
@@ -265,6 +266,7 @@ REQUIRED (choose one):
 OPTIONAL:
   --mode MODE              Explicit mode override (source|project) [auto-detected]
   --url-prefix PREFIX      Deploy at URL prefix (e.g., "pdev" for /pdev/ location)
+  --project-name NAME      Project name for auto-registration in projects.json
   --db-password PASSWORD   PostgreSQL password (source mode, default: auto-generated)
   --admin-key KEY          Admin API key (source mode, default: auto-generated)
   --http-user USERNAME     HTTP auth username (source mode, default: admin)
@@ -284,6 +286,9 @@ EXAMPLES:
 
   # Project server (client only, posts to source server)
   sudo ./pdl-installer.sh --source-url https://your-company.com/pdev/api
+
+  # Project server with auto-registration
+  sudo ./pdl-installer.sh --source-url https://your-company.com/pdev/api --project-name myproject
 
   # Explicit mode override
   sudo ./pdl-installer.sh --mode=project --source-url https://example.com/pdev/api
@@ -471,6 +476,10 @@ parse_arguments() {
                 ;;
             --url-prefix)
                 URL_PREFIX="$2"
+                shift 2
+                ;;
+            --project-name)
+                PROJECT_NAME="$2"
                 shift 2
                 ;;
             --valid-servers)
@@ -1553,11 +1562,11 @@ PDEV_SERVE_STATIC=true
 PDEV_FRONTEND_DIR=$INSTALL_DIR/frontend
 
 # ===================================
-# HTTP BASIC AUTH (Defense-in-Depth)
+# HTTP BASIC AUTH
 # ===================================
-# CRITICAL: Set to 'true' for dual-layer auth (nginx + Express)
-# PRIMARY auth at nginx layer, this is BACKUP layer
-PDEV_HTTP_AUTH=true
+# Set to 'false' - nginx handles authentication at proxy layer
+# Express auth disabled for JavaScript fetch() compatibility
+PDEV_HTTP_AUTH=false
 PDEV_AUTH_USER=$HTTP_USER
 PDEV_AUTH_PASSWORD=$HTTP_PASSWORD
 
@@ -2527,6 +2536,72 @@ EOF
 
     chmod 600 "$HOME/$CLIENT_CONFIG_FILE"
     success "Client config: $HOME/$CLIENT_CONFIG_FILE (600 permissions)"
+
+    # Create pdev-docs directory for pipeline documents
+    local pdev_docs_dir="$PWD/pdev-docs"
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        dry_run_msg "Would create pdev-docs directory: $pdev_docs_dir"
+        dry_run_msg "Would create projects registry: $client_dir/projects.json"
+        [[ -n "${PROJECT_NAME:-}" ]] && dry_run_msg "Would register project: $PROJECT_NAME"
+    else
+        # Create pdev-docs directory
+        if [[ ! -d "$pdev_docs_dir" ]]; then
+            log "Creating pdev-docs directory: $pdev_docs_dir"
+            if mkdir -p "$pdev_docs_dir"; then
+                success "Created: $pdev_docs_dir"
+            else
+                warn "Failed to create pdev-docs directory: $pdev_docs_dir"
+            fi
+        else
+            log "pdev-docs directory already exists: $pdev_docs_dir"
+        fi
+
+        # Copy projects.json template if it doesn't exist
+        local projects_file="$client_dir/projects.json"
+        if [[ ! -f "$projects_file" ]]; then
+            log "Creating projects registry: $projects_file"
+            cat > "$projects_file" <<'PROJECTS_EOF'
+{
+  "_convention": "Standard path: /<project-root>/pdev-docs/ - all projects should follow this",
+  "projects": {}
+}
+PROJECTS_EOF
+            success "Created projects registry template"
+        fi
+
+        # Auto-register current project if PROJECT_NAME is set
+        if [[ -n "${PROJECT_NAME:-}" ]]; then
+            local server_name
+            server_name=$(hostname 2>/dev/null | cut -d. -f1 || echo "unknown")
+            log "Registering project '$PROJECT_NAME' at $server_name:$pdev_docs_dir"
+
+            # Use jq to add project entry (if jq available)
+            if command -v jq &>/dev/null; then
+                local tmp_projects
+                tmp_projects=$(mktemp 2>/dev/null) || tmp_projects="/tmp/projects-$$.json"
+
+                if jq --arg name "$PROJECT_NAME" \
+                      --arg server "$server_name" \
+                      --arg path "$pdev_docs_dir" \
+                      '.projects[$name] = {"server": $server, "path": $path, "aliases": []}' \
+                      "$projects_file" > "$tmp_projects" 2>/dev/null; then
+                    if mv "$tmp_projects" "$projects_file" 2>/dev/null; then
+                        success "Registered project: $PROJECT_NAME -> $server_name:$pdev_docs_dir"
+                    else
+                        warn "Failed to update projects registry"
+                        rm -f "$tmp_projects" 2>/dev/null
+                    fi
+                else
+                    warn "Failed to generate project entry (jq error)"
+                    rm -f "$tmp_projects" 2>/dev/null
+                fi
+            else
+                warn "jq not installed - skipping auto-registration"
+                warn "Manually add project to: $projects_file"
+            fi
+        fi
+    fi
 
     return 0
 }

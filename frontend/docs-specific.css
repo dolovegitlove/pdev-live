@@ -347,6 +347,59 @@
   font-size: 0.9rem;
 }
 
+/* Simple/Success Callout - Green-tinted for "simplest way" highlights */
+.simple-callout {
+  background: color-mix(in srgb, var(--success) 10%, var(--card));
+  border: 1px solid var(--success);
+  border-left: 4px solid var(--success);
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin-top: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.simple-callout h4 {
+  margin: 0 0 0.75rem 0;
+  font-size: 1rem;
+  color: var(--success);
+}
+
+.simple-callout p {
+  margin: 0 0 0.5rem 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.simple-callout p:last-child {
+  margin-bottom: 0;
+}
+
+.simple-callout code {
+  display: block;
+  background: var(--bg);
+  padding: 1rem;
+  margin: 0.5rem 0;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-size: 1.1rem;
+  color: var(--success);
+}
+
+.simple-callout code.inline {
+  display: inline;
+  padding: 0.15rem 0.35rem;
+  font-size: 0.85rem;
+}
+
+/* Section Subtitle */
+.section-subtitle {
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+  color: var(--text);
+  font-size: 1.1rem;
+}
+
 /* Pipeline Visual */
 .pipeline-visual {
   display: flex;

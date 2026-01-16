@@ -161,6 +161,8 @@ create_tarball() {
 
   # List of directories to include
   local include_dirs=(server installer frontend client)
+  # Root-level files to include (config.js required by server/server.js)
+  local include_files=(config.js)
 
   # Create tarball with comprehensive exclusions
   if tar -czf "${tarball_path}" \
@@ -187,6 +189,7 @@ create_tarball() {
       --exclude='.npm' \
       --exclude='.vscode' \
       --exclude='.idea' \
+      "${include_files[@]}" \
       "${include_dirs[@]}"; then
     log_success "Tarball created: ${tarball_path}"
   else

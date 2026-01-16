@@ -112,6 +112,58 @@
   cursor: default;
 }
 
+/* Pipeline Progress Indicator */
+.pipeline-progress-card {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(168, 85, 247, 0.05));
+}
+
+.pipeline-progress {
+  padding: 0.5rem 0;
+}
+
+.progress-bar-container {
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  border-radius: 4px;
+  transition: width 0.3s ease;
+  width: 0%;
+}
+
+.progress-bar[data-progress="0"] { width: 0%; }
+.progress-bar[data-progress="10"],
+.progress-bar[data-progress="11"],
+.progress-bar[data-progress="12"] { width: 11%; }
+.progress-bar[data-progress="20"],
+.progress-bar[data-progress="22"] { width: 22%; }
+.progress-bar[data-progress="30"],
+.progress-bar[data-progress="33"] { width: 33%; }
+.progress-bar[data-progress="40"],
+.progress-bar[data-progress="44"] { width: 44%; }
+.progress-bar[data-progress="50"],
+.progress-bar[data-progress="55"],
+.progress-bar[data-progress="56"] { width: 56%; }
+.progress-bar[data-progress="60"],
+.progress-bar[data-progress="67"] { width: 67%; }
+.progress-bar[data-progress="70"],
+.progress-bar[data-progress="78"] { width: 78%; }
+.progress-bar[data-progress="80"],
+.progress-bar[data-progress="89"] { width: 89%; }
+.progress-bar[data-progress="100"] { width: 100%; }
+
+.progress-text {
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-align: center;
+}
+
 /* Session List in Sidebar */
 .session-list {
   list-style: none;
@@ -134,6 +186,42 @@
 
 .session-list a:hover {
   text-decoration: underline;
+}
+
+/* Session List Item with Resume Button */
+.session-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.session-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.session-date {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.session-steps {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.session-actions {
+  flex-shrink: 0;
+}
+
+.session-resume-btn {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
 }
 
 /* Loading States */

@@ -1,5 +1,5 @@
 // PM2 Ecosystem Config - Standardized with Restart Protection
-const baseDir = process.env.PDEV_SERVER_DIR || '/home/acme/pdev-live/server';
+const baseDir = process.env.PDEV_SERVER_DIR || '/opt/services/pdev-live';
 
 module.exports = {
   apps: [{
@@ -34,9 +34,9 @@ module.exports = {
       // PDEV_ADMIN_KEY must be set in .env file - NEVER hardcode secrets
     },
 
-    // Logging
-    error_file: baseDir + '/logs/error.log',
-    out_file: baseDir + '/logs/out.log',
+    // Logging (absolute paths for reliability)
+    error_file: '/opt/services/pdev-live/logs/error.log',
+    out_file: '/opt/services/pdev-live/logs/out.log',
     merge_logs: true,
     log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
 

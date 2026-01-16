@@ -18,6 +18,9 @@ installer/migrations/004_create_registration_codes.sql
 installer/migrations/005_create_guest_tokens.sql
 installer/migrations/006_fix_permissions_security.sql
 
+# Configuration (1 file - CRITICAL for runtime)
+config.js
+
 # Server Core (3 files - CRITICAL for runtime)
 server/package.json
 server/server.js
