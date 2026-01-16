@@ -175,6 +175,40 @@
         function showElement(el) { el.classList.remove('hidden'); }
         function hideElement(el) { el.classList.add('hidden'); }
 
+        // Aggregate projects by project_name (combine multiple server entries into one card)
+        function aggregateProjects(projects) {
+            var grouped = {};
+            projects.forEach(function(p) {
+                var name = p.project_name;
+                if (!grouped[name]) {
+                    grouped[name] = {
+                        project_name: name,
+                        servers: [],
+                        server_origin: p.server_origin,
+                        session_count: 0,
+                        total_steps: 0,
+                        last_activity: null,
+                        has_active_session: false
+                    };
+                }
+                var g = grouped[name];
+                if (g.servers.indexOf(p.server_origin) === -1) {
+                    g.servers.push(p.server_origin);
+                }
+                g.session_count += (p.session_count || 0);
+                g.total_steps += (p.total_steps || 0);
+                if (!g.last_activity || new Date(p.last_activity) > new Date(g.last_activity)) {
+                    g.last_activity = p.last_activity;
+                    g.server_origin = p.server_origin;
+                }
+                // has_active_session: true if any session exists (API doesn't provide status yet)
+                if (p.session_count > 0) {
+                    g.has_active_session = true;
+                }
+            });
+            return Object.values(grouped);
+        }
+
         // Render a single project card with action buttons
         function renderProjectCard(project) {
             const lastActivity = timeAgo(project.last_activity);
@@ -186,10 +220,17 @@
             const sessionCount = project.session_count || 0;
             const hasSession = project.has_active_session || false;
 
+            // Build server badges (multiple servers if aggregated)
+            const servers = project.servers || [project.server_origin];
+            const serverBadges = servers.map(function(s) {
+                return '<span class="server-badge">' + escapeHtml(s) + '</span>';
+            }).join('');
+            const serverList = servers.join(', ');
+
             return `
-                <div class="project-card" role="listitem" aria-label="${escapeHtml(project.project_name)} project on ${escapeHtml(project.server_origin)}">
+                <div class="project-card" role="listitem" aria-label="${escapeHtml(project.project_name)} project on ${escapeHtml(serverList)}">
                     <div class="project-card-header">
-                        <span class="server-badge">${escapeHtml(project.server_origin)}</span>
+                        <div class="server-badges">${serverBadges}</div>
                         <span class="doc-count">${escapeHtml(String(docCount))} docs</span>
                     </div>
                     <div class="project-card-body">
@@ -296,7 +337,9 @@
                 const data = await response.json();
                 hideElement(loadingState);
 
-                allProjects = data.projects || [];
+                // Store raw projects for server filter, aggregate for display
+                var rawProjects = data.projects || [];
+                allProjects = aggregateProjects(rawProjects);
 
                 if (allProjects.length === 0) {
                     showElement(emptyState);
@@ -304,7 +347,7 @@
                     return;
                 }
 
-                populateServerFilter(allProjects);
+                populateServerFilter(rawProjects);
                 applyFiltersAndRender();
 
             } catch (error) {
