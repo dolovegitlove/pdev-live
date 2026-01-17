@@ -6,12 +6,15 @@
 // ============================================================================
 
 (function() {
+    // Health endpoint path (proxied through /pdev/ → server root)
+    const HEALTH_ENDPOINT = '/pdev/health';
+
     let currentVersion = null;
     let versionCheckInterval = null;
 
     async function checkVersion() {
         try {
-            const response = await fetch('/health', {
+            const response = await fetch(HEALTH_ENDPOINT, {
                 method: 'GET',
                 cache: 'no-store',
                 headers: {
