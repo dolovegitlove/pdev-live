@@ -302,10 +302,10 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
       imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'"],
+      connectSrc: ["'self'", "https://cdnjs.cloudflare.com"],
       fontSrc: ["'self'"],
       objectSrc: ["'none'"],
       mediaSrc: ["'self'"],
@@ -339,6 +339,51 @@ const mutationLimiter = rateLimit({
 
 app.use(apiLimiter);
 app.use(express.json({ limit: '10mb' }));
+
+// ============================================================================
+// PARAMETER NORMALIZATION MIDDLEWARE
+// ============================================================================
+// Backward compatibility: Accept both old (server_origin/project_name) and new (server/project) parameters
+// Normalize to new standard while logging deprecation warnings
+app.use((req, res, next) => {
+  // Query parameters
+  if (req.query.server_origin && !req.query.server) {
+    // Sanitize before normalization (alphanumeric, hyphens, underscores only)
+    if (!/^[a-zA-Z0-9_-]+$/.test(req.query.server_origin)) {
+      return res.status(400).json({ error: 'Invalid server_origin format' });
+    }
+    req.query.server = req.query.server_origin;
+    console.warn(`[DEPRECATION] Use 'server' instead of 'server_origin' in query params. Route: ${req.path}`);
+  }
+  if (req.query.project_name && !req.query.project) {
+    // Sanitize before normalization (alphanumeric, hyphens, underscores only)
+    if (!/^[a-zA-Z0-9_-]+$/.test(req.query.project_name)) {
+      return res.status(400).json({ error: 'Invalid project_name format' });
+    }
+    req.query.project = req.query.project_name;
+    console.warn(`[DEPRECATION] Use 'project' instead of 'project_name' in query params. Route: ${req.path}`);
+  }
+
+  // Body parameters
+  if (req.body?.server_origin && !req.body.server) {
+    // Sanitize before normalization
+    if (!/^[a-zA-Z0-9_-]+$/.test(req.body.server_origin)) {
+      return res.status(400).json({ error: 'Invalid server_origin format' });
+    }
+    req.body.server = req.body.server_origin;
+    console.warn(`[DEPRECATION] Use 'server' instead of 'server_origin' in body. Route: ${req.path}`);
+  }
+  if (req.body?.project_name && !req.body.project) {
+    // Sanitize before normalization
+    if (!/^[a-zA-Z0-9_-]+$/.test(req.body.project_name)) {
+      return res.status(400).json({ error: 'Invalid project_name format' });
+    }
+    req.body.project = req.body.project_name;
+    console.warn(`[DEPRECATION] Use 'project' instead of 'project_name' in body. Route: ${req.path}`);
+  }
+
+  next();
+});
 
 // ============================================================================
 // SESSION-BASED AUTHENTICATION
@@ -469,6 +514,59 @@ app.get('/auth/check', (req, res) => {
   });
 });
 
+// Auto-authenticate session for HTTP Basic Auth users (nginx layer)
+// This allows users who pass nginx Basic Auth to access API endpoints
+// SECURITY: Only trusts requests with X-Pdev-Nginx-Auth header (set by nginx AFTER Basic Auth passes)
+app.use((req, res, next) => {
+  // Skip if already authenticated (avoid re-processing)
+  if (req.session.authenticated) {
+    return next();
+  }
+
+  // Skip for public paths that don't need auth
+  const publicPaths = [
+    '/auth/login', '/auth/logout', '/auth/check',
+    '/health', '/guest/', '/contract', '/version',
+    '/pdev/installer', '/webssh'
+  ];
+  if (typeof req.path === 'string' && publicPaths.some(p => req.path.startsWith(p))) {
+    return next();
+  }
+
+  // Skip for static assets
+  if (req.path.match(/\.(css|js|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$/)) {
+    return next();
+  }
+
+  // SECURE: Auto-authenticate ONLY if nginx set secret header (not client-forgeable)
+  // This header is ONLY set by nginx AFTER auth_basic validates credentials
+  const nginxAuthHeader = req.headers['x-pdev-nginx-auth'];
+  if (nginxAuthHeader === 'validated') {
+    // Regenerate session to avoid session fixation attacks
+    req.session.regenerate((err) => {
+      if (err) {
+        console.error('[Auth] Session regenerate error:', err);
+        return res.status(500).json({ error: 'Session initialization failed' });
+      }
+      req.session.authenticated = true;
+      req.session.loginTime = Date.now();
+      req.session.loginMethod = 'nginx-basic-auth';
+      req.session.username = 'pdev'; // From nginx Basic Auth
+      req.session.save((err) => {
+        if (err) {
+          console.error('[Auth] Auto-auth session save error:', err);
+          return res.status(500).json({ error: 'Session save failed' });
+        }
+        console.log('[Auth] Auto-authenticated session via nginx Basic Auth');
+        next();
+      });
+    });
+  } else {
+    // No nginx auth header - continue to requireSession middleware
+    next();
+  }
+});
+
 // Session middleware - protects browser/web UI access only
 // Bypasses: X-Admin-Key, X-Pdev-Token, public paths, guest tokens
 function requireSession(req, res, next) {
@@ -562,6 +660,13 @@ if (process.env.PDEV_SERVE_STATIC === 'true') {
   // Serve static files at /pdev/live/ (for guest links via regex location)
   app.use('/pdev/live', express.static(FRONTEND_DIR, staticOptions));
 }
+
+// Favicon route - serve from frontend directory
+app.get('/favicon.ico', (req, res) => {
+  res.sendFile(path.join(FRONTEND_DIR, 'favicon.svg'), {
+    headers: { 'Content-Type': 'image/svg+xml' }
+  });
+});
 
 // API: Expose document contract (SINGLE SOURCE OF TRUTH for frontend)
 app.get('/contract', (req, res) => {
@@ -1138,7 +1243,7 @@ app.post('/sessions/:sessionId/reopen', async (req, res) => {
     const { sessionId } = req.params;
     await pool.query(`
       UPDATE pdev_sessions
-      SET session_status = 'active', last_activity_at = NOW()
+      SET session_status = 'active', updated_at = NOW()
       WHERE id = $1 AND deleted_at IS NULL
     `, [sessionId]);
     broadcastGlobal({ type: 'session_reopened', sessionId });
@@ -1214,7 +1319,7 @@ app.post('/projects/init', mutationLimiter, async (req, res) => {
       `INSERT INTO pdev_sessions (server_origin, project_name, command_type, session_status, started_at)
        VALUES ($1, $2, 'init', 'completed', NOW())
        ON CONFLICT (server_origin, project_name) WHERE command_type = 'init'
-       DO UPDATE SET started_at = NOW(), last_activity_at = NOW()
+       DO UPDATE SET started_at = NOW(), updated_at = NOW()
        RETURNING id`,
       [server_origin, sanitizedName]
     );
@@ -1247,7 +1352,7 @@ app.post('/sessions/resume', mutationLimiter, async (req, res) => {
 
     const result = await pool.query(
       `UPDATE pdev_sessions
-       SET session_status = 'active', last_activity_at = NOW()
+       SET session_status = 'active', updated_at = NOW()
        WHERE server_origin = $1 AND project_name = $2
          AND session_status IN ('active', 'paused')
          AND deleted_at IS NULL
@@ -2481,7 +2586,7 @@ function validateAuthMessage(data) {
     errors.push('Invalid username');
   }
 
-  if (!['password', 'key'].includes(data.authMethod)) {
+  if (!['password', 'key', 'privateKey'].includes(data.authMethod)) {
     errors.push('Invalid authMethod');
   }
 
@@ -2501,9 +2606,9 @@ function validateAuthMessage(data) {
     errors.push('Password required');
   }
 
-  if (data.authMethod === 'key' && !data.privateKey) {
+  if ((data.authMethod === 'key' || data.authMethod === 'privateKey') && !data.privateKey) {
     errors.push('Private key required');
-  } else if (data.authMethod === 'key') {
+  } else if (data.authMethod === 'key' || data.authMethod === 'privateKey') {
     // Validate private key format
     const keyPattern = /^-----BEGIN (RSA|OPENSSH|EC|DSA) PRIVATE KEY-----[\s\S]+-----END (RSA|OPENSSH|EC|DSA) PRIVATE KEY-----$/;
     if (!keyPattern.test(data.privateKey.trim())) {

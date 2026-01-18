@@ -102,7 +102,7 @@
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#039;');
         }
-        const API_BASE = '/pdev/api';
+        const API_BASE = '/pdev';
         // SINGLE SOURCE OF TRUTH: Load from API, fallback to hardcoded
         let PIPELINE_DOCS = [
             { type: 'IDEATION', name: 'IDEATION.md', icon: '💡', phase: 1, cmd: '/idea' },
@@ -131,7 +131,7 @@
             }
             // Load contract from API (single source of truth)
             try {
-                const contractRes = await fetch(API_BASE + '/contract');
+                const contractRes = await fetch(API_BASE + '/contract', { credentials: 'same-origin' });
                 if (contractRes.ok) {
                     const contract = await contractRes.json();
                     if (contract.PIPELINE_DOCS && contract.PIPELINE_DOCS.length > 0) {
@@ -157,7 +157,7 @@
         
         async function loadProjectDocs() {
             try {
-                const response = await fetch(API_BASE + '/projects/' + serverName + '/' + projectName + '/docs');
+                const response = await fetch(API_BASE + '/projects/' + serverName + '/' + projectName + '/docs', { credentials: 'same-origin' });
                 if (!response.ok) { renderDocList({}); return; }
                 projectDocs = await response.json();
                 renderDocList(projectDocs);
@@ -270,7 +270,7 @@
                 renderContent(docData.content);
             } else {
                 try {
-                    const response = await fetch(API_BASE + '/projects/' + serverName + '/' + projectName + '/docs/' + type);
+                    const response = await fetch(API_BASE + '/projects/' + serverName + '/' + projectName + '/docs/' + type, { credentials: 'same-origin' });
                     if (response.ok) {
                         const data = await response.json();
                         currentDocRawContent = data.content || '';
@@ -445,7 +445,7 @@
         
         async function loadProjectSessions() {
             try {
-                const response = await fetch(API_BASE + '/projects/' + serverName + '/' + projectName + '/sessions');
+                const response = await fetch(API_BASE + '/projects/' + serverName + '/' + projectName + '/sessions', { credentials: 'same-origin' });
                 if (!response.ok) {
                     document.getElementById('session-list').innerHTML = '<li>No sessions found</li>';
                     return;
@@ -483,7 +483,7 @@
             try {
                 var response = await fetch(API_BASE + '/sessions/' + sessionId + '/reopen', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
+                    headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin'
                 });
                 if (!response.ok) {
                     throw new Error('Failed to resume session');
@@ -535,7 +535,7 @@
 
                 var res = await fetch(API_BASE + '/project-share', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Share-Token': tokenData.token },
+                    headers: { 'Content-Type': 'application/json', 'X-Share-Token': tokenData.token }, credentials: 'same-origin',
                     body: JSON.stringify({
                         server: serverName,
                         project: projectName,
