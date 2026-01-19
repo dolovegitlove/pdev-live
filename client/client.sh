@@ -3,6 +3,7 @@
 # PDev Live Client - CLI tool to post updates to PDev Live server
 #
 # Usage:
+#   pdev-live init [project]                        - Register project (deferred naming)
 #   pdev-live start <command_type> <project_name>  - Start/resume session
 #   pdev-live step <content>                        - Add step to current session
 #   pdev-live doc <name> <path>                     - Push full document
@@ -281,6 +282,54 @@ sanitize_remote_path() {
   return 1
 }
 
+# Sanitize project name (alphanumeric, dash, underscore only)
+sanitize_project_name() {
+  local name="$1"
+  # Remove anything not alphanumeric, dash, or underscore
+  local sanitized="${name//[^a-zA-Z0-9_-]/}"
+
+  # Reject empty or too long names
+  if [ -z "$sanitized" ] || [ ${#sanitized} -gt 64 ]; then
+    error "Invalid project name: must be 1-64 alphanumeric/dash/underscore characters"
+    return 1
+  fi
+
+  # Reject names starting with dash (could be interpreted as flags)
+  if [[ "$sanitized" =~ ^- ]]; then
+    error "Project name cannot start with dash"
+    return 1
+  fi
+
+  echo "$sanitized"
+}
+
+# Update projects.json (idempotent - creates or updates entry)
+update_projects_json() {
+  local project="$1"
+  local server="$2"
+  local path="$3"
+
+  # Create projects.json if doesn't exist
+  if [ ! -f "$PROJECTS_FILE" ]; then
+    echo '{"_convention": "Standard path: /<project-root>/pdev-docs/", "projects": {}}' > "$PROJECTS_FILE"
+  fi
+
+  # Validate existing JSON before modifying
+  if ! jq empty "$PROJECTS_FILE" 2>/dev/null; then
+    error "Corrupted projects.json - cannot update"
+    return 1
+  fi
+
+  # Idempotent merge (overwrites if exists, adds if new)
+  local temp_file
+  temp_file=$(mktemp)
+  trap 'rm -f "${temp_file}"' RETURN
+
+  jq --arg p "$project" --arg s "$server" --arg path "$path" \
+    '.projects[$p] = {"server": $s, "path": $path, "aliases": []}' \
+    "$PROJECTS_FILE" > "$temp_file" && mv "$temp_file" "$PROJECTS_FILE"
+}
+
 # Resolve project name to server/path via registry
 resolve_project() {
   local project_name="$1"
@@ -325,6 +374,32 @@ resolve_project() {
   return 1
 }
 
+# SSH helper for finding docs (handles wdress WSL wrapping)
+ssh_find_docs() {
+  local server="$1"
+  local path="$2"
+  local cmd="find \"$path\" -maxdepth 1 -name '*.md' -type f 2>/dev/null"
+
+  if [ "$server" = "wdress" ]; then
+    ssh -o ConnectTimeout=10 -o BatchMode=yes "$server" "wsl -e bash -c \"$cmd\""
+  else
+    ssh -o ConnectTimeout=10 -o BatchMode=yes "$server" "$cmd"
+  fi
+}
+
+# SSH helper for reading file content (handles wdress WSL wrapping)
+ssh_cat_file() {
+  local server="$1"
+  local file="$2"
+  local cmd="cat \"$file\""
+
+  if [ "$server" = "wdress" ]; then
+    ssh -n -o ConnectTimeout=30 -o BatchMode=yes "$server" "wsl -e bash -c \"$cmd\""
+  else
+    ssh -n -o ConnectTimeout=30 -o BatchMode=yes "$server" "$cmd"
+  fi
+}
+
 # Fetch docs from remote server via SSH and push to pdev-live API
 fetch_remote_docs() {
   local server="$1"
@@ -350,10 +425,9 @@ fetch_remote_docs() {
 
   [ -z "$quiet" ] && log "Fetching docs from $server:$safe_path"
 
-  # Get list of doc files
+  # Get list of doc files (uses helper for wdress WSL support)
   local doc_files
-  doc_files=$(ssh -o ConnectTimeout=10 -o BatchMode=yes "$server" \
-    "find \"$safe_path\" -maxdepth 1 -name '*.md' -type f 2>/dev/null" 2>&1)
+  doc_files=$(ssh_find_docs "$server" "$safe_path" 2>&1)
 
   if [ $? -ne 0 ] || [ -z "$doc_files" ]; then
     [ -z "$quiet" ] && warn "No docs found at $server:$safe_path"
@@ -368,9 +442,8 @@ fetch_remote_docs() {
 
     local basename=$(basename "$remote_file")
     local content
-    # Use -n to prevent SSH from consuming stdin (which breaks the while loop)
-    content=$(ssh -n -o ConnectTimeout=30 -o BatchMode=yes "$server" \
-      "cat \"$remote_file\"" 2>/dev/null)
+    # Use helper for wdress WSL support (-n prevents SSH from consuming stdin)
+    content=$(ssh_cat_file "$server" "$remote_file" 2>/dev/null)
 
     if [ -n "$content" ]; then
       # Get phase info
@@ -608,21 +681,27 @@ cmd_doc() {
 
   # Check if path is remote (server:path format or /home/* on different server)
   if [[ "$DOC_PATH" == *:* ]]; then
-    # Explicit server:path format
-    IS_REMOTE=true
+    # Explicit server:path format - check if it's actually a different server
     local REMOTE_SERVER="${DOC_PATH%%:*}"
     local REMOTE_FILE="${DOC_PATH#*:}"
-    log "Fetching from remote: $REMOTE_SERVER:$REMOTE_FILE"
-    CONTENT=$(ssh -n -o ConnectTimeout=30 -o BatchMode=yes "$REMOTE_SERVER" "cat \"$REMOTE_FILE\"" 2>/dev/null)
-    if [ -z "$CONTENT" ]; then
-      error "Failed to fetch remote file: $DOC_PATH"
-      return 1
+
+    if [ "$REMOTE_SERVER" != "$PDEV_SERVER" ]; then
+      IS_REMOTE=true
+      log "Fetching from remote: $REMOTE_SERVER:$REMOTE_FILE"
+      CONTENT=$(ssh -n -o ConnectTimeout=30 -o BatchMode=yes "$REMOTE_SERVER" "cat \"$REMOTE_FILE\"" 2>/dev/null)
+      if [ -z "$CONTENT" ]; then
+        error "Failed to fetch remote file: $DOC_PATH"
+        return 1
+      fi
+    else
+      # Same server - treat as local file
+      DOC_PATH="$REMOTE_FILE"
     fi
   elif [[ "$DOC_PATH" == /home/* ]]; then
-    # Remote path on session's server
+    # Remote path on session's server - only SSH if it's actually a different server
     local sf=$(get_session_file)
     local REMOTE_SERVER=$(jq -r '.server // empty' "$sf" 2>/dev/null)
-    if [ -n "$REMOTE_SERVER" ] && [ "$REMOTE_SERVER" != "dolovdev" ]; then
+    if [ -n "$REMOTE_SERVER" ] && [ "$REMOTE_SERVER" != "$PDEV_SERVER" ]; then
       IS_REMOTE=true
       log "Fetching from $REMOTE_SERVER:$DOC_PATH"
       CONTENT=$(ssh -n -o ConnectTimeout=30 -o BatchMode=yes "$REMOTE_SERVER" "cat \"$DOC_PATH\"" 2>/dev/null)
@@ -645,6 +724,48 @@ cmd_doc() {
   if [ -z "$CONTENT" ]; then
     error "Empty content from: $DOC_PATH"
     return 1
+  fi
+
+  # Extract file timestamps (local files only)
+  local FILE_CREATED_AT=""
+  local FILE_MODIFIED_AT=""
+
+  if [ "$IS_REMOTE" = false ]; then
+    local os_type
+    os_type=$(uname -s)
+
+    if [ "$os_type" = "Darwin" ]; then
+      # macOS (BSD stat)
+      local birth_epoch
+      local mtime_epoch
+      birth_epoch=$(stat -f "%B" "$DOC_PATH" 2>/dev/null)
+      mtime_epoch=$(stat -f "%m" "$DOC_PATH" 2>/dev/null)
+
+      if [ -n "$birth_epoch" ] && [ "$birth_epoch" != "0" ]; then
+        FILE_CREATED_AT=$(date -r "$birth_epoch" -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null)
+      fi
+      if [ -n "$mtime_epoch" ]; then
+        FILE_MODIFIED_AT=$(date -r "$mtime_epoch" -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null)
+      fi
+
+    else
+      # Linux (GNU stat)
+      local birth_epoch
+      local mtime_epoch
+      birth_epoch=$(stat -c "%W" "$DOC_PATH" 2>/dev/null)
+      mtime_epoch=$(stat -c "%Y" "$DOC_PATH" 2>/dev/null)
+
+      # Fallback: if birth time unsupported (returns 0), use mtime
+      if [ -n "$birth_epoch" ] && [ "$birth_epoch" != "0" ]; then
+        FILE_CREATED_AT=$(date -u -d "@$birth_epoch" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null)
+      elif [ -n "$mtime_epoch" ]; then
+        FILE_CREATED_AT=$(date -u -d "@$mtime_epoch" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null)
+      fi
+
+      if [ -n "$mtime_epoch" ]; then
+        FILE_MODIFIED_AT=$(date -u -d "@$mtime_epoch" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null)
+      fi
+    fi
   fi
 
   local CONTENT=$(echo "$CONTENT")
@@ -674,7 +795,9 @@ cmd_doc() {
       \"documentPath\": $(echo "$DOC_PATH" | jq -Rs '.'),
       \"content\": $(echo "$CONTENT" | jq -Rs '.'),
       \"phaseNumber\": ${PHASE_NUM:-0},
-      \"phaseName\": $(echo "$PHASE_NAME" | jq -Rs '.')
+      \"phaseName\": $(echo "$PHASE_NAME" | jq -Rs '.'),
+      \"fileCreatedAt\": $(echo "${FILE_CREATED_AT:-null}" | jq -Rs 'if . == "null" then null else . end'),
+      \"fileModifiedAt\": $(echo "${FILE_MODIFIED_AT:-null}" | jq -Rs 'if . == "null" then null else . end')
     }" 2>/dev/null)
 
   STEP_NUM=$(echo "$RESPONSE" | jq -r '.stepNumber // empty' 2>/dev/null)
@@ -1002,8 +1125,10 @@ cmd_seed() {
   fi
 
   if [ ! -d "$DOCS_PATH" ]; then
-    # Try common locations
-    if [ -d "$PWD/docs" ]; then
+    # Try common locations (dev/ first for PDev pipeline, then docs/, then current dir)
+    if [ -d "$PWD/dev" ]; then
+      DOCS_PATH="$PWD/dev"
+    elif [ -d "$PWD/docs" ]; then
       DOCS_PATH="$PWD/docs"
     elif [ -d "$PWD" ]; then
       DOCS_PATH="$PWD"
@@ -1021,8 +1146,11 @@ cmd_seed() {
   local DOC_LIST=""
 
   for DOC_TYPE in $DOC_ORDER; do
-    # Find matching file (case insensitive)
-    local DOC_FILE=$(find "$DOCS_PATH" -maxdepth 1 -iname "*${DOC_TYPE}*.md" 2>/dev/null | head -1)
+    # Find matching file (prioritize exact match, then any match)
+    local DOC_FILE=$(find "$DOCS_PATH" -maxdepth 1 -iname "${DOC_TYPE}.md" 2>/dev/null | head -1)
+    if [ -z "$DOC_FILE" ]; then
+      DOC_FILE=$(find "$DOCS_PATH" -maxdepth 1 -iname "*${DOC_TYPE}*.md" 2>/dev/null | head -1)
+    fi
 
     if [ -n "$DOC_FILE" ] && [ -f "$DOC_FILE" ]; then
       local BASENAME=$(basename "$DOC_FILE")
@@ -1076,8 +1204,107 @@ cmd_sync() {
   success "Sync complete - PDev Live updated with latest docs"
 }
 
+# VIEW command - simplest way to view a project
+# Just: pdev-live view Wdress -> fetches docs, opens project
+cmd_view() {
+  local PROJECT_NAME="$1"
+
+  if [ -z "$PROJECT_NAME" ]; then
+    error "Usage: pdev-live view <project>"
+    echo ""
+    echo "Registered projects:"
+    if [ -f "$PROJECTS_FILE" ]; then
+      jq -r '.projects | keys[]' "$PROJECTS_FILE" 2>/dev/null | while read p; do
+        local info=$(jq -r ".projects[\"$p\"]" "$PROJECTS_FILE")
+        local server=$(echo "$info" | jq -r '.server')
+        local path=$(echo "$info" | jq -r '.path')
+        echo "  $p -> $server:$path"
+      done
+    fi
+    return 1
+  fi
+
+  # Resolve project from registry
+  local PROJECT_INFO=$(resolve_project "$PROJECT_NAME")
+
+  if [ -z "$PROJECT_INFO" ]; then
+    error "Project '$PROJECT_NAME' not found in registry"
+    echo ""
+    echo "Add it to ~/.claude/tools/pdev-live/projects.json or use:"
+    echo "  pdev-live start view $PROJECT_NAME"
+    return 1
+  fi
+
+  local REMOTE_SERVER=$(echo "$PROJECT_INFO" | jq -r '.server // empty')
+  local REMOTE_PATH=$(echo "$PROJECT_INFO" | jq -r '.path // empty')
+
+  log "Opening $PROJECT_NAME from $REMOTE_SERVER:$REMOTE_PATH"
+
+  # Start a "view" session (or resume existing)
+  cmd_start "view" "$PROJECT_NAME"
+}
+
+# INIT command - register project for future use (deferred registration)
+# Allows installing pdev-client first, naming project later
+cmd_init() {
+  local PROJECT_NAME="${1:-$(basename "$PWD")}"
+
+  # 1. Sanitize project name
+  PROJECT_NAME=$(sanitize_project_name "$PROJECT_NAME") || return 1
+
+  # 2. Create pdev-docs directory (idempotent)
+  local DOCS_DIR="$PWD/pdev-docs"
+  if ! mkdir -p "$DOCS_DIR" 2>/dev/null; then
+    error "Failed to create directory: $DOCS_DIR"
+    return 1
+  fi
+
+  # 3. Get server name
+  local SERVER_NAME
+  SERVER_NAME=$(detect_server)
+
+  # 4. Update local projects.json (idempotent)
+  if ! update_projects_json "$PROJECT_NAME" "$SERVER_NAME" "$DOCS_DIR"; then
+    error "Failed to update projects.json"
+    return 1
+  fi
+
+  # 5. Register with remote API (graceful degradation if unreachable)
+  local RESPONSE
+  RESPONSE=$(curl -s --connect-timeout 10 --max-time 30 \
+    "${CURL_AUTH[@]}" \
+    -X POST "$PDEV_LIVE_URL/projects" \
+    -H "Content-Type: application/json" \
+    -d "{
+      \"name\": $(echo "$PROJECT_NAME" | jq -Rs '.'),
+      \"server\": $(echo "$SERVER_NAME" | jq -Rs '.'),
+      \"path\": $(echo "$DOCS_DIR" | jq -Rs '.')
+    }" 2>/dev/null)
+
+  # 6. Validate API response
+  if [ -z "$RESPONSE" ]; then
+    warn "API registration failed (timeout/unreachable) - local config saved"
+  elif echo "$RESPONSE" | jq -e '.error' >/dev/null 2>&1; then
+    local ERR=$(echo "$RESPONSE" | jq -r '.error')
+    warn "API registration returned error: $ERR - local config saved"
+  else
+    log "Project registered with API"
+  fi
+
+  # 7. Output success
+  success "Initialized project: $PROJECT_NAME"
+  echo "  Server: $SERVER_NAME"
+  echo "  Docs path: $DOCS_DIR"
+  echo "  Projects file: $PROJECTS_FILE"
+  echo ""
+  echo "Next steps:"
+  echo "  1. Add PDev docs to: $DOCS_DIR"
+  echo "  2. View with: pdev-live $PROJECT_NAME"
+}
+
 case "${1:-}" in
   start) shift; cmd_start "$@" ;;
+  view) shift; cmd_view "$@" ;;
   step) shift; cmd_step "$@" ;;
   doc) shift; cmd_doc "$@" ;;
   phase) shift; cmd_phase "$@" ;;
@@ -1092,33 +1319,51 @@ case "${1:-}" in
   share) shift; cmd_share "$@" ;;
   seed) shift; cmd_seed "$@" ;;
   sync) cmd_sync ;;
-  *)
-    echo "PDev Live Client (Multi-Session + Sharing)"
+  init) shift; cmd_init "$@" ;;
+  help|--help|-h)
+    echo "PDev Live Client"
     echo ""
-    echo "Session Commands:"
+    echo "SIMPLE USAGE (just project name):"
+    echo "  pdev-live <project>        View project docs (auto-fetches from registered server)"
+    echo "  pdev-live view <project>   Same as above"
+    echo ""
+    echo "Examples:"
+    echo "  pdev-live Wdress           Opens Wdress project, fetches docs from wdress server"
+    echo "  pdev-live churchcare       Opens ChurchCare project from ittz server"
+    echo ""
+    echo "SETUP (deferred registration - install now, name project later):"
+    echo "  init [project]           Register project in current directory"
+    echo ""
+    echo "SESSION COMMANDS:"
     echo "  start <type> [project]   Start or resume session"
     echo "  step <content>           Add output step"
-    echo "  doc <name> <path>        Push full document"
+    echo "  doc <name> <path>        Push document"
     echo "  phase <num> <name>       Set current phase"
-    echo "  seed [docs_path]         Seed session with existing PDev docs"
-    echo "  sync                     Re-fetch all docs from remote (refresh)"
+    echo "  seed [docs_path]         Seed with existing docs"
+    echo "  sync                     Re-fetch all docs from remote"
     echo "  end [status]             End session"
     echo "  status                   Show current session"
     echo "  list                     List all active sessions"
-    echo "  use <project>            Switch to different project"
-    echo "  id                       Output session ID"
+    echo "  use <project>            Switch project"
     echo ""
-    echo "Manifest Commands:"
-    echo "  manifest [docs_path]     Set docs path for current project"
-    echo "  manifest-doc <type> <file>  Register doc in manifest"
-    echo "  manifest-get             Show manifest for current project"
+    echo "SHARING:"
+    echo "  share [hours] [email]    Create guest link"
     echo ""
-    echo "Sharing Commands:"
-    echo "  share [hours] [email]    Create guest link (default 24h)"
-    echo ""
-    echo "Session behavior:"
-    echo "  - Resumes existing active session by default"
-    echo "  - regen commands always create new session"
-    echo "  - PDEV_FORCE_NEW=1 to force new session"
+    echo "Project registry: ~/.claude/tools/pdev-live/projects.json"
+    ;;
+  *)
+    # If first arg looks like a project name (not a command), try view
+    if [ -n "$1" ]; then
+      # Check if it's a registered project
+      if resolve_project "$1" >/dev/null 2>&1; then
+        cmd_view "$1"
+      else
+        error "Unknown command or project: $1"
+        echo "Run: pdev-live help"
+      fi
+    else
+      echo "Usage: pdev-live <project> or pdev-live <command>"
+      echo "Run: pdev-live help"
+    fi
     ;;
 esac
