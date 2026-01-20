@@ -185,6 +185,25 @@ const PDEV_COMMANDS = [
 // Valid server origins (from config)
 const VALID_SERVERS = config.servers.valid;
 
+// Session idempotency cache - prevents duplicate session creation on double-submit
+const recentSessionRequests = new Map(); // key: hash, value: { sessionId, timestamp }
+const IDEMPOTENCY_WINDOW_MS = 5000; // 5 second dedup window
+const MAX_IDEMPOTENCY_KEYS = 10000; // Prevent memory exhaustion attacks
+
+// Cleanup stale idempotency entries every 5 seconds (matches TTL for efficient cleanup)
+const idempotencyCleanupInterval = setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of recentSessionRequests) {
+    if (now - entry.timestamp > IDEMPOTENCY_WINDOW_MS) {
+      recentSessionRequests.delete(key);
+    }
+  }
+}, 5000);
+
+// Ensure cleanup stops on server shutdown
+process.on('SIGTERM', () => clearInterval(idempotencyCleanupInterval));
+process.on('SIGINT', () => clearInterval(idempotencyCleanupInterval));
+
 // Frontend directory for auto-update (environment-specific)
 const FRONTEND_DIR = process.env.PDEV_FRONTEND_DIR || path.join(__dirname, '..', 'frontend');
 
@@ -908,7 +927,7 @@ async function createSession({ server, hostname, project, projectPath, cwd, comm
   return result.rows[0];
 }
 
-async function addStep({ sessionId, stepNumber, stepType, phaseName, phaseNumber, subPhase, contentMarkdown, commandText, exitCode, documentName }) {
+async function addStep({ sessionId, stepNumber, stepType, phaseName, phaseNumber, subPhase, contentMarkdown, commandText, exitCode, documentName, fileCreatedAt, fileModifiedAt }) {
   // SECURITY: Sanitize markdown to prevent XSS attacks
   const contentHtml = contentMarkdown ? DOMPurify.sanitize(marked.parse(contentMarkdown), {
     ALLOWED_TAGS: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'li', 'code', 'pre', 'a', 'strong', 'em', 'blockquote', 'table', 'tr', 'td', 'th', 'thead', 'tbody', 'br', 'hr', 'span', 'div'],
@@ -917,17 +936,70 @@ async function addStep({ sessionId, stepNumber, stepType, phaseName, phaseNumber
   const contentPlain = contentMarkdown ? contentMarkdown.replace(/[#*_`]/g, '').substring(0, 500) : null;
 
   const result = await pool.query(`
-    INSERT INTO pdev_steps (
+    INSERT INTO pdev_session_steps (
       session_id, step_number, step_type, phase_name, phase_number,
       sub_phase, content_markdown, content_html, content_plain,
-      command_text, exit_code, output_byte_size, document_name
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      command_text, exit_code, output_byte_size, document_name,
+      file_created_at, file_modified_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
     RETURNING id, created_at
   `, [
     sessionId, stepNumber, stepType, phaseName, phaseNumber,
     subPhase, contentMarkdown, contentHtml, contentPlain,
-    commandText, exitCode, contentMarkdown?.length || 0, documentName || null
+    commandText, exitCode, contentMarkdown?.length || 0, documentName || null,
+    fileCreatedAt || null, fileModifiedAt || null
   ]);
+
+  // DUAL-WRITE: Also save documents to project-scoped table (survives session deletion)
+  try {
+    if (stepType === 'document' && documentName && contentMarkdown) {
+      // Get session details to populate server_origin and project_name
+      const sessionResult = await pool.query(
+        'SELECT server_origin, project_name FROM pdev_sessions WHERE id = $1',
+        [sessionId]
+      );
+
+      if (sessionResult.rows.length > 0) {
+        const { server_origin, project_name } = sessionResult.rows[0];
+
+        // Extract version from content
+        const versionMatch = contentMarkdown.match(/pdev_version:\s*([0-9.]+)/);
+        const version = versionMatch ? versionMatch[1] : null;
+
+        // Upsert into pdev_project_documents (latest version wins)
+        await pool.query(`
+          INSERT INTO pdev_project_documents
+            (server_origin, project_name, document_name, content, content_html, version,
+             file_created_at, file_modified_at, phase_number, phase_name, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+          ON CONFLICT (server_origin, project_name, document_name)
+          DO UPDATE SET
+            content = EXCLUDED.content,
+            content_html = EXCLUDED.content_html,
+            version = EXCLUDED.version,
+            file_created_at = EXCLUDED.file_created_at,
+            file_modified_at = EXCLUDED.file_modified_at,
+            phase_number = EXCLUDED.phase_number,
+            phase_name = EXCLUDED.phase_name,
+            updated_at = NOW()
+        `, [
+          server_origin, project_name, documentName, contentMarkdown, contentHtml, version,
+          fileCreatedAt || null, fileModifiedAt || null, phaseNumber || null, phaseName || null
+        ]);
+
+        console.log(`[Document] Saved to project_documents: ${project_name}/${documentName}`);
+      } else {
+        console.warn(`[Document] Session ${sessionId} not found - skipping dual-write for ${documentName}`);
+      }
+    }
+  } catch (dualWriteError) {
+    // Non-fatal: Main insert already succeeded
+    console.error('[Document] Dual-write failed (non-fatal):', {
+      sessionId,
+      documentName,
+      error: dualWriteError.message
+    });
+  }
 
   return result.rows[0];
 }
@@ -954,7 +1026,7 @@ async function getSessionWithSteps(sessionId) {
   if (sessionResult.rows.length === 0) return null;
 
   const stepsResult = await pool.query(`
-    SELECT * FROM pdev_steps WHERE session_id = $1 ORDER BY step_number
+    SELECT * FROM pdev_session_steps WHERE session_id = $1 ORDER BY step_number
   `, [sessionId]);
 
   return {
@@ -988,7 +1060,7 @@ async function getSessionsByServer(server) {
 
 async function getNextStepNumber(sessionId) {
   const result = await pool.query(`
-    SELECT COALESCE(MAX(step_number), 0) + 1 as next FROM pdev_steps WHERE session_id = $1
+    SELECT COALESCE(MAX(step_number), 0) + 1 as next FROM pdev_session_steps WHERE session_id = $1
   `, [sessionId]);
   return result.rows[0].next;
 }
@@ -1030,6 +1102,36 @@ app.post('/sessions', async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields: project, commandType' });
     }
 
+    // Idempotency check - prevent duplicate submissions within 5 second window
+    const idempotencyKey = `${server}:${project}:${commandType}:${user || 'anonymous'}:${gitBranch || 'default'}`;
+    const now = Date.now();
+
+    const existing = recentSessionRequests.get(idempotencyKey);
+    if (existing) {
+      if (now - existing.timestamp < IDEMPOTENCY_WINDOW_MS) {
+        if (existing.sessionId) {
+          // Session already created, return it
+          console.log(`[Session] Dedup: returning existing session ${existing.sessionId}`);
+          return res.json({ success: true, sessionId: existing.sessionId, deduplicated: true });
+        }
+        // Another request is in-flight - wait briefly
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const updated = recentSessionRequests.get(idempotencyKey);
+        if (updated && updated.sessionId) {
+          console.log(`[Session] Dedup (after wait): returning session ${updated.sessionId}`);
+          return res.json({ success: true, sessionId: updated.sessionId, deduplicated: true });
+        }
+      }
+    }
+
+    // Reserve slot BEFORE creating session (prevents race condition)
+    // Enforce max size to prevent memory exhaustion attacks
+    if (recentSessionRequests.size >= MAX_IDEMPOTENCY_KEYS) {
+      const oldestKey = recentSessionRequests.keys().next().value;
+      recentSessionRequests.delete(oldestKey);
+    }
+    recentSessionRequests.set(idempotencyKey, { timestamp: now, sessionId: null });
+
     const session = await createSession({
       server,
       hostname: hostname || server,
@@ -1042,6 +1144,9 @@ app.post('/sessions', async (req, res) => {
       gitBranch,
       gitCommit
     });
+
+    // Update cache with actual session ID
+    recentSessionRequests.set(idempotencyKey, { timestamp: now, sessionId: session.id });
 
     console.log(`[Session] Created ${session.id} from ${server} - ${commandType}`);
 
@@ -1068,7 +1173,7 @@ app.post('/sessions', async (req, res) => {
 app.post('/sessions/:sessionId/steps', async (req, res) => {
   try {
     const { sessionId } = req.params;
-    const { type, phaseName, phaseNumber, subPhase, content, command, exitCode, documentName } = req.body;
+    const { type, phaseName, phaseNumber, subPhase, content, command, exitCode, documentName, fileCreatedAt, fileModifiedAt } = req.body;
 
     if (!type) {
       return res.status(400).json({ error: 'Missing required field: type' });
@@ -1086,7 +1191,9 @@ app.post('/sessions/:sessionId/steps', async (req, res) => {
       contentMarkdown: content,
       commandText: command,
       exitCode,
-      documentName
+      documentName,
+      fileCreatedAt,
+      fileModifiedAt
     });
 
     console.log(`[Step] Added #${stepNumber} to ${sessionId} - ${type}`);
@@ -1105,7 +1212,9 @@ app.post('/sessions/:sessionId/steps', async (req, res) => {
         ALLOWED_ATTR: ['href', 'class', 'id']
       }) : null,
       command_text: command,
-      created_at: step.created_at
+      created_at: step.created_at,
+      file_created_at: fileCreatedAt || null,
+      file_modified_at: fileModifiedAt || null
     };
 
     broadcastToSession(sessionId, {
@@ -1195,9 +1304,9 @@ app.get('/sessions/find-active', async (req, res) => {
 
     const result = await pool.query(`
       SELECT id, command_type, started_at,
-        (SELECT COUNT(*) FROM pdev_steps WHERE session_id = pdev_sessions.id) as step_count
+        (SELECT COUNT(*) FROM pdev_session_steps WHERE session_id = pdev_sessions.id) as step_count
       FROM pdev_sessions
-      WHERE server_origin = $1 AND project_name = $2
+      WHERE server_origin = $1 AND LOWER(project_name) = LOWER($2)
         AND session_status = 'active' AND deleted_at IS NULL
       ORDER BY started_at DESC LIMIT 1
     `, [server, project]);
@@ -1222,9 +1331,9 @@ app.get('/sessions/find-session', async (req, res) => {
     }
     const result = await pool.query(`
       SELECT id, command_type, session_status, started_at,
-        (SELECT COUNT(*) FROM pdev_steps WHERE session_id = pdev_sessions.id) as step_count
+        (SELECT COUNT(*) FROM pdev_session_steps WHERE session_id = pdev_sessions.id) as step_count
       FROM pdev_sessions
-      WHERE server_origin = $1 AND project_name = $2 AND deleted_at IS NULL
+      WHERE server_origin = $1 AND LOWER(project_name) = LOWER($2) AND deleted_at IS NULL
       ORDER BY started_at DESC LIMIT 1
     `, [server, project]);
     if (result.rows.length > 0) {
@@ -1271,7 +1380,7 @@ app.get("/sessions/:sessionId/steps", async (req, res) => {
   try {
     const { sessionId } = req.params;
     const result = await pool.query(`
-      SELECT * FROM pdev_steps WHERE session_id = $1 ORDER BY step_number
+      SELECT * FROM pdev_session_steps WHERE session_id = $1 ORDER BY step_number
     `, [sessionId]);
     res.json({ steps: result.rows, count: result.rows.length });
   } catch (err) {
@@ -1353,12 +1462,12 @@ app.post('/sessions/resume', mutationLimiter, async (req, res) => {
     const result = await pool.query(
       `UPDATE pdev_sessions
        SET session_status = 'active', updated_at = NOW()
-       WHERE server_origin = $1 AND project_name = $2
+       WHERE server_origin = $1 AND LOWER(project_name) = LOWER($2)
          AND session_status IN ('active', 'paused')
          AND deleted_at IS NULL
          AND id = (
            SELECT id FROM pdev_sessions
-           WHERE server_origin = $1 AND project_name = $2
+           WHERE server_origin = $1 AND LOWER(project_name) = LOWER($2)
              AND session_status IN ('active', 'paused')
              AND deleted_at IS NULL
            ORDER BY started_at DESC
@@ -2394,14 +2503,14 @@ app.get("/manifests/:server/:project", async (req, res) => {
     
     // First try exact match
     let result = await pool.query(
-      "SELECT * FROM project_manifests WHERE server_origin = $1 AND project_name = $2",
+      "SELECT * FROM project_manifests WHERE server_origin = $1 AND LOWER(project_name) = LOWER($2)",
       [server, project]
     );
     
     // Fallback to dolovdev (orchestrator) if not found and not already dolovdev
     if (result.rows.length === 0 && server !== "dolovdev" && server !== "djm" && server !== "rmlve" && server !== "djm" && server !== "rmlve") {
       result = await pool.query(
-        "SELECT * FROM project_manifests WHERE server_origin = $1 AND project_name = $2",
+        "SELECT * FROM project_manifests WHERE server_origin = $1 AND LOWER(project_name) = LOWER($2)",
         ["dolovdev", project]
       );
       // Mark as fallback so client knows
@@ -3086,58 +3195,21 @@ app.get('/projects/:server/:project/docs', async (req, res) => {
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
 
-    // Query both explicit documents AND output steps with PDev doc headers
-    // Normalize document_name: UPPER, TRIM whitespace/newlines, remove .md suffix
+    // Query project-scoped documents (survives session deletion)
     const result = await pool.query(`
-      WITH doc_steps AS (
-        -- Explicit document steps
-        SELECT
-          id as step_id,
-          UPPER(REGEXP_REPLACE(TRIM(BOTH E'\\n\\r\\t ' FROM document_name), '\\.md$', '', 'i')) as normalized_name,
-          document_name as original_name,
-          content_markdown as content,
-          created_at as modified,
-          phase_number,
-          phase_name
-        FROM pdev_steps
-        WHERE session_id IN (
-          SELECT id FROM pdev_sessions
-          WHERE server_origin = $1 AND project_name = $2 AND deleted_at IS NULL
-        )
-        AND step_type = 'document'
-        AND document_name IS NOT NULL
-
-        UNION ALL
-
-        -- Output steps with PDev document headers (document: IDEATION, etc)
-        SELECT
-          id as step_id,
-          UPPER(TRIM(SUBSTRING(content_markdown FROM 'document:\\s*([A-Z_]+)'))) as normalized_name,
-          UPPER(TRIM(SUBSTRING(content_markdown FROM 'document:\\s*([A-Z_]+)'))) as original_name,
-          content_markdown as content,
-          created_at as modified,
-          phase_number,
-          phase_name
-        FROM pdev_steps
-        WHERE session_id IN (
-          SELECT id FROM pdev_sessions
-          WHERE server_origin = $1 AND project_name = $2 AND deleted_at IS NULL
-        )
-        AND step_type = 'output'
-        AND content_markdown ~ '^---\\s*\\npdev_version:'
-        AND content_markdown ~ 'document:\\s*[A-Z_]+'
-      )
-      SELECT DISTINCT ON (normalized_name)
-        step_id,
-        normalized_name as document_name,
-        original_name,
+      SELECT
+        id as step_id,
+        UPPER(REGEXP_REPLACE(TRIM(BOTH E'\\n\\r\\t ' FROM document_name), '\\.md$', '', 'i')) as document_name,
+        document_name as original_name,
         content,
-        modified,
+        updated_at as modified,
+        file_created_at,
+        file_modified_at,
         phase_number,
         phase_name
-      FROM doc_steps
-      WHERE normalized_name IS NOT NULL AND normalized_name != ''
-      ORDER BY normalized_name, modified DESC
+      FROM pdev_project_documents
+      WHERE server_origin = $1 AND LOWER(project_name) = LOWER($2)
+      ORDER BY phase_number NULLS LAST, document_name
     `, [server, project]);
     
     const docs = {};
@@ -3163,6 +3235,8 @@ app.get('/projects/:server/:project/docs', async (req, res) => {
           name: row.document_name.replace(/[\r\n]/g, '').trim(),
           version: version,
           modified: docModified,
+          fileCreatedAt: row.file_created_at,
+          fileModifiedAt: row.file_modified_at,
           phase: row.phase_number,
           phaseName: row.phase_name ? row.phase_name.replace(/[\r\n]/g, '').trim() : null,
           hasContent: !!row.content
@@ -3212,12 +3286,14 @@ app.get('/projects/:server/:project/docs/:docType', async (req, res) => {
           document_name as original_name,
           content_markdown as content,
           created_at as modified,
+          file_created_at,
+          file_modified_at,
           phase_number,
           phase_name
-        FROM pdev_steps
+        FROM pdev_session_steps
         WHERE session_id IN (
           SELECT id FROM pdev_sessions
-          WHERE server_origin = $1 AND project_name = $2 AND deleted_at IS NULL
+          WHERE server_origin = $1 AND LOWER(project_name) = LOWER($2) AND deleted_at IS NULL
         )
         AND step_type = 'document'
         AND document_name IS NOT NULL
@@ -3231,18 +3307,20 @@ app.get('/projects/:server/:project/docs/:docType', async (req, res) => {
           UPPER(TRIM(SUBSTRING(content_markdown FROM 'document:\\s*([A-Z_]+)'))) as original_name,
           content_markdown as content,
           created_at as modified,
+          file_created_at,
+          file_modified_at,
           phase_number,
           phase_name
-        FROM pdev_steps
+        FROM pdev_session_steps
         WHERE session_id IN (
           SELECT id FROM pdev_sessions
-          WHERE server_origin = $1 AND project_name = $2 AND deleted_at IS NULL
+          WHERE server_origin = $1 AND LOWER(project_name) = LOWER($2) AND deleted_at IS NULL
         )
         AND step_type = 'output'
         AND content_markdown ~ '^---\\s*\\npdev_version:'
         AND content_markdown ~ 'document:\\s*[A-Z_]+'
       )
-      SELECT step_id, normalized_name as document_name, original_name, content, modified, phase_number, phase_name
+      SELECT step_id, normalized_name as document_name, original_name, content, modified, file_created_at, file_modified_at, phase_number, phase_name
       FROM doc_steps
       WHERE normalized_name IS NOT NULL AND normalized_name LIKE $3
       ORDER BY modified DESC
@@ -3268,6 +3346,8 @@ app.get('/projects/:server/:project/docs/:docType', async (req, res) => {
       content: row.content,
       version: version,
       modified: row.modified,
+      fileCreatedAt: row.file_created_at,
+      fileModifiedAt: row.file_modified_at,
       phase: row.phase_number,
       phaseName: row.phase_name ? row.phase_name.replace(/[\r\n]/g, '').trim() : null
     });
@@ -3296,7 +3376,7 @@ app.get('/projects/:server/:project/sessions', async (req, res) => {
         COUNT(st.id) as step_count
       FROM pdev_sessions ps
       LEFT JOIN pdev_steps st ON st.session_id = ps.id
-      WHERE ps.server_origin = $1 AND ps.project_name = $2 AND ps.deleted_at IS NULL
+      WHERE ps.server_origin = $1 AND LOWER(ps.project_name) = LOWER($2) AND ps.deleted_at IS NULL
       GROUP BY ps.id, ps.command_type, ps.session_status, ps.started_at, ps.completed_at
       ORDER BY ps.started_at DESC
       LIMIT 20
