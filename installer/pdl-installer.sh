@@ -84,7 +84,7 @@ DB_USER="pdev_app"                 # PostgreSQL application user
 NGINX_SITE_NAME="pdev-live"        # Nginx site config name
 CLIENT_CONFIG_FILE=".pdev-live-config"  # Client config filename
 TOOLS_DIR_NAME="pdev-live"         # ~/.claude/tools/<name>/ directory
-TARBALL_VERSION="1.3.0"            # Source package version (pdev-source-v*.tar.gz)
+TARBALL_VERSION="1.4.0"            # Source package version (pdev-source-v*.tar.gz)
 
 # Detect target user (non-root user who ran sudo)
 # This user will own PM2 processes and config
@@ -605,6 +605,10 @@ parse_arguments() {
             HTTP_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=' | head -c 24)
             log "Generated HTTP auth password (24 chars, ~144 bits entropy)"
         fi
+
+        # Session secret for express-session (required by server.js)
+        SESSION_SECRET=$(openssl rand -hex 32)
+        log "Generated session secret (64 chars hex, 256 bits entropy)"
     elif [[ "$MODE" == "project" ]]; then
         if [[ -z "$SOURCE_URL" ]]; then
             fail "Project mode requires --source-url flag"
@@ -1636,6 +1640,11 @@ PDEV_DB_PASSWORD=$DB_PASSWORD
 # ADMIN API KEY
 # ===================================
 PDEV_ADMIN_KEY=$ADMIN_KEY
+
+# ===================================
+# SESSION SECRET (express-session)
+# ===================================
+PDEV_SESSION_SECRET=$SESSION_SECRET
 
 # ===================================
 # SERVER INVENTORY
