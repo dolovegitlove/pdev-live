@@ -54,8 +54,14 @@ IFS=$'\n\t'
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
-VERSION="1.0.28"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VERSION="1.0.30"
+# Handle both direct execution and piped execution (curl | bash)
+# In piped mode, BASH_SOURCE is empty - migrations come from tarball anyway
+if [[ -n "${BASH_SOURCE[0]:-}" ]] && [[ -f "${BASH_SOURCE[0]:-}" ]]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || SCRIPT_DIR=""
+else
+    SCRIPT_DIR=""  # Piped execution - no local script directory available
+fi
 LOG_FILE="/tmp/pdl-installer-$(date +%s).log"
 
 # Runtime configuration
@@ -84,7 +90,7 @@ DB_USER="pdev_app"                 # PostgreSQL application user
 NGINX_SITE_NAME="pdev-live"        # Nginx site config name
 CLIENT_CONFIG_FILE=".pdev-live-config"  # Client config filename
 TOOLS_DIR_NAME="pdev-live"         # ~/.claude/tools/<name>/ directory
-TARBALL_VERSION="1.4.0"            # Source package version (pdev-source-v*.tar.gz)
+TARBALL_VERSION="1.5.0"            # Source package version (pdev-source-v*.tar.gz)
 
 # Detect target user (non-root user who ran sudo)
 # This user will own PM2 processes and config
@@ -2784,7 +2790,7 @@ main() {
 
         # Extract tarball
         log "Extracting package..."
-        if ! tar -xzf "$DOWNLOAD_FILE" -C "$INSTALL_DIR" --strip-components=1; then
+        if ! tar -xzf "$DOWNLOAD_FILE" -C "$INSTALL_DIR"; then
             fail "Failed to extract package"
             rm -f "$DOWNLOAD_FILE"
             exit 1

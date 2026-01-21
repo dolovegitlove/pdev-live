@@ -219,6 +219,8 @@ HTTP Basic Auth Username: pdev
 HTTP Basic Auth Password: [generate 24-char random alphanumeric]
 Session Secret: [generate 32-char random alphanumeric]
 
+**NOTE for Project Server:** HTTP auth credentials are automatically provided by the Source Server during installation. No manual configuration needed - just enter SSH credentials and Source Server URL.
+
 **SSH Private Key (SAVE THIS for future access as pdev):**
 [show contents of /home/pdev/.ssh/id_ed25519]
 </code></pre>
@@ -308,7 +310,7 @@ MIIEpAIBAAKCAQEA...
                 <div class="form-group hidden" id="source-url-field">
                     <label for="install-source-url">Source Server URL</label>
                     <input type="text" id="install-source-url" placeholder="e.g., https://pdev.example.com/pdev/api">
-                    <small>Required for Project Server installation</small>
+                    <small>Auto-detected from this server. Edit if your configuration differs.</small>
                 </div>
 
             </div>
@@ -420,6 +422,11 @@ MIIEpAIBAAKCAQEA...
                 } else {
                     domainField.classList.add('hidden');
                     sourceUrlField.classList.remove('hidden');
+                    // Auto-fill source URL with current origin (user can still edit if needed)
+                    const sourceUrlInput = document.getElementById('install-source-url');
+                    if (sourceUrlInput && !sourceUrlInput.value) {
+                        sourceUrlInput.value = window.location.origin + '/pdev';
+                    }
                 }
             });
         });
