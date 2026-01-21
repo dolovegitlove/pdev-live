@@ -546,7 +546,7 @@ app.use((req, res, next) => {
   const publicPaths = [
     '/auth/login', '/auth/logout', '/auth/check',
     '/health', '/guest/', '/contract', '/version',
-    '/pdev/installer', '/webssh'
+    '/pdev/installer', '/webssh', 
   ];
   if (typeof req.path === 'string' && publicPaths.some(p => req.path.startsWith(p))) {
     return next();
@@ -603,7 +603,7 @@ function requireSession(req, res, next) {
   const publicPaths = [
     '/auth/login', '/auth/logout', '/auth/check',
     '/health', '/guest/', '/contract', '/version',
-    '/pdev/installer', '/webssh'
+    '/pdev/installer', '/webssh', 
   ];
   if (publicPaths.some(p => req.path.startsWith(p))) {
     return next();
@@ -615,7 +615,7 @@ function requireSession(req, res, next) {
   }
 
   // BYPASS: Login page
-  if (req.path === '/live/login.html' || req.path === '/login.html' || req.path === '/login') {
+  if (req.path === '/live/login.html' || req.path === '/login.html' || req.path === '/login' || req.path === '/live/login.html') {
     return next();
   }
 
