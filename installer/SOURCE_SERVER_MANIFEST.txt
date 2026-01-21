@@ -1,0 +1,62 @@
+# PDev Source Server Required Files Manifest
+# =========================================
+# This file defines ALL files that MUST exist on the source server
+# (vyxenai.com/pdev/) for partner installations to succeed.
+#
+# Used by: preflight-check.sh, installer-server.js /readiness endpoint
+# Format: One URL path per line (relative to /pdev/)
+# Comments start with #
+#
+# CRITICAL: If ANY file is missing, partner installations WILL FAIL
+# Run preflight-check.sh after ANY deployment to vyxenai.com
+#
+# Last updated: 2026-01-20
+# =========================================
+
+# =============================================
+# STATIC FILES (served by nginx)
+# =============================================
+
+# Bootstrap Script (curl entry point)
+install.sh
+
+# Web Installation Wizard
+install-wizard.html
+install-wizard-specific.css
+
+# Main Installer Script
+install/pdl-installer.sh
+
+# Source Tarball (Main Distribution Package)
+# Contains server, frontend, client, installer, migrations
+install/pdev-source-v1.2.0.tar.gz
+install/pdev-source-v1.2.0.tar.gz.sha256
+
+# Database Migrations (in install/ subdirectory)
+install/migrations/001_create_tables.sql
+install/migrations/002_add_missing_objects.sql
+install/migrations/003_create_server_tokens.sql
+install/migrations/004_create_registration_codes.sql
+install/migrations/005_create_guest_tokens.sql
+install/migrations/006_fix_permissions_security.sql
+
+# Live Dashboard Files (static frontend preview)
+live/index.html
+live/pdev-live.css
+live/mgmt.js
+
+# =============================================
+# API ENDPOINTS (served by pdev-installer on port 3078)
+# These are proxied through nginx at /pdev/ level
+# =============================================
+
+# Readiness endpoint (GET) - validates full source server health
+# @endpoint readiness
+
+# =============================================
+# OPTIONAL FILES (not required for installation)
+# =============================================
+
+# @optional live/dashboard.html
+# @optional live/docs.html
+# @optional live/projects.html

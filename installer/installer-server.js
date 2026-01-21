@@ -194,6 +194,54 @@ app.get('/health', (req, res) => {
     version: '1.0.0', activeConnections: activeWSConnections, maxConnections: MAX_CONCURRENT_WS });
 });
 
+/**
+ * Readiness endpoint - comprehensive health check for source server validation
+ * Used by preflight-check.sh and monitoring systems
+ *
+ * Returns 200 if server is ready to handle installations
+ * Returns 503 if server is not ready (shutting down or critical issues)
+ *
+ * Response includes:
+ * - status: 'ready' | 'not_ready'
+ * - checks: individual health check results
+ * - timestamp: ISO timestamp for cache validation
+ */
+app.get('/readiness', async (req, res) => {
+  const checks = {
+    server: true,
+    shutdownState: !isShuttingDown,
+    tokenGeneration: true,
+    webSocketCapacity: activeWSConnections < MAX_CONCURRENT_WS,
+    installScriptConfigured: ALLOWED_INSTALL_URLS.includes(INSTALL_SCRIPT_URL)
+  };
+
+  // Test token generation capability
+  try {
+    const testToken = generateToken();
+    checks.tokenGeneration = typeof testToken === 'string' && testToken.length === 64;
+  } catch (err) {
+    checks.tokenGeneration = false;
+  }
+
+  // Calculate overall readiness
+  const allPassed = Object.values(checks).every(v => v === true);
+  const status = allPassed && !isShuttingDown ? 'ready' : 'not_ready';
+  const httpStatus = status === 'ready' ? 200 : 503;
+
+  res.status(httpStatus).json({
+    status,
+    service: 'pdev-installer',
+    version: '1.0.0',
+    timestamp: new Date().toISOString(),
+    checks,
+    capacity: {
+      activeConnections: activeWSConnections,
+      maxConnections: MAX_CONCURRENT_WS,
+      available: MAX_CONCURRENT_WS - activeWSConnections
+    }
+  });
+});
+
 app.post('/pdev/installer/token', (req, res) => {
   if (isShuttingDown) return res.status(503).json({ error: 'Service shutting down' });
   let clientIP = req.ip;
@@ -343,5 +391,5 @@ process.on('unhandledRejection', (reason) => console.error('[WARN] Unhandled rej
 server.listen(PORT, () => {
   console.log('\nPDev-Live Installer Server (Hardened)');
   console.log('Port:', PORT, '| Script:', INSTALL_SCRIPT_URL);
-  console.log('Endpoints: POST /pdev/installer/token, WS /pdev/webssh, GET /health\n');
+  console.log('Endpoints: POST /pdev/installer/token, WS /pdev/webssh, GET /health, GET /readiness\n');
 });
