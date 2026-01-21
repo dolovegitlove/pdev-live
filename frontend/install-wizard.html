@@ -159,18 +159,24 @@
 
 **[ASK FOR ALL INSTALLATIONS]**
 6. What is the IP address of this server?
-7. What SSH user has sudo access on this server? (e.g., root, ubuntu, or existing admin user)
+7. What username should I create for the PDev-Live service user?
+   (This will be a NEW dedicated Linux user with passwordless sudo for installation)
+   (Default: pdevuser - or provide a custom username)
 
-After all questions are answered, output EXACTLY this format:
+After all questions are answered, you MUST:
+1. SSH to the server as root (or existing sudo user) using credentials the user provides
+2. Create the new service user with: home directory, bash shell, passwordless sudo
+3. Set a secure random password for the new user
+4. Then output EXACTLY this format with the NEW user credentials:
 
 **Installation Mode:** [Source Server / Project Server]
 
 **PAGE 1 - Server Connection**
 Server Host: [ip-address]
 SSH Port: 22
-Username: [ssh-user-with-sudo]
+Username: [NEW-service-user-you-created]
 Authentication Method: Password
-Password: [user provides their existing password]
+Password: [password-you-set-for-new-user]
 Domain Name: [domain - Source Server only]
 Source Server URL: [https://source-domain/pdev/api - Project Server only]
 
