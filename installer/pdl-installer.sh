@@ -84,7 +84,7 @@ DB_USER="pdev_app"                 # PostgreSQL application user
 NGINX_SITE_NAME="pdev-live"        # Nginx site config name
 CLIENT_CONFIG_FILE=".pdev-live-config"  # Client config filename
 TOOLS_DIR_NAME="pdev-live"         # ~/.claude/tools/<name>/ directory
-TARBALL_VERSION="1.2.0"            # Source package version (pdev-source-v*.tar.gz)
+TARBALL_VERSION="1.3.0"            # Source package version (pdev-source-v*.tar.gz)
 
 # Detect target user (non-root user who ran sudo)
 # This user will own PM2 processes and config
@@ -239,6 +239,56 @@ rollback_installation() {
     fi
 
     success "Rollback complete"
+}
+
+# =============================================================================
+# TARBALL VALIDATION (Preflight Check)
+# =============================================================================
+# Validates tarball contains critical files BEFORE extraction
+# This prevents failed installations due to incomplete/corrupt tarballs
+validate_tarball_critical_files() {
+    local tarball="$1"
+    local missing=0
+    local contents
+
+    log "Validating tarball contains critical files..."
+
+    # First verify tarball is readable
+    if ! contents=$(tar -tzf "$tarball" 2>&1); then
+        error "Failed to read tarball: $tarball"
+        error "The file may be corrupt or not a valid gzip tarball."
+        return 1
+    fi
+
+    # CRITICAL files that MUST exist for installation to work
+    # These map to server/server.js require('../config') and core functionality
+    local critical_files=(
+        "config.js"
+        "server/server.js"
+        "server/package.json"
+        "installer/pdl-installer.sh"
+    )
+
+    for file in "${critical_files[@]}"; do
+        if ! printf '%s\n' "$contents" | grep -qx "$file"; then
+            error "CRITICAL FILE MISSING: $file"
+            missing=$((missing + 1))
+        fi
+    done
+
+    if [[ $missing -gt 0 ]]; then
+        error ""
+        error "Tarball validation FAILED - $missing critical file(s) missing"
+        error "This tarball cannot produce a working installation."
+        error ""
+        error "The tarball may have been built incorrectly."
+        error "Contact the source server administrator or rebuild using:"
+        error "  ./installer/scripts/build-source-tarball.sh"
+        return 1
+    fi
+
+    success "Tarball validated - all critical files present"
+    return 0
 }
 
 # =============================================================================
@@ -2713,6 +2763,12 @@ main() {
             error "  2. Check HTTP auth credentials if server requires authentication"
             error "  3. Test manually: curl $curl_auth_opts -I $REMOTE_SOURCE"
             error ""
+            rm -f "$DOWNLOAD_FILE"
+            exit 1
+        fi
+
+        # Validate tarball before extraction (preflight check)
+        if ! validate_tarball_critical_files "$DOWNLOAD_FILE"; then
             rm -f "$DOWNLOAD_FILE"
             exit 1
         fi

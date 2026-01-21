@@ -229,22 +229,49 @@ create_tarball() {
   echo "${tarball_name}"
 }
 
-# Generate SHA256 checksum
+# Generate SHA256 checksum (cross-platform: Linux + macOS)
 generate_checksum() {
   local tarball_path="$1"
   local checksum_file="${tarball_path}.sha256"
 
-  log_info "Generating SHA256 checksum..."
-
-  if sha256sum "${tarball_path}" > "${checksum_file}"; then
-    log_success "Checksum file created: ${checksum_file}"
-    cat "${checksum_file}"
-  else
-    log_error "Failed to generate checksum"
-    exit 1
+  # Input validation
+  if [[ -z "${tarball_path}" ]]; then
+    log_error "generate_checksum: No tarball path provided"
+    return 1
   fi
 
-  echo "${checksum_file}"
+  if [[ ! -f "${tarball_path}" ]]; then
+    log_error "generate_checksum: File not found: ${tarball_path}"
+    return 1
+  fi
+
+  log_info "Generating SHA256 checksum..."
+
+  # Cross-platform: Use sha256sum on Linux, shasum on macOS
+  if command -v sha256sum >/dev/null 2>&1; then
+    if sha256sum "${tarball_path}" > "${checksum_file}"; then
+      log_success "Checksum file created: ${checksum_file}"
+    else
+      log_error "Failed to generate checksum"
+      return 1
+    fi
+  elif command -v shasum >/dev/null 2>&1; then
+    if shasum -a 256 "${tarball_path}" > "${checksum_file}"; then
+      log_success "Checksum file created: ${checksum_file}"
+    else
+      log_error "Failed to generate checksum"
+      return 1
+    fi
+  else
+    log_error "No SHA256 tool found (sha256sum or shasum)"
+    return 1
+  fi
+
+  # Output checksum content for visibility
+  cat "${checksum_file}"
+
+  # Return the checksum file path
+  printf '%s\n' "${checksum_file}"
 }
 
 # Verify tarball contents
