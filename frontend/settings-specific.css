@@ -590,6 +590,141 @@
   min-height: 32px;
 }
 
+/* ==============================================
+   Account Security Form Components
+   ============================================== */
+
+/* Text/Password Input Fields */
+.input-text {
+  width: 100%;
+  padding: 0.75rem;
+  min-height: 44px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.input-text:hover {
+  border-color: var(--muted);
+}
+
+.input-text:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-subtle, rgba(59, 130, 246, 0.15));
+}
+
+.input-text::placeholder {
+  color: var(--muted);
+  opacity: 0.6;
+}
+
+.input-text:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Password Strength Indicator */
+.password-strength {
+  margin-top: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.password-strength.hidden {
+  display: none;
+}
+
+.strength-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.strength-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 2px;
+  transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+.strength-fill[data-strength="weak"] {
+  width: 25%;
+  background-color: var(--error);
+}
+
+.strength-fill[data-strength="fair"] {
+  width: 50%;
+  background-color: var(--warn);
+}
+
+.strength-fill[data-strength="good"] {
+  width: 75%;
+  background-color: #22c55e;
+}
+
+.strength-fill[data-strength="strong"] {
+  width: 100%;
+  background-color: var(--success);
+}
+
+.strength-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  min-width: 60px;
+  color: var(--muted);
+}
+
+.strength-label[data-strength="weak"] {
+  color: var(--error);
+}
+
+.strength-label[data-strength="fair"] {
+  color: var(--warn);
+}
+
+.strength-label[data-strength="good"],
+.strength-label[data-strength="strong"] {
+  color: var(--success);
+}
+
+/* Form Validation Error Messages */
+.input-error {
+  display: block;
+  margin-top: 0.375rem;
+  font-size: 0.8rem;
+  color: var(--error);
+  line-height: 1.4;
+}
+
+.input-error.hidden {
+  display: none;
+}
+
+/* Error state for inputs */
+.input-text.has-error {
+  border-color: var(--error);
+}
+
+.input-text.has-error:focus {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--error) 15%, transparent);
+}
+
+/* Confirm Password Group (hidden by default) */
+.confirm-password-group.hidden {
+  display: none;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .settings-container {

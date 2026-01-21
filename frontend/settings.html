@@ -38,14 +38,109 @@
 
             <!-- Tabs -->
             <div class="settings-tabs" role="tablist" aria-label="Settings sections">
-                <button type="button" class="tab-btn active" role="tab" aria-selected="true" aria-controls="tab-git" id="btn-git" onclick="switchTab('git')">Git Sync</button>
+                <button type="button" class="tab-btn active" role="tab" aria-selected="true" aria-controls="tab-account" id="btn-account" onclick="switchTab('account')">Account</button>
+                <button type="button" class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-git" id="btn-git" onclick="switchTab('git')">Git Sync</button>
                 <button type="button" class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-servers" id="btn-servers" onclick="switchTab('servers')">Servers</button>
-                <button type="button" class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-access" id="btn-access" onclick="switchTab('access')">Access</button>
                 <button type="button" class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-about" id="btn-about" onclick="switchTab('about')">About</button>
             </div>
 
+            <!-- Account Tab -->
+            <div id="tab-account" class="tab-content active" role="tabpanel" aria-labelledby="btn-account">
+                <section class="settings-section">
+                    <div class="section-header">
+                        <h2>Account Security</h2>
+                        <p class="section-description">Update your username or password. Your current password confirms your identity.</p>
+                    </div>
+
+                    <div class="info-box info">
+                        <div class="info-icon">🔒</div>
+                        <div class="info-content">
+                            <h3>Secure Account Changes</h3>
+                            <p>Your current password confirms your identity. After updating, you'll need to sign in again with your new credentials.</p>
+                            <p><strong>Your data is safe:</strong> All projects, sessions, and settings remain unchanged.</p>
+                        </div>
+                    </div>
+
+                    <form id="credentialForm" onsubmit="updateCredentials(event)">
+                        <div class="setting-item">
+                            <label for="currentPassword" class="input-label">
+                                <span class="label-title">Current Password</span>
+                                <span class="label-help">Required to verify it's really you</span>
+                            </label>
+                            <input
+                                type="password"
+                                id="currentPassword"
+                                class="input-text"
+                                placeholder="Enter your current password"
+                                required
+                                autocomplete="current-password"
+                                aria-required="true"
+                            >
+                        </div>
+
+                        <div class="setting-item">
+                            <label for="newUsername" class="input-label">
+                                <span class="label-title">New Username (optional)</span>
+                                <span class="label-help">3-50 characters. Letters, numbers, and underscores only.</span>
+                            </label>
+                            <input
+                                type="text"
+                                id="newUsername"
+                                class="input-text"
+                                placeholder="Leave blank to keep current"
+                                autocomplete="username"
+                                pattern="^[a-zA-Z0-9_]{3,50}$"
+                                minlength="3"
+                                maxlength="50"
+                            >
+                        </div>
+
+                        <div class="setting-item">
+                            <label for="newPassword" class="input-label">
+                                <span class="label-title">New Password (optional)</span>
+                                <span class="label-help">At least 12 characters for security.</span>
+                            </label>
+                            <input
+                                type="password"
+                                id="newPassword"
+                                class="input-text"
+                                placeholder="Leave blank to keep current"
+                                autocomplete="new-password"
+                                minlength="12"
+                                maxlength="200"
+                                oninput="checkPasswordStrength()"
+                            >
+                            <div id="passwordStrength" class="password-strength hidden" role="status" aria-live="polite">
+                                <span class="strength-bar"><span id="strengthFill" class="strength-fill"></span></span>
+                                <span id="strengthLabel" class="strength-label"></span>
+                            </div>
+                        </div>
+
+                        <div class="setting-item confirm-password-group hidden" id="confirmPasswordGroup">
+                            <label for="confirmPassword" class="input-label">
+                                <span class="label-title">Confirm New Password</span>
+                                <span class="label-help">Re-enter your new password to confirm</span>
+                            </label>
+                            <input
+                                type="password"
+                                id="confirmPassword"
+                                class="input-text"
+                                placeholder="Re-enter your new password"
+                                autocomplete="new-password"
+                            >
+                            <small id="confirmError" class="input-error hidden"></small>
+                        </div>
+
+                        <div class="save-section">
+                            <button id="saveCredentialsButton" class="btn-save" type="submit">Update Account &amp; Sign Out</button>
+                            <p class="save-help">After saving, you'll be signed out and redirected to sign in with your new credentials.</p>
+                        </div>
+                    </form>
+                </section>
+            </div>
+
             <!-- Git Sync Tab -->
-            <div id="tab-git" class="tab-content active" role="tabpanel" aria-labelledby="btn-git">
+            <div id="tab-git" class="tab-content hidden" role="tabpanel" aria-labelledby="btn-git">
                 <section class="settings-section">
                     <div class="section-header">
                         <h2>Git Auto-Commit</h2>
@@ -160,35 +255,6 @@
                 </section>
             </div>
 
-            <!-- Access Tab -->
-            <div id="tab-access" class="tab-content hidden" role="tabpanel" aria-labelledby="btn-access">
-                <section class="settings-section">
-                    <div class="section-header">
-                        <h2>Admin Access</h2>
-                        <p class="section-description">Authentication for protected operations</p>
-                    </div>
-
-                    <div class="setting-item">
-                        <label class="input-label">
-                            <span class="label-title">Admin Key</span>
-                            <span class="label-help">Required for deleting sessions, managing share links, and other admin operations</span>
-                        </label>
-                        <code class="admin-key-display">Set via PDEV_ADMIN_KEY environment variable</code>
-                    </div>
-                </section>
-
-                <section class="settings-section">
-                    <div class="section-header">
-                        <h2>Active Share Links</h2>
-                        <p class="section-description">Guest links currently providing access to sessions</p>
-                    </div>
-
-                    <div id="shareLinksList" class="share-links-list">
-                        <div class="loading-text">Loading share links...</div>
-                    </div>
-                </section>
-            </div>
-
             <!-- About Tab -->
             <div id="tab-about" class="tab-content hidden" role="tabpanel" aria-labelledby="btn-about">
                 <section class="settings-section">
@@ -286,7 +352,6 @@
 
             // Load tab-specific data
             if (tabId === 'servers') loadServers();
-            if (tabId === 'access') loadShareLinks();
             if (tabId === 'about') loadAbout();
         }
 
@@ -306,6 +371,119 @@
                     const message = container.querySelector('.message');
                     if (message) message.remove();
                 }, 5000);
+            }
+        }
+
+        // Account/Credential Management
+        function checkPasswordStrength() {
+            const password = document.getElementById('newPassword').value;
+            const strengthContainer = document.getElementById('passwordStrength');
+            const strengthFill = document.getElementById('strengthFill');
+            const strengthLabel = document.getElementById('strengthLabel');
+            const confirmGroup = document.getElementById('confirmPasswordGroup');
+
+            if (password.length === 0) {
+                strengthContainer.classList.add('hidden');
+                confirmGroup.classList.add('hidden');
+                return;
+            }
+
+            strengthContainer.classList.remove('hidden');
+            confirmGroup.classList.remove('hidden');
+
+            let strength = 'weak';
+            let score = 0;
+
+            if (password.length >= 12) score++;
+            if (password.length >= 16) score++;
+            if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++;
+            if (/[0-9]/.test(password)) score++;
+            if (/[^a-zA-Z0-9]/.test(password)) score++;
+
+            if (score >= 4) strength = 'strong';
+            else if (score >= 3) strength = 'good';
+            else if (score >= 2) strength = 'fair';
+
+            strengthFill.setAttribute('data-strength', strength);
+            strengthLabel.setAttribute('data-strength', strength);
+            strengthLabel.textContent = strength.charAt(0).toUpperCase() + strength.slice(1);
+        }
+
+        async function updateCredentials(event) {
+            event.preventDefault();
+
+            const currentPassword = document.getElementById('currentPassword').value;
+            const newUsername = document.getElementById('newUsername').value.trim();
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            const confirmError = document.getElementById('confirmError');
+            const btn = document.getElementById('saveCredentialsButton');
+
+            // Clear previous errors
+            confirmError.classList.add('hidden');
+            confirmError.textContent = '';
+
+            // Validate at least one new value
+            if (!newUsername && !newPassword) {
+                showMessage('Please provide a new username or password', 'error');
+                return;
+            }
+
+            // Validate password confirmation
+            if (newPassword && newPassword !== confirmPassword) {
+                confirmError.textContent = 'The passwords you entered don\'t match. Please check both fields.';
+                confirmError.classList.remove('hidden');
+                document.getElementById('confirmPassword').focus();
+                return;
+            }
+
+            // Validate username format if provided
+            if (newUsername && !/^[a-zA-Z0-9_]{3,50}$/.test(newUsername)) {
+                showMessage('Username must be 3-50 characters (letters, numbers, underscore only)', 'error');
+                return;
+            }
+
+            // Validate password length if provided
+            if (newPassword && newPassword.length < 12) {
+                showMessage('Password must be at least 12 characters for security', 'error');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = 'Updating...';
+
+            try {
+                const response = await fetch(`${API_BASE}/auth/update-credentials`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        currentPassword,
+                        newUsername: newUsername || undefined,
+                        newPassword: newPassword || undefined
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    if (data.code === 'REAUTH_REQUIRED') {
+                        showMessage('For security, please log out and log back in before changing credentials', 'error');
+                    } else {
+                        showMessage(data.error || 'Failed to update credentials', 'error');
+                    }
+                    return;
+                }
+
+                showMessage('Credentials updated successfully! Redirecting to login...', 'success');
+                setTimeout(() => {
+                    window.location.href = '/pdev/live/login.html';
+                }, 2000);
+
+            } catch (error) {
+                showMessage('Connection error. Please try again.', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Update Account & Sign Out';
             }
         }
 
@@ -388,58 +566,6 @@
                 `).join('');
             } catch (error) {
                 container.innerHTML = '<div class="error-text">We couldn\'t load servers right now. Try refreshing the page.</div>';
-            }
-        }
-
-        // Share Links
-        async function loadShareLinks() {
-            const container = document.getElementById('shareLinksList');
-            try {
-                const response = await fetch(`${API_BASE}/guest-links`);
-
-                if (response.status === 401) {
-                    container.innerHTML = '<div class="auth-required">Admin authentication required to view share links</div>';
-                    return;
-                }
-
-                if (!response.ok) throw new Error('Failed to load share links');
-
-                const data = await response.json();
-                const links = data.links || [];
-
-                if (links.length === 0) {
-                    container.innerHTML = '<div class="empty-text">No active share links</div>';
-                    return;
-                }
-
-                container.innerHTML = links.map(link => `
-                    <div class="share-link-item">
-                        <div class="share-link-info">
-                            <span class="share-link-token">${escapeHtml(link.token)}</span>
-                            <span class="share-link-meta">Expires in ${escapeHtml(String(link.remainingHours))}h</span>
-                        </div>
-                        <button class="btn btn-outline btn-sm" onclick="revokeLink('${escapeHtml(link.token)}')" aria-label="Revoke access">Revoke Access</button>
-                    </div>
-                `).join('');
-            } catch (error) {
-                container.innerHTML = '<div class="error-text">We couldn\'t load share links right now. Try refreshing the page.</div>';
-            }
-        }
-
-        async function revokeLink(token) {
-            if (!confirm('Revoke this share link? Anyone using it will lose access.')) return;
-
-            try {
-                const response = await fetch(`${API_BASE}/guest-links/${encodeURIComponent(token)}`, {
-                    method: 'DELETE'
-                });
-
-                if (!response.ok) throw new Error('Failed to revoke link');
-
-                showMessage('Share link revoked', 'success');
-                loadShareLinks();
-            } catch (error) {
-                showMessage('Failed to revoke link: ' + error.message, 'error');
             }
         }
 

@@ -533,6 +533,210 @@ app.get('/auth/check', (req, res) => {
   });
 });
 
+// Rate limiter for credential updates (3 attempts per hour)
+const credentialUpdateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 3,
+  message: { error: 'Too many credential update attempts. Try again in 1 hour.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// File lock to prevent concurrent credential updates
+let credentialUpdateLock = false;
+
+// Validate password strength
+function validatePasswordStrength(password, username) {
+  const errors = [];
+  if (password.length < 12) {
+    errors.push('Password must be at least 12 characters');
+  }
+  if (password.length > 200) {
+    errors.push('Password must not exceed 200 characters');
+  }
+  if (username && password.toLowerCase() === username.toLowerCase()) {
+    errors.push('Password cannot be the same as username');
+  }
+  if (/^(.)\1+$/.test(password)) {
+    errors.push('Password cannot be all repeated characters');
+  }
+  return errors;
+}
+
+// Update credentials endpoint
+app.post('/auth/update-credentials', credentialUpdateLimiter, async (req, res) => {
+  const clientIP = req.ip || req.connection.remoteAddress;
+
+  // 1. Check authentication
+  if (!req.session || !req.session.authenticated) {
+    console.log(`[AUTH] Credential update rejected - not authenticated (IP: ${clientIP})`);
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  // 2. Re-authentication timeout (5 minutes) - require recent login for sensitive operation
+  const REAUTH_TIMEOUT = 5 * 60 * 1000;
+  if (Date.now() - req.session.loginTime > REAUTH_TIMEOUT) {
+    console.log(`[AUTH] Credential update rejected - session too old (IP: ${clientIP})`);
+    return res.status(401).json({
+      error: 'For security, please log out and log back in before changing credentials',
+      code: 'REAUTH_REQUIRED'
+    });
+  }
+
+  // 3. Prevent concurrent updates
+  if (credentialUpdateLock) {
+    return res.status(429).json({ error: 'Another credential update in progress. Please wait.' });
+  }
+
+  const { currentPassword, newUsername, newPassword } = req.body;
+
+  // 4. Validate input types
+  if (typeof currentPassword !== 'string') {
+    return res.status(400).json({ error: 'Current password is required' });
+  }
+
+  // At least one of newUsername or newPassword must be provided
+  const hasNewUsername = typeof newUsername === 'string' && newUsername.trim().length > 0;
+  const hasNewPassword = typeof newPassword === 'string' && newPassword.length > 0;
+
+  if (!hasNewUsername && !hasNewPassword) {
+    return res.status(400).json({ error: 'Please provide a new username or password' });
+  }
+
+  // 5. Validate new username if provided
+  if (hasNewUsername) {
+    const trimmedUsername = newUsername.trim();
+    if (!/^[a-zA-Z0-9_]{3,50}$/.test(trimmedUsername)) {
+      return res.status(400).json({
+        error: 'Username must be 3-50 characters (letters, numbers, underscore only)'
+      });
+    }
+  }
+
+  // 6. Validate new password if provided
+  if (hasNewPassword) {
+    const usernameToCheck = hasNewUsername ? newUsername.trim() : process.env.PDEV_USERNAME;
+    const passwordErrors = validatePasswordStrength(newPassword, usernameToCheck);
+    if (passwordErrors.length > 0) {
+      return res.status(400).json({ error: passwordErrors.join('. ') });
+    }
+  }
+
+  // 7. Verify current password exists in environment
+  const validPass = process.env.PDEV_PASSWORD;
+  if (!validPass) {
+    console.error('[AUTH] PDEV_PASSWORD not configured');
+    return res.status(500).json({ error: 'Server configuration error' });
+  }
+
+  // 8. Verify current password (timing-safe comparison)
+  const currentPassBuffer = Buffer.from(String(currentPassword));
+  const validPassBuffer = Buffer.from(String(validPass));
+  const maxLen = Math.max(currentPassBuffer.length, validPassBuffer.length);
+  const paddedCurrent = Buffer.alloc(maxLen);
+  const paddedValid = Buffer.alloc(maxLen);
+  currentPassBuffer.copy(paddedCurrent);
+  validPassBuffer.copy(paddedValid);
+
+  const passwordMatch = crypto.timingSafeEqual(paddedCurrent, paddedValid) &&
+                        currentPassBuffer.length === validPassBuffer.length;
+
+  if (!passwordMatch) {
+    console.log(`[AUTH] Credential update failed - wrong current password (IP: ${clientIP})`);
+    return res.status(401).json({ error: 'Current password is incorrect' });
+  }
+
+  // 9. Acquire lock
+  credentialUpdateLock = true;
+  let tempPath = null;
+  const fs = require('fs').promises;
+
+  try {
+    const envPath = path.join(__dirname, '.env');
+
+    // 10. Read current .env
+    let envContent;
+    try {
+      envContent = await fs.readFile(envPath, 'utf8');
+    } catch (readErr) {
+      if (readErr.code === 'ENOENT') {
+        throw new Error('.env file not found');
+      }
+      throw readErr;
+    }
+
+    // 11. Verify required lines exist
+    if (!/^PDEV_USERNAME=/m.test(envContent)) {
+      throw new Error('PDEV_USERNAME not found in .env');
+    }
+    if (!/^PDEV_PASSWORD=/m.test(envContent)) {
+      throw new Error('PDEV_PASSWORD not found in .env');
+    }
+
+    // 12. Update credentials in content
+    let updatedContent = envContent;
+    const finalUsername = hasNewUsername ? newUsername.trim() : process.env.PDEV_USERNAME;
+    const finalPassword = hasNewPassword ? newPassword : process.env.PDEV_PASSWORD;
+
+    if (hasNewUsername) {
+      updatedContent = updatedContent.replace(/^PDEV_USERNAME=.*$/m, `PDEV_USERNAME=${finalUsername}`);
+    }
+    if (hasNewPassword) {
+      updatedContent = updatedContent.replace(/^PDEV_PASSWORD=.*$/m, `PDEV_PASSWORD=${finalPassword}`);
+    }
+
+    // 13. Atomic write: temp file + rename
+    tempPath = `${envPath}.tmp.${Date.now()}`;
+    await fs.writeFile(tempPath, updatedContent, { mode: 0o600 });
+    await fs.rename(tempPath, envPath);
+    tempPath = null; // Rename succeeded, no cleanup needed
+
+    // 14. Update in-memory env vars
+    if (hasNewUsername) {
+      process.env.PDEV_USERNAME = finalUsername;
+    }
+    if (hasNewPassword) {
+      process.env.PDEV_PASSWORD = finalPassword;
+    }
+
+    // 15. Log success
+    console.log(`[AUTH] Credentials updated (IP: ${clientIP}, username_changed: ${hasNewUsername}, password_changed: ${hasNewPassword})`);
+
+    // 16. Destroy session to force re-login with new credentials
+    req.session.destroy((destroyErr) => {
+      if (destroyErr) {
+        console.error('[AUTH] Session destroy error after credential update:', destroyErr.message);
+      }
+      res.clearCookie('pdev.sid', {
+        secure: process.env.NODE_ENV === 'production',
+        httpOnly: true,
+        sameSite: 'strict'
+      });
+      res.json({
+        success: true,
+        message: 'Credentials updated successfully. Please log in with your new credentials.'
+      });
+    });
+
+  } catch (err) {
+    console.error(`[AUTH] Credential update failed (IP: ${clientIP}):`, err.message);
+
+    // Clean up temp file if it exists
+    if (tempPath) {
+      try {
+        await fs.unlink(tempPath);
+      } catch (unlinkErr) {
+        console.error('[AUTH] Failed to clean up temp file:', unlinkErr.message);
+      }
+    }
+
+    res.status(500).json({ error: 'Failed to update credentials. Please try again.' });
+  } finally {
+    // 17. Release lock
+    credentialUpdateLock = false;
+  }
+});
+
 // Auto-authenticate session for HTTP Basic Auth users (nginx layer)
 // This allows users who pass nginx Basic Auth to access API endpoints
 // SECURITY: Only trusts requests with X-Pdev-Nginx-Auth header (set by nginx AFTER Basic Auth passes)
