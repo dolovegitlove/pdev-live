@@ -159,14 +159,11 @@
 
 **[ASK FOR ALL INSTALLATIONS]**
 6. What is the IP address of this server?
-7. Do you have SSH access configured in ~/.ssh/config, or should I use password auth?
-   - If SSH config: What's the host alias? (e.g., ittz, acme)
-   - If password: What SSH user has sudo access? (e.g., root, ubuntu)
+7. Do you have SSH access to this server configured in your ~/.ssh/config?
+   - If YES: I'll use your existing SSH config to connect
+   - If NO: What SSH username should I use? (e.g., root, ubuntu)
 
 After I've answered all questions, you MUST:
-
-**STEP 1: Get SSH credentials to access the server**
-Ask me: "I need to SSH to [server-ip] as [user]. Please provide your SSH password, or confirm I can use your existing SSH key."
 
 **STEP 2: Create the pdev service user** (run these exact commands):
 ```bash
