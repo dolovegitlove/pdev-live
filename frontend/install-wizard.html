@@ -150,51 +150,38 @@
    - Project Server: Client-only installation (connects to existing Source Server)
 
 **[ONLY ASK IF SOURCE SERVER - Skip for Project Server]**
-2. What domain will PDev-Live run on?
-3. What's your company name?
-4. What other servers do you plan on using as project servers?
-5. What are the IP addresses of the servers that will be used as project servers?
+2. What domain will PDev-Live run on? (e.g., walletsnack.com)
+3. What server names should be allowed to connect? (comma-separated, e.g., ittz,acme,cfree,wsrv)
+4. What IP addresses should be whitelisted for API access? (comma-separated, include all project server IPs)
 
 **[ONLY ASK IF PROJECT SERVER - Skip for Source Server]**
-6. What is the Source Server URL? (e.g., https://source-domain/pdev/api)
+5. What is the Source Server URL? (e.g., https://walletsnack.com/pdev/api)
 
 **[ASK FOR ALL INSTALLATIONS]**
-7. What do you call this server?
-8. What is the IP address of this server?
-9. What username should I create for the PDev-Live service user?
-   (This will be a NEW dedicated Linux user with passwordless sudo privileges)
-   (Default: pdevuser - or provide a custom username like pdev-source)
+6. What is the IP address of this server?
+7. What SSH user has sudo access on this server? (e.g., root, ubuntu, or existing admin user)
 
-After all questions are answered, you must:
-1. Generate a secure random password for the new service user
-2. Create the Linux user on the target server with: home directory, bash shell, passwordless sudo, SSH password authentication
-3. Output EXACTLY this format:
+After all questions are answered, output EXACTLY this format:
 
 **Installation Mode:** [Source Server / Project Server]
 
 **PAGE 1 - Server Connection**
 Server Host: [ip-address]
 SSH Port: 22
-Username: [service-user]
+Username: [ssh-user-with-sudo]
 Authentication Method: Password
-Password: [generated]
-Domain Name: [domain]
-Source Server URL: [only for Project Server: https://source-domain/pdev/api]
+Password: [user provides their existing password]
+Domain Name: [domain - Source Server only]
+Source Server URL: [https://source-domain/pdev/api - Project Server only]
 
 **PAGE 2 - Configuration** [Source Server only - skip for Project Server]
 Domain Name: [domain]
-Company Name: [company]
-Server Name: [server-nickname]
-Valid Servers: [comma-separated-list]
-Allowed IP Addresses: [comma-separated-ips]
-Database Password: [generated-32-char]
+Valid Servers: [comma-separated server names]
+Allowed IP Addresses: [comma-separated IPs including 127.0.0.1,::1]
+Database Password: [generate 32-char random]
 HTTP Basic Auth Username: pdev
-HTTP Basic Auth Password: [generated-24-char]
-Session Secret: [generated-32-char]
-
-**SSH Key (ED25519)**
-Public Key: [generated-public-key]
-Private Key: [generated-private-key]
+HTTP Basic Auth Password: [generate 24-char random]
+Session Secret: [generate 32-char random]
 </code></pre>
             <p><strong>After Claude generates the values:</strong> Copy them into the form fields below.</p>
         </div>
@@ -301,17 +288,6 @@ MIIEpAIBAAKCAQEA...
                         <small>Your company's domain (used for URLs and SSL certificates)</small>
                     </div>
 
-                    <div class="form-group">
-                        <label for="config-partner-name">Company Name</label>
-                        <input type="text" id="config-partner-name" placeholder="e.g., ACME Corporation">
-                        <small>Display name for your organization</small>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="config-server-name">Server Name <span class="required">*</span></label>
-                        <input type="text" id="config-server-name" placeholder="e.g., prod-server-01" required>
-                        <small>Identifier for this server (used for session tagging)</small>
-                    </div>
                 </div>
 
                 <div class="config-section">
@@ -560,7 +536,6 @@ MIIEpAIBAAKCAQEA...
         // Configuration step validation
         function validateConfigStep() {
             const partnerDomain = document.getElementById('config-partner-domain').value;
-            const serverName = document.getElementById('config-server-name').value;
             const validServers = document.getElementById('config-valid-servers').value;
             const allowedIps = document.getElementById('config-allowed-ips').value;
             const dbPassword = document.getElementById('config-db-password').value;
@@ -568,7 +543,7 @@ MIIEpAIBAAKCAQEA...
             const sessionSecret = document.getElementById('config-session-secret').value;
 
             // Check required fields
-            if (!partnerDomain || !serverName || !validServers || !allowedIps || !dbPassword || !authPassword || !sessionSecret) {
+            if (!partnerDomain || !validServers || !allowedIps || !dbPassword || !authPassword || !sessionSecret) {
                 showStatus('error', 'Please fill in all required fields (marked with *)');
                 return false;
             }
@@ -576,12 +551,6 @@ MIIEpAIBAAKCAQEA...
             // Validate domain format
             if (!/^[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,}$/i.test(partnerDomain)) {
                 showStatus('error', 'Invalid domain format. Example: company.com');
-                return false;
-            }
-
-            // Validate server name (alphanumeric, hyphens, underscores)
-            if (!/^[a-z0-9_-]+$/i.test(serverName)) {
-                showStatus('error', 'Server name must contain only letters, numbers, hyphens, and underscores');
                 return false;
             }
 
@@ -627,8 +596,6 @@ MIIEpAIBAAKCAQEA...
             if (selectedMode === 'source') {
                 config = {
                     partnerDomain: document.getElementById('config-partner-domain').value,
-                    partnerName: document.getElementById('config-partner-name').value || document.getElementById('config-partner-domain').value,
-                    serverName: document.getElementById('config-server-name').value,
                     validServers: document.getElementById('config-valid-servers').value,
                     allowedIps: document.getElementById('config-allowed-ips').value,
                     dbPassword: document.getElementById('config-db-password').value,
@@ -674,6 +641,10 @@ MIIEpAIBAAKCAQEA...
         }
 
         function generateEnvFile(config) {
+            // NOTE: PARTNER_NAME and PARTNER_SERVER_NAME are auto-detected by installer
+            // - PARTNER_NAME: Derived from domain (e.g., walletsnack.com -> Walletsnack)
+            // - PARTNER_SERVER_NAME: Uses hostname -s on target server
+            // - DEPLOY_USER: Uses $SUDO_USER on target server
             return `# PDev-Live Configuration
 # Generated by PDev Live Installer on ${new Date().toISOString()}
 
@@ -681,8 +652,6 @@ MIIEpAIBAAKCAQEA...
 # PARTNER IDENTITY
 # ========================================
 PARTNER_DOMAIN=${config.partnerDomain}
-PARTNER_NAME="${config.partnerName}"
-PARTNER_SERVER_NAME=${config.serverName}
 
 # ========================================
 # API CONFIGURATION
@@ -717,7 +686,6 @@ SESSION_SECRET=${config.sessionSecret}
 # ========================================
 # DEPLOYMENT PATHS
 # ========================================
-DEPLOY_USER=${config.serverName}
 FRONTEND_DEPLOY_PATH=/var/www/${config.partnerDomain}/pdev
 FRONTEND_BACKUP_PATH=/var/www/${config.partnerDomain}/pdev-backups
 BACKEND_SERVICE_PATH=/opt/services/pdev-live
@@ -728,12 +696,6 @@ LOG_PATH=/opt/services/pdev-live/logs
 # ========================================
 SSL_CERT_PATH=/etc/letsencrypt/live/${config.partnerDomain}/fullchain.pem
 SSL_KEY_PATH=/etc/letsencrypt/live/${config.partnerDomain}/privkey.pem
-
-# ========================================
-# DESKTOP CLIENT
-# ========================================
-DESKTOP_HOMEPAGE=https://${config.partnerDomain}/pdev/live/
-DESKTOP_UPDATE_URL=https://${config.partnerDomain}/pdev/releases/
 
 # ========================================
 # FEATURE FLAGS

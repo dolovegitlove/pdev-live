@@ -40,10 +40,6 @@ install/migrations/004_create_registration_codes.sql
 install/migrations/005_create_guest_tokens.sql
 install/migrations/006_fix_permissions_security.sql
 
-# Live Dashboard Files (static frontend preview)
-live/index.html
-live/pdev-live.css
-live/mgmt.js
 
 # =============================================
 # API ENDPOINTS (served by pdev-installer on port 3078)
@@ -57,6 +53,3 @@ live/mgmt.js
 # OPTIONAL FILES (not required for installation)
 # =============================================
 
-# @optional live/dashboard.html
-# @optional live/docs.html
-# @optional live/projects.html
