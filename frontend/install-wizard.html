@@ -159,24 +159,57 @@
 
 **[ASK FOR ALL INSTALLATIONS]**
 6. What is the IP address of this server?
-7. What username should I create for the PDev-Live service user?
-   (This will be a NEW dedicated Linux user with passwordless sudo for installation)
-   (Default: pdevuser - or provide a custom username)
+7. Do you have SSH access configured in ~/.ssh/config, or should I use password auth?
+   - If SSH config: What's the host alias? (e.g., ittz, acme)
+   - If password: What SSH user has sudo access? (e.g., root, ubuntu)
 
-After all questions are answered, you MUST:
-1. SSH to the server as root (or existing sudo user) using credentials the user provides
-2. Create the new service user with: home directory, bash shell, passwordless sudo
-3. Set a secure random password for the new user
-4. Then output EXACTLY this format with the NEW user credentials:
+After I've answered all questions, you MUST:
+
+**STEP 1: Get SSH credentials to access the server**
+Ask me: "I need to SSH to [server-ip] as [user]. Please provide your SSH password, or confirm I can use your existing SSH key."
+
+**STEP 2: Create the pdev service user** (run these exact commands):
+```bash
+# Create user with home directory and bash shell
+sudo useradd -m -s /bin/bash pdev
+
+# Generate and set secure random password
+PASSWORD=$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 24)
+echo "pdev:$PASSWORD" | sudo chpasswd
+
+# Grant passwordless sudo for installation
+echo "pdev ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/pdev
+sudo chmod 440 /etc/sudoers.d/pdev
+
+# Create SSH directory structure
+sudo mkdir -p /home/pdev/.ssh
+sudo chmod 700 /home/pdev/.ssh
+
+# Generate ED25519 keypair for pdev user
+sudo ssh-keygen -t ed25519 -f /home/pdev/.ssh/id_ed25519 -N "" -C "pdev-live-service"
+
+# Add public key to authorized_keys
+sudo cat /home/pdev/.ssh/id_ed25519.pub | sudo tee /home/pdev/.ssh/authorized_keys
+sudo chmod 600 /home/pdev/.ssh/authorized_keys
+sudo chown -R pdev:pdev /home/pdev/.ssh
+
+# Verify user was created
+id pdev
+```
+
+**STEP 3: Test SSH as pdev user**
+SSH to [server-ip] as pdev using the generated password to verify it works.
+
+**STEP 4: Output credentials** in EXACTLY this format:
 
 **Installation Mode:** [Source Server / Project Server]
 
 **PAGE 1 - Server Connection**
 Server Host: [ip-address]
 SSH Port: 22
-Username: [NEW-service-user-you-created]
+Username: pdev
 Authentication Method: Password
-Password: [password-you-set-for-new-user]
+Password: [the $PASSWORD you generated above]
 Domain Name: [domain - Source Server only]
 Source Server URL: [https://source-domain/pdev/api - Project Server only]
 
@@ -184,10 +217,13 @@ Source Server URL: [https://source-domain/pdev/api - Project Server only]
 Domain Name: [domain]
 Valid Servers: [comma-separated server names]
 Allowed IP Addresses: [comma-separated IPs including 127.0.0.1,::1]
-Database Password: [generate 32-char random]
+Database Password: [generate 32-char random alphanumeric]
 HTTP Basic Auth Username: pdev
-HTTP Basic Auth Password: [generate 24-char random]
-Session Secret: [generate 32-char random]
+HTTP Basic Auth Password: [generate 24-char random alphanumeric]
+Session Secret: [generate 32-char random alphanumeric]
+
+**SSH Private Key (SAVE THIS for future access as pdev):**
+[show contents of /home/pdev/.ssh/id_ed25519]
 </code></pre>
             <p><strong>After Claude generates the values:</strong> Copy them into the form fields below.</p>
         </div>

@@ -14,3 +14,5 @@ installer/dist/
 .env
 .env.*
 !.env.partner.example
+test-results/
+*.spec.js
