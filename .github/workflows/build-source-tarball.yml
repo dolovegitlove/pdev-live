@@ -110,6 +110,14 @@ jobs:
             echo "status=new" >> $GITHUB_OUTPUT
           fi
 
+      - name: Regenerate manifest from source
+        run: |
+          set -euo pipefail
+          echo "Regenerating TARBALL_MANIFEST.txt from actual files..."
+          chmod +x installer/generate-manifest.sh
+          ./installer/generate-manifest.sh
+          echo "Manifest generated with $(grep -c '^[^#]' installer/TARBALL_MANIFEST.txt) files"
+
       - name: Build pdev-source tarball
         id: build
         run: |
