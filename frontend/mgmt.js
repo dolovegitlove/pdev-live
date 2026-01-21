@@ -158,20 +158,24 @@
       return;
     }
 
-    // Group by project
+    // Group by project name only (aggregate servers)
     var projects = {};
     items.forEach(function(item) {
-      var key = (item.project_name || 'unknown') + '|' + (item.server_origin || '');
+      var key = item.project_name || 'unknown';
       if (!projects[key]) {
         projects[key] = {
           name: item.project_name || 'unknown',
-          server: item.server_origin || '',
+          servers: [],
           sessions: [],
           totalSteps: 0
         };
       }
-      projects[key].sessions.push(item);
-      projects[key].totalSteps += (item.total_steps || 0);
+      var p = projects[key];
+      if (p.servers.indexOf(item.server_origin || '') === -1) {
+        p.servers.push(item.server_origin || '');
+      }
+      p.sessions.push(item);
+      p.totalSteps += (item.total_steps || 0);
     });
 
     // Clear and rebuild grid using DOM methods (XSS safe)
@@ -186,7 +190,7 @@
       var card = document.createElement('div');
       card.className = 'scard';
       card.onclick = function() {
-        location.href = 'project.html?project=' + encodeURIComponent(p.name) + '&server=' + encodeURIComponent(p.server);
+        location.href = 'project.html?project=' + encodeURIComponent(p.name) + '&server=' + encodeURIComponent(p.servers[0] || '');
       };
 
       var head = document.createElement('div');
@@ -205,7 +209,7 @@
 
       var meta = document.createElement('div');
       meta.className = 'smeta';
-      meta.textContent = p.server + ' - ' + p.totalSteps + ' steps';
+      meta.textContent = p.servers.join(', ') + ' - ' + p.totalSteps + ' steps';
 
       var btns = document.createElement('div');
       btns.className = 'sbtns';

@@ -16,6 +16,10 @@ module.exports = {
     valid: (process.env.PDEV_VALID_SERVERS || 'acme,ittz,cfree,djm,wdress,rmlve,dolovdev')
       .split(',')
       .map(s => s.trim())
+      .filter(s => s.length > 0),
+    allowedIps: (process.env.ALLOWED_IPS || '127.0.0.1,::1')
+      .split(',')
+      .map(s => s.trim())
       .filter(s => s.length > 0)
   },
 

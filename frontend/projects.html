@@ -32,7 +32,7 @@
             <div class="header-right">
                 <span class="project-count" id="projectCount">-</span>
                 <span class="project-count-label">projects</span>
-                <button type="button" class="btn btn-primary add-project-btn" onclick="openAddProjectModal()" aria-label="Add new project">+ Add Project</button>
+                <button type="button" class="btn btn-primary add-project-btn" aria-label="Add new project">+ Add Project</button>
             </div>
         </header>
 
@@ -94,7 +94,7 @@
                 <div class="icon" aria-hidden="true">🔍</div>
                 <h3>No matching projects</h3>
                 <p class="empty-state-hint">Try adjusting your search or filter.</p>
-                <button type="button" class="btn btn-outline" onclick="clearFilters()">Clear Filters</button>
+                <button type="button" class="btn btn-outline" id="clearFiltersBtn">Clear Filters</button>
             </div>
 
             <!-- Error state -->
@@ -102,7 +102,7 @@
                 <div class="icon" aria-hidden="true">⚠️</div>
                 <h3>Couldn't load projects</h3>
                 <p class="error-hint" id="errorMessage">Please check your connection and try again.</p>
-                <button type="button" class="btn btn-outline" onclick="loadProjects()">Try Again</button>
+                <button type="button" class="btn btn-outline" id="tryAgainBtn">Try Again</button>
             </div>
 
             <!-- Projects grid container -->
@@ -115,7 +115,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3 id="addProjectTitle">Add New Project</h3>
-                <button type="button" class="modal-close" onclick="closeAddProjectModal()" aria-label="Close modal">&times;</button>
+                <button type="button" class="modal-close" aria-label="Close modal">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="form-group">
@@ -138,8 +138,8 @@
                 <div id="addProjectError" class="error-message hidden" role="alert"></div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-outline" onclick="closeAddProjectModal()">Cancel</button>
-                <button type="button" class="btn btn-primary" id="createProjectBtn" onclick="createProject()">Create Project</button>
+                <button type="button" class="btn btn-outline" id="cancelProjectBtn">Cancel</button>
+                <button type="button" class="btn btn-primary" id="createProjectBtn">Create Project</button>
             </div>
         </div>
     </div>
@@ -157,6 +157,12 @@
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#039;');
+        }
+
+        // Security: Attribute escape helper for data attributes
+        function escapeAttr(str) {
+            if (!str) return '';
+            return String(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         // Format relative time
@@ -216,7 +222,7 @@
             const fullDate = project.last_activity
                 ? new Date(project.last_activity).toLocaleString()
                 : 'No activity';
-            const docCount = project.total_steps || 0;
+            const stepCount = project.total_steps || 0;
             const sessionCount = project.session_count || 0;
             const hasSession = project.has_active_session || false;
 
@@ -231,7 +237,7 @@
                 <div class="project-card" role="listitem" aria-label="${escapeHtml(project.project_name)} project on ${escapeHtml(serverList)}">
                     <div class="project-card-header">
                         <div class="server-badges">${serverBadges}</div>
-                        <span class="doc-count">${escapeHtml(String(docCount))} docs</span>
+                        <span class="doc-count">${escapeHtml(String(stepCount))} steps</span>
                     </div>
                     <div class="project-card-body">
                         <h3 class="project-name">${escapeHtml(project.project_name)}</h3>
@@ -242,8 +248,8 @@
                     </div>
                     <div class="project-card-actions">
                         <a href="project.html?server=${encodeURIComponent(project.server_origin)}&project=${encodeURIComponent(project.project_name)}" class="btn btn-outline btn-sm" aria-label="View ${escapeHtml(project.project_name)} documents">View</a>
-                        <button type="button" class="btn btn-outline btn-sm" onclick="shareProject('${escapeHtml(project.server_origin)}', '${escapeHtml(project.project_name)}')" aria-label="Share ${escapeHtml(project.project_name)}">Share</button>
-                        <button type="button" class="btn btn-primary btn-sm ${hasSession ? '' : 'btn-disabled'}" onclick="resumeProject('${escapeHtml(project.server_origin)}', '${escapeHtml(project.project_name)}')" ${hasSession ? '' : 'disabled'} aria-label="Resume ${escapeHtml(project.project_name)} session" title="${hasSession ? 'Resume last session' : 'No active session to resume'}">Resume</button>
+                        <button type="button" class="btn btn-outline btn-sm share-btn" data-server="${escapeAttr(project.server_origin)}" data-project="${escapeAttr(project.project_name)}" aria-label="Share ${escapeHtml(project.project_name)}">Share</button>
+                        <button type="button" class="btn btn-primary btn-sm resume-btn ${hasSession ? '' : 'btn-disabled'}" data-server="${escapeAttr(project.server_origin)}" data-project="${escapeAttr(project.project_name)}" ${hasSession ? '' : 'disabled'} aria-label="Resume ${escapeHtml(project.project_name)} session" title="${hasSession ? 'Resume last session' : 'No active session to resume'}">Resume</button>
                     </div>
                 </div>
             `;
@@ -378,11 +384,81 @@
 
             // Search input with debounce
             const searchInput = document.getElementById('searchInput');
-            searchInput.addEventListener('input', debounce(applyFiltersAndRender, 300));
+            if (searchInput) {
+                searchInput.addEventListener('input', debounce(applyFiltersAndRender, 300));
+            }
 
             // Server filter change
             const serverFilter = document.getElementById('serverFilter');
-            serverFilter.addEventListener('change', applyFiltersAndRender);
+            if (serverFilter) {
+                serverFilter.addEventListener('change', applyFiltersAndRender);
+            }
+
+            // Static button - Add Project
+            const addProjectBtn = document.querySelector('.add-project-btn');
+            if (addProjectBtn) {
+                addProjectBtn.addEventListener('click', openAddProjectModal);
+            }
+
+            // Static button - Clear Filters
+            const clearFiltersBtn = document.getElementById('clearFiltersBtn');
+            if (clearFiltersBtn) {
+                clearFiltersBtn.addEventListener('click', clearFilters);
+            }
+
+            // Static button - Try Again
+            const tryAgainBtn = document.getElementById('tryAgainBtn');
+            if (tryAgainBtn) {
+                tryAgainBtn.addEventListener('click', loadProjects);
+            }
+
+            // Modal close button
+            const modalCloseBtn = document.querySelector('.modal-close');
+            if (modalCloseBtn) {
+                modalCloseBtn.addEventListener('click', closeAddProjectModal);
+            }
+
+            // Modal cancel button
+            const cancelProjectBtn = document.getElementById('cancelProjectBtn');
+            if (cancelProjectBtn) {
+                cancelProjectBtn.addEventListener('click', closeAddProjectModal);
+            }
+
+            // Create Project button
+            const createProjectBtn = document.getElementById('createProjectBtn');
+            if (createProjectBtn) {
+                createProjectBtn.addEventListener('click', createProject);
+            }
+
+            // Event delegation for dynamic project card buttons
+            const projectsContainer = document.getElementById('projectsContainer');
+            if (projectsContainer) {
+                projectsContainer.addEventListener('click', (e) => {
+                    // Share button
+                    const shareBtn = e.target.closest('.share-btn');
+                    if (shareBtn) {
+                        const server = shareBtn.dataset.server;
+                        const project = shareBtn.dataset.project;
+                        if (server && project) {
+                            shareProject(server, project);
+                        }
+                        return;
+                    }
+
+                    // Resume button
+                    const resumeBtn = e.target.closest('.resume-btn');
+                    if (resumeBtn) {
+                        const server = resumeBtn.dataset.server;
+                        const project = resumeBtn.dataset.project;
+                        if (server && project) {
+                            resumeProject(server, project);
+                        }
+                        return;
+                    }
+                });
+            } else {
+                console.error('Projects container not found - event delegation failed');
+            }
 
             // Close modal on escape key
             document.addEventListener('keydown', (e) => {
@@ -438,7 +514,7 @@
                 const response = await fetch(`${API_BASE}/api/projects/init`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, server })
+                    body: JSON.stringify({ project_name: name, server_origin: server })
                 });
 
                 if (!response.ok) {
@@ -474,7 +550,7 @@
                 const response = await fetch(`${API_BASE}/api/sessions/resume`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ server, project })
+                    body: JSON.stringify({ server_origin: server, project_name: project })
                 });
 
                 if (!response.ok) {
