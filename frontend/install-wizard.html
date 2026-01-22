@@ -155,7 +155,7 @@
 4. What IP addresses should be whitelisted for API access? (comma-separated, include all project server IPs)
 
 **[ONLY ASK IF PROJECT SERVER - Skip for Source Server]**
-5. What is the Source Server URL? (e.g., https://walletsnack.com/pdev/api)
+5. What URL hosts your install wizard and files? (e.g., https://pdev.example.com/pdev)
 
 **[ASK FOR ALL INSTALLATIONS]**
 6. What is the IP address of this server?
@@ -208,7 +208,7 @@ Username: pdev
 Authentication Method: Password
 Password: [the $PASSWORD you generated above]
 Domain Name: [domain - Source Server only]
-Source Server URL: [https://source-domain/pdev/api - Project Server only]
+Install Files URL: [https://your-pdev-host.com/pdev - Project Server only]
 
 **PAGE 2 - Configuration** [Source Server only - skip for Project Server]
 Domain Name: [domain]
@@ -219,7 +219,7 @@ HTTP Basic Auth Username: pdev
 HTTP Basic Auth Password: [generate 24-char random alphanumeric]
 Session Secret: [generate 32-char random alphanumeric]
 
-**NOTE for Project Server:** HTTP auth credentials are automatically provided by the Source Server during installation. No manual configuration needed - just enter SSH credentials and Source Server URL.
+**NOTE for Project Server:** HTTP auth credentials are automatically provided during installation. No manual configuration needed - just enter SSH credentials and the URL where installer files are hosted.
 
 **SSH Private Key (SAVE THIS for future access as pdev):**
 [show contents of /home/pdev/.ssh/id_ed25519]
@@ -308,9 +308,9 @@ MIIEpAIBAAKCAQEA...
                 </div>
 
                 <div class="form-group hidden" id="source-url-field">
-                    <label for="install-source-url">Source Server URL</label>
-                    <input type="text" id="install-source-url" placeholder="e.g., https://pdev.example.com/pdev/api">
-                    <small>Auto-detected from this server. Edit if your configuration differs.</small>
+                    <label for="install-source-url">Install Files URL</label>
+                    <input type="text" id="install-source-url" placeholder="e.g., https://pdev.example.com/pdev">
+                    <small>URL where the install wizard and installer files are hosted.</small>
                 </div>
 
             </div>
@@ -422,11 +422,6 @@ MIIEpAIBAAKCAQEA...
                 } else {
                     domainField.classList.add('hidden');
                     sourceUrlField.classList.remove('hidden');
-                    // Auto-fill source URL with current origin (user can still edit if needed)
-                    const sourceUrlInput = document.getElementById('install-source-url');
-                    if (sourceUrlInput && !sourceUrlInput.value) {
-                        sourceUrlInput.value = window.location.origin + '/pdev';
-                    }
                 }
             });
         });
