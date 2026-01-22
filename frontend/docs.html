@@ -431,8 +431,20 @@
                 </details>
 
                 <details class="faq-item">
-                    <summary>How do I resume a project?</summary>
-                    <p>Just use the same project name. Running <code>/pdev start myproject</code> will create the project if it doesn't exist, or resume it if it does. PDev Live matches by project name automatically. Tip: use consistent naming (always "myapp", not sometimes "my-app").</p>
+                    <summary>How do I resume a project or work with existing projects?</summary>
+                    <p>Use the same project name you used before:</p>
+                    <ul>
+                        <li><code>/pdev start myproject</code> - Creates if new, resumes if exists</li>
+                        <li><code>/pdev status myproject</code> - Check which documents already exist</li>
+                        <li><code>/pdev next myproject</code> - Run the next missing pipeline command</li>
+                    </ul>
+                    <p>PDev Live matches by project name automatically. If the project exists, it will:</p>
+                    <ul>
+                        <li>Load all existing documents from <code>~/projects/myproject/pdev-docs/</code></li>
+                        <li>Show completion status for each pipeline phase</li>
+                        <li>Let you continue from where you left off</li>
+                    </ul>
+                    <p><strong>Tip:</strong> Use consistent naming (always "myapp", not sometimes "my-app" or "MyApp").</p>
                 </details>
 
                 <details class="faq-item">
