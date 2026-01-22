@@ -54,7 +54,7 @@ IFS=$'\n\t'
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
-VERSION="1.0.30"
+VERSION="1.0.31"
 # Handle both direct execution and piped execution (curl | bash)
 # In piped mode, BASH_SOURCE is empty - migrations come from tarball anyway
 if [[ -n "${BASH_SOURCE[0]:-}" ]] && [[ -f "${BASH_SOURCE[0]:-}" ]]; then
@@ -637,28 +637,43 @@ detect_existing_installation() {
 
     local existing=false
 
-    # Check for PM2 process
-    if command -v pm2 &>/dev/null && pm2 show "$PM2_APP_NAME" &>/dev/null; then
-        warn "Existing PM2 process: $PM2_APP_NAME"
-        existing=true
+    # Source mode: Check for full stack components
+    if [[ "$MODE" == "source" ]]; then
+        # Check for PM2 process
+        if command -v pm2 &>/dev/null && pm2 show "$PM2_APP_NAME" &>/dev/null; then
+            warn "Existing PM2 process: $PM2_APP_NAME"
+            existing=true
+        fi
+
+        # Check for installation directory
+        if [[ -d "$INSTALL_DIR" ]] && [[ -f "$INSTALL_DIR/server.js" || -f "$INSTALL_DIR/server/server.js" ]]; then
+            warn "Existing installation directory: $INSTALL_DIR"
+            existing=true
+        fi
+
+        # Check for database
+        if command -v psql &>/dev/null && sudo -u postgres psql -lqt 2>/dev/null | cut -d \| -f 1 | grep -qw "$DB_NAME"; then
+            warn "Existing database: $DB_NAME"
+            existing=true
+        fi
+
+        # Check for nginx config
+        if [[ -f "/etc/nginx/sites-available/$NGINX_SITE_NAME" ]]; then
+            warn "Existing nginx config: /etc/nginx/sites-available/$NGINX_SITE_NAME"
+            existing=true
+        fi
     fi
 
-    # Check for installation directory
-    if [[ -d "$INSTALL_DIR" ]] && [[ -f "$INSTALL_DIR/server.js" || -f "$INSTALL_DIR/server/server.js" ]]; then
-        warn "Existing installation directory: $INSTALL_DIR"
-        existing=true
-    fi
-
-    # Check for database
-    if command -v psql &>/dev/null && sudo -u postgres psql -lqt 2>/dev/null | cut -d \| -f 1 | grep -qw "$DB_NAME"; then
-        warn "Existing database: $DB_NAME"
-        existing=true
-    fi
-
-    # Check for nginx config
-    if [[ -f "/etc/nginx/sites-available/$NGINX_SITE_NAME" ]]; then
-        warn "Existing nginx config: /etc/nginx/sites-available/$NGINX_SITE_NAME"
-        existing=true
+    # Project mode: Check for client installation only
+    if [[ "$MODE" == "project" ]]; then
+        if [[ -f "$HOME/.claude/tools/$TOOLS_DIR_NAME/client.sh" ]]; then
+            warn "Existing client installation: $HOME/.claude/tools/$TOOLS_DIR_NAME/client.sh"
+            existing=true
+        fi
+        if [[ -f "$HOME/$CLIENT_CONFIG_FILE" ]]; then
+            warn "Existing client config: $HOME/$CLIENT_CONFIG_FILE"
+            existing=true
+        fi
     fi
 
     if [[ "$existing" == "true" ]]; then
